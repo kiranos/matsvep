@@ -50,6 +50,17 @@ Currently available (with PHP 8.3 CLI, PDO MySQL, and an existing empty MySQL 8 
 9. Parser tests use saved HTML or JSON-LD fixtures. Never hit live recipe sites from tests or during development tasks.
 10. Recipe photos are linked by URL, never downloaded. Scraped data and database snapshots never go into a public repository.
 11. Never read, print or commit secrets. Configuration comes from an uncommitted `.env`. You have no production credentials and do not deploy.
+12. Everything in the code base is in English (see Language and naming). Swedish appears only in the Flutter app's localisation files and in data (recipe content, word lists, seed files), never in code.
+
+## Language and naming
+
+- Use English for identifiers, tables, columns, enum values, config keys, API paths and fields, codes, comments, log messages, tests, commits, pull requests and docs.
+- Keep user-facing text in Flutter localisation files: `app/lib/l10n/app_sv.arb` is the default Swedish locale and `app/lib/l10n/app_en.arb` is the English locale. Do not hard-code user-facing text in Dart. The server sends event and reason codes with parameters, never display text; for example, reason `rated_stars` with `{"stars": 5}` or event `planning_ready`.
+- Keep Swedish recipe content, tags, ingredient names and aliases, leftover keywords, title-reduction words and onboarding dishes in the database or seed files (`server/seeds/*.csv`), never as literals in code.
+- PHP: PSR-12 via PHP-CS-Fixer; PascalCase classes, camelCase methods and variables, UPPER_SNAKE constants, and the `Matsvep\` namespace. Dart: Effective Dart.
+- SQL: snake_case identifiers, singular tables, `fk_`/`ix_`/`uq_`/`ck_`/`ft_` index and constraint prefixes, and `NNN_snake_case.sql` migrations. `schema_migrations` is the sole singular-table exception because it is the standard migration-tool name.
+- API: snake_case fields and lower snake_case enum values. Config: dot-separated lower snake_case keys. Event and reason codes: lower snake_case English.
+- Git: use `feature/…` or `fix/…` branches and English imperative commit messages.
 
 ## How to work
 

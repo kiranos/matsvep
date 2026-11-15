@@ -27,7 +27,7 @@ Design principles:
 | Plan week | Sunday to Saturday; plan all 7 days or Sun–Thu |
 | Planning mode | Whole week chosen on Sunday, or split: Sun–Tue chosen on Sunday and Wed–Sat on Wednesday |
 | Choosing | Swipe deck of ranked suggestions per day; the same deck replaces a chosen dish |
-| Day profiles | Sun–Thu dinners feed the next day's work lunch (batch-friendly dishes, ≤ 60 min Mon–Thu, ≤ 90 min Sun); Fri is fredagsmys; Sat is a nicer dish with few leftovers |
+| Day profiles | `weekday_leftovers` on Sun–Thu feeds the next day's work lunch (batch-friendly dishes, ≤ 60 min Mon–Thu, ≤ 90 min Sun); `friday_treat` suits Friday; `saturday_dinner` favours a nicer dish with few leftovers |
 | After dinner | The app asks if the dinner was cooked; uncooked dinners move to the next planning by default |
 | Explanations | Short reason on each card, full breakdown on tap |
 | Recipe intake | Recipes come from configured Swedish sites; the family can search them and add to a want-to-cook list; no free-form URL import |
@@ -80,7 +80,7 @@ In the engine, a dish group means:
 
 - **Recency per dish:** cooking any köttbullar recipe puts every köttbullar recipe on cooldown.
 - **One per week:** two recipes from the same group are never chosen in the same week.
-- **One card per dish:** a deck shows only the best recipe of each group, with an *Andra varianter* link.
+- **One card per dish:** a deck shows only the best recipe of each group, with a localised link to other variants.
 - **The family's version wins:** once the family rates a variant 4★ or higher, that version represents the group.
 - **Siblings inform new variants:** an unrated variant uses its rated siblings as a strong prior (see Pref); ratings themselves are never copied.
 
@@ -88,7 +88,7 @@ In the engine, a dish group means:
 
 - Images are linked by URL and never downloaded. Every recipe view shows the source name and a link.
 - A per-source `display_mode` (*full* / *index\_only*) can hide steps for a source, with no schema change.
-- The family searches the local database with MySQL `FULLTEXT` on title and ingredients, filtered by source. *Lägg till* puts a recipe on the family's *Vill laga* (want to cook) list.
+- The family searches the local database with MySQL `FULLTEXT` on title and ingredients, filtered by source. The add action puts a recipe on the family's wishlist.
 
 ## Data model
 
@@ -121,7 +121,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `user` | id, household\_id, email, password\_hash, role | Logins; all members share one household state |
 | `device_token` | user\_id, platform (android / windows), refresh\_token\_hash, push\_token, last\_seen\_at | App logins and push notifications |
 | `household_setting` | household\_id, key, value | Favourite share, plan days, planning mode, block vegetarian |
-| `day_profile` | household\_id, weekday, profile | Weekday to profile, e.g. Fri → *fredagsmys* |
+| `day_profile` | household\_id, weekday, profile | Weekday to profile, e.g. Friday → `friday_treat` |
 | `household_recipe` | household\_id, recipe\_id, status (library / removed / blocked), wishlist, rating (1–5, nullable), rating\_source (onboarding / user), rated\_at, last\_cooked\_at, times\_cooked | The family's relation to each recipe |
 | `rating_history` | household\_id, recipe\_id, old\_rating, new\_rating, source, changed\_at | Audit trail of rating changes |
 | `affinity` | household\_id, feature\_type (ingredient / cuisine / protein / carb / meal\_type / tag), feature\_value, score, weight\_sum, updated\_at | Learned taste per feature |
@@ -157,7 +157,7 @@ Every candidate recipe *r* gets a score for a specific day *d*, given the dinner
 S(r,d,P) = w_p\,\mathrm{Pref}(r) + w_d\,\mathrm{DayFit}(r,d) + w_r\,\mathrm{Due}(r) + w_e\,\mathrm{Explore}(r) - w_v\,\mathrm{VarietyPen}(r,P) - w_s\,\mathrm{SkipPen}(r) + B_{\mathrm{wish}}(r)
 ```
 
-*B\_wish* is the *Vill laga* bonus (0.10) for recipes on the want-to-cook list. Carried-over dinners are not scored: they are pinned into the plan, and DayFit only chooses their day.
+*B\_wish* is the wishlist bonus (0.10). Carried-over dinners are not scored: they are pinned into the plan, and DayFit only chooses their day.
 
 **Hard filters** (the recipe is removed, not scored):
 
@@ -190,9 +190,9 @@ S(r,d,P) = w_p\,\mathrm{Pref}(r) + w_d\,\mathrm{DayFit}(r,d) + w_r\,\mathrm{Due}
 
 | Profile | Days | DayFit | Soft time cap |
 | --- | --- | --- | --- |
-| *vardag\_matlada* (feeds tomorrow's lunch) | Sun–Thu | 0.7 · leftover\_score + 0.3 · (1 − effort/3) | 60 min Mon–Thu, 90 min Sun |
-| *fredagsmys* | Fri | 1.0 if tagged *fredagsmys*, *taco*, *pizza* or *burgare*; otherwise 0.4 · festive\_score | – |
-| *helgmiddag* (nicer, few leftovers) | Sat | 0.6 · festive\_score + 0.4 · (1 − leftover\_score) | – |
+| `weekday_leftovers` (feeds tomorrow's lunch) | Sun–Thu | 0.7 · leftover\_score + 0.3 · (1 − effort/3) | 60 min Mon–Thu, 90 min Sun |
+| `friday_treat` | Fri | 1.0 if a recipe has a tag in `dayfit.friday_tags`; otherwise 0.4 · festive\_score | – |
+| `saturday_dinner` (nicer, few leftovers) | Sat | 0.6 · festive\_score + 0.4 · (1 − leftover\_score) | – |
 
 Exceeding a soft cap multiplies DayFit by 0.3 rather than blocking the recipe.
 
@@ -236,7 +236,7 @@ The penalty adds up rule breaks against this week's chosen dinners and the last 
 
 ### SkipPen: recently rejected
 
-A recipe replaced with *Byt* gets SkipPen = 1, fading linearly to 0 over 14 days. A recipe swiped past in 5 separate sessions without being picked gets the same penalty over 30 days. SkipPen never touches ratings or affinities.
+A replaced recipe gets SkipPen = 1, fading linearly to 0 over 14 days. A recipe swiped past in 5 separate sessions without being picked gets the same penalty over 30 days. SkipPen never touches ratings or affinities.
 
 ### Weights
 
@@ -261,9 +261,9 @@ The family rates a recipe once, the first time they cook it. Any member can answ
 
 | Situation | Day-after prompt | Stored |
 | --- | --- | --- |
-| First time cooked, unrated | "Lagade ni X?" + stars | `household_recipe.rating`, `rating_source = user` |
-| First time cooked, rated in onboarding | "Lagade ni X?" + stars pre-filled from onboarding | Confirmed or changed rating, `rating_source = user` |
-| Cooked again | "Lagade ni X?" with an *Ändra betyg* link showing the current stars | Recency only |
+| First time cooked, unrated | Localised cooking confirmation and star picker | `household_recipe.rating`, `rating_source = user` |
+| First time cooked, rated in onboarding | Localised cooking confirmation with onboarding stars pre-filled | Confirmed or changed rating, `rating_source = user` |
+| Cooked again | Localised cooking confirmation with a change-rating link and current stars | Recency only |
 | Rating changed from the recipe page or library | – | New rating replaces the old; old value kept in `rating_history` |
 
 Each recipe contributes to the affinities exactly once, with its current rating, so a dish cooked 20 times doesn't dominate the taste profile.
@@ -300,13 +300,13 @@ W_f \leftarrow W_f\cdot 2^{-\Delta t/H},\qquad a_f \leftarrow \frac{W_f\, a_f + 
 
 ## Weekly plan builder
 
-The builder ranks recipes for every open day of a planning: the whole week, or one half in split mode. Its top choice per day becomes the first card of that day's swipe deck. It is deterministic for a given seed; *Blanda* changes the seed.
+The builder ranks recipes for every open day of a planning: the whole week, or one half in split mode. Its top choice per day becomes the first card of that day's swipe deck. It is deterministic for a given seed; reshuffling changes the seed.
 
 1. **Set up:** read the days to plan, each day's profile, the favourite share, the active config version and any pending carry-overs. The seed is a hash of household, week, part and reshuffle count.
 2. **Place carry-overs:** pinned dinners go first, each on the open day where its DayFit is highest, and count toward their kind's quota.
 3. **Build pools:**
    - *Favourites:* rated recipes with Pref ≥ 0.6 (about 3.4★) that pass the hard filters.
-   - *Discovery:* unrated recipes that pass the hard filters: every *Vill laga* recipe, plus the top 300 others by Content.
+   - *Discovery:* unrated recipes that pass the hard filters: every wishlisted recipe, plus the top 300 others by Content.
 4. **Set quotas:** favourites = round(N × share) for the week, discoveries for the rest. With 7 days at 70% that is 5 + 2. In split mode, the second half's quota is the week's target minus the favourites already chosen. If the favourites pool runs short, discoveries fill the gap.
 5. **Order the days:** most constrained first, so Fri and Sat go before the lunch-box days.
 6. **Score each day:** score both pools against the dinners chosen so far. If one kind's remaining quota equals the remaining days, that kind is forced; otherwise the higher top score wins.
@@ -314,7 +314,7 @@ The builder ranks recipes for every open day of a planning: the whole week, or o
 8. **Swap pass:** try exchanging every pair of open days and keep any swap that raises the total score, for at most 2 passes.
 9. **Build decks:** for each day, rank the remaining candidates behind the top choice, one recipe per dish group, interleaving favourites and discoveries by the favourite share.
 
-**Timing:** cron prepares the decks every Sunday at 07:00, and also every Wednesday at 07:00 in split mode, then sends a notification. Reshuffling or re-preparing keeps every day the family has already chosen and every carry-over, and redraws only open days.
+**Timing:** cron prepares the decks every Sunday at 07:00, and also every Wednesday at 07:00 in split mode, then sends a `planning_ready` event with date parameters. The app builds the localised notification text. Reshuffling or re-preparing keeps every day the family has already chosen and every carry-over, and redraws only open days.
 
 **Performance:** 7 days × about 400 candidates × 6 components is roughly 17,000 simple calculations, well under 100 ms in PHP.
 
@@ -326,10 +326,10 @@ The family doesn't approve a finished plan. It swipes through a ranked deck per 
 
 | Mode | Sunday 07:00 | Wednesday 07:00 |
 | --- | --- | --- |
-| *Hela veckan* (whole week) | Choose Sun–Sat, or Sun–Thu | – |
-| *Dela veckan* (split) | Choose Sun, Mon, Tue | Choose Wed–Sat, or Wed–Thu |
+| Whole week | Choose Sun–Sat, or Sun–Thu | – |
+| Split week | Choose Sun, Mon, Tue | Choose Wed–Sat, or Wed–Thu |
 
-- Each planning starts with a notification, e.g. *"Dags att välja söndag–tisdag"*.
+- Each planning starts with a `planning_ready` event and parameters such as `start_date` and `end_date`; the app renders the notification in the selected locale.
 - The second half is scored against what was chosen and cooked in the first half, so variety and the favourite share hold across the week.
 - An uncooked dinner from the first half moves to the second half's planning by default.
 
@@ -337,69 +337,69 @@ The family doesn't approve a finished plan. It swipes through a ranked deck per 
 
 | Gesture | Meaning | Effect |
 | --- | --- | --- |
-| Swipe right | *Välj* | Recipe is chosen for the day; the other open days are re-ranked |
-| Swipe left | *Nästa* | Card is hidden for this session only |
+| Swipe right | Pick | Recipe is chosen for the day; the other open days are re-ranked |
+| Swipe left | Next | Card is hidden for this session only |
 | Tap | Details | Full recipe, short reason and score breakdown |
-| *Ångra* | Undo | Brings back the last card |
-| *Fyll i resten* | Autofill | The engine's top card is chosen for every remaining open day |
-| *Blanda* | Reshuffle | New seed for the open days |
+| Undo | Undo | Brings back the last card |
+| Autofill | Autofill | The engine's top card is chosen for every remaining open day |
+| Reshuffle | Reshuffle | New seed for the open days |
 
-- Each card shows title, image (linked from the source), cook time, a *Nytt* badge for discoveries and the short reason, e.g. *"Ni gav den 5★ · bra matlåda"*. A card for a dish group has an *Andra varianter* link.
+- Each card shows title, image (linked from the source), cook time, a localised discovery badge and a reason rendered from server reason codes and parameters. A card for a dish group has a localised link to other variants.
 - The server returns the top 20 cards per day for the whole planning in one call, and the app pre-loads images. After each pick, one call (under 100 ms) re-ranks the other days. The next 20 cards load if a deck runs out. All scoring stays on the server.
 - A recipe swiped past in 5 separate sessions without being picked gets a 30-day SkipPen. A single left swipe has no lasting effect.
 - A search box lets the family choose any recipe in the database for a day. Hard filters still apply, and a warning shows if it breaks a variety rule.
 
 ### Replacing a chosen dinner
 
-*Byt* on a chosen day opens that day's deck, re-scored against the rest of the week; the other days stay as they are. The replaced recipe gets a 14-day SkipPen. Ratings and affinities are untouched.
+Replacing a chosen dinner opens that day's deck, re-scored against the rest of the week; the other days stay as they are. The replaced recipe gets a 14-day SkipPen. Ratings and affinities are untouched.
 
 ## After dinner
 
-The day after each chosen dinner, the app asks *"Lagade ni {recept}?"*. A dinner that wasn't cooked is never counted as eaten or as disliked.
+The day after each chosen dinner, the app renders a localised cooking confirmation prompt using the recipe title. A dinner that wasn't cooked is never counted as eaten or as disliked.
 
 | Answer | Status | Recency and variety | Learning | Accuracy metrics |
 | --- | --- | --- | --- | --- |
 | Yes, first time (stars asked) | cooked | Cooldown starts; counts in the 7-day variety history | Rating updates Pref and affinities | Included |
 | Yes, already rated | cooked | Same as above | None | Excluded |
-| No → *Flytta till nästa planering* (default) | not\_cooked | No cooldown; pinned into the next planning | None | Excluded |
-| No → *Inte nu, spara till senare* | not\_cooked | No cooldown; added to *Vill laga* | None | Excluded |
-| No → *Inte nu, ta bort* | not\_cooked | Status *removed*: out of all pools, still searchable | None | Excluded |
+| No → carry over (default) | not\_cooked | No cooldown; pinned into the next planning | None | Excluded |
+| No → save for later | not\_cooked | No cooldown; added to the wishlist | None | Excluded |
+| No → remove | not\_cooked | Status *removed*: out of all pools, still searchable | None | Excluded |
 | No answer within 2 days | unconfirmed | Counted as eaten: cooldown starts, counts for variety | None | Excluded |
 
-- **Carry-over:** the next planning is Wednesday's half in split mode, otherwise next week. If its days are already chosen, the app offers to swap the dinner in on the best-fitting day. A carry-over lasts one week; if it still isn't cooked, it moves to *Vill laga*.
-- **Vill laga:** wishlisted recipes get the 0.10 bonus until cooked, so they come back within a few weeks without being forced.
+- **Carry-over:** the next planning is Wednesday's half in split mode, otherwise next week. If its days are already chosen, the app offers to swap the dinner in on the best-fitting day. A carry-over lasts one week; if it still isn't cooked, it moves to the wishlist.
+- **Wishlist:** wishlisted recipes get the 0.10 bonus until cooked, so they come back within a few weeks without being forced.
 - **Removed vs blocked:** *removed* means "not for us right now" and can be undone from search; *blocked* means "never show again".
 - **Flags:** a recipe uncooked or replaced 3 or more times in 60 days is flagged in admin. It never gets a lower score automatically.
 
 ## Explainability
 
-Each card shows one short reason built from its two largest positive components. Tapping it shows the full breakdown. Both come from `explanation_json`, saved with the slot when the dish is chosen, so the explanation always matches the decision.
+Each card shows one short reason built from its two largest positive components. Tapping it shows the full breakdown. The server returns English reason codes and structured parameters, never display text. Both the reasons and score components are saved in `explanation_json` with the slot when the dish is chosen, so the explanation always matches the decision. The app renders Swedish text from `app/lib/l10n/app_sv.arb` (or English from `app_en.arb`).
 
-| Top component | Reason (Swedish UI) |
-| --- | --- |
-| Pref, rated | "Ni gav den {stars}★" |
-| Pref, unrated | "Liknar {recept} som ni gav {stars}★" |
-| Pref, dish group | "Ni gillar {rätt} – ny variant" |
-| Due | "Inte lagad på {veckor} veckor" |
-| DayFit, lunch-box day | "Bra matlåda till imorgon" |
-| DayFit, Friday | "Fredagsmys" |
-| DayFit, Saturday | "Lite finare, få rester" |
-| Explore | "Nytt för er: {kök}" |
-| Carry-over | "Flyttad från {dag}" |
-| Vill laga bonus | "Från er Vill laga-lista" |
+| Top component | Reason code | Example parameters |
+| --- | --- | --- |
+| Pref, rated | `rated_stars` | `{"stars": 5}` |
+| Pref, unrated | `similar_rated_recipe` | `{"recipe_id": 123, "stars": 5}` |
+| Pref, dish group | `liked_dish_group_variant` | `{"dish_group_id": 45}` |
+| Due | `not_cooked_recently` | `{"weeks": 3}` |
+| DayFit, lunch-box day | `good_for_leftovers` | `{}` |
+| DayFit, Friday | `friday_treat` | `{}` |
+| DayFit, Saturday | `saturday_dinner` | `{}` |
+| Explore | `new_cuisine` | `{"cuisine_code": "indian"}` |
+| Carry-over | `carried_over` | `{"from_date": "2026-11-11"}` |
+| Wishlist bonus | `wishlisted` | `{}` |
 
-For "Liknar", the engine names the rated recipe that shares the most weighted features.
+For `similar_rated_recipe`, the engine identifies the rated recipe that shares the most weighted features; the app looks up and displays its title.
 
 Example breakdown:
 
 ```
-Kycklinggryta med curry           Totalt 0.68
-  Smak (Pref)       0.90 × 0.45 = +0.41   betyg 5★, kyckling +0.6, indiskt +0.4
-  Dagen (DayFit)    0.90 × 0.25 = +0.23   matlåda: rester 0.9, 40 min
-  Dags igen (Due)   0.50 × 0.15 = +0.08   lagad för 21 dagar sedan (spärr 14)
-  Ny (Explore)      0.00 × 0.10 = +0.00
-  Variation        −0.10 × 0.35 = −0.04   2:a kycklingrätten denna vecka
-  Bytt nyligen      0.00 × 0.30 = −0.00
+Recipe 123                       Total 0.68
+  Pref             0.90 × 0.45 = +0.41   stars 5, protein +0.6, cuisine +0.4
+  DayFit           0.90 × 0.25 = +0.23   leftover score 0.9, 40 min
+  Due              0.50 × 0.15 = +0.08   cooked 21 days ago (cooldown 14)
+  Explore          0.00 × 0.10 = +0.00
+  VarietyPen      −0.10 × 0.35 = −0.04   second recipe with this protein this week
+  SkipPen          0.00 × 0.30 = −0.00
 ```
 
 The same data powers an admin view, "Why not recipe X on Tuesday?", showing which hard filter removed a recipe or how far it scored below the winner.
@@ -413,7 +413,7 @@ Each `plan_slot` stores the Pref predicted when the dish was chosen. When a reci
 | MAE | Mean absolute error between predicted and actual first ratings | Fall |
 | Hit rate | Share of cooked dinners rated 4★ or higher | Rise |
 | Discovery success | Share of discovery dinners rated 4★ or higher | Rise |
-| Replace rate | Share of chosen dinners later replaced with *Byt* | Fall |
+| Replace rate | Share of chosen dinners later replaced | Fall |
 | Swipes to pick | Average cards swiped before a pick | Fall |
 | Top-3 picks | Share of picks from the first 3 cards | Rise |
 
@@ -436,16 +436,17 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Filters | `filter.hide_at_or_below` | 2 | Ratings at or below this are hidden |
 | Recency | `cooldown.days.5` / `.4` / `.3` | 14 / 21 / 42 | Cooldown by rating; unrated cooked recipes use the 4★ value |
 | Day fit | `dayfit.weekday_max_minutes` / `dayfit.sunday_max_minutes` | 60 / 90 | Soft time caps on lunch-box days |
+| Day fit | `dayfit.friday_tags` | fredagsmys, taco, pizza, burgare | Recipe tags that give `friday_treat` full DayFit |
 | Day fit | `dayfit.softcap_factor` | 0.3 | DayFit multiplier when a cap is exceeded |
 | Variety | `variety.max_protein_week` / `.max_cuisine_week` / `.max_carb_week` | 2 / 2 / 3 | Weekly repeat limits |
 | Variety | `variety.pen.adjacent_protein` / `.protein` / `.cuisine` / `.carb` / `.overlap` | 0.5 / 0.4 / 0.3 / 0.2 / 0.3 | Penalty sizes |
 | Variety | `variety.overlap_jaccard` | 0.5 | Ingredient-overlap threshold |
 | Variety | `variety.target_fish` / `.target_veg` | 1 / 1 | Weekly targets, with bonuses 0.3 / 0.2 |
-| Skips | `skip.replace_days` | 14 | SkipPen after *Byt* |
+| Skips | `skip.replace_days` | 14 | SkipPen after replacement |
 | Skips | `swipe.reject_sessions` / `swipe.reject_days` | 5 / 30 | Repeated left swipes before a SkipPen, and its length |
 | After dinner | `confirm.auto_days` | 2 | Days without an answer before a dinner counts as eaten |
 | After dinner | `carryover.expire_weeks` | 1 | How long a carry-over stays pinned |
-| After dinner | `wishlist.bonus` | 0.10 | Score bonus for *Vill laga* recipes |
+| After dinner | `wishlist.bonus` | 0.10 | Score bonus for wishlisted recipes |
 | After dinner | `flag.count` / `flag.days` | 3 / 60 | Uncooked or replaced this often → admin flag |
 | Builder | `builder.fav_threshold` | 0.6 | Pref needed to count as a favourite |
 | Builder | `builder.top_k` / `builder.temperature` | 5 / 0.05 | Controlled variation |
@@ -457,7 +458,7 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Dedupe | `dedupe.source_priority` | koket, ica, arla, coop | Tie-breaker for the kept copy |
 | Crawl | `crawl.delay_s` / `crawl.recheck_share` | 5 / 0.01 | Seconds between requests per site; nightly re-check share |
 
-**Family settings** (in the app): favourite share (default 70%), plan days (all 7 or Sun–Thu), planning mode (whole week or split) and block vegetarian (off). The weekday-to-profile map lives in `day_profile`; a new profile, such as *gäster*, needs one new DayFit rule plus config rows.
+**Family settings** (in the app): favourite share (default 70%), plan days (all 7 or Sun–Thu), planning mode (whole week or split) and block vegetarian (off). The weekday-to-profile map lives in `day_profile`; a new profile, such as `guests`, needs one new DayFit rule plus config rows.
 
 ## System architecture
 
@@ -506,12 +507,12 @@ Windows + Android apps (Flutter)
 | `GET /plans/{week}/{part}/deck` | Swipe decks for the open days of a planning |
 | `POST /swipes` | Log swipes |
 | `PUT /slots/{id}` | Choose or replace a dinner; re-ranks the other open days |
-| `POST /plans/{week}/{part}/autofill` | *Fyll i resten* |
-| `POST /plans/{week}/{part}/shuffle` | *Blanda* |
+| `POST /plans/{week}/{part}/autofill` | Fill the remaining days |
+| `POST /plans/{week}/{part}/shuffle` | Reshuffle the open days |
 | `POST /slots/{id}/cooked` | Day-after answer: yes, or no with a choice |
 | `PUT /recipes/{id}/rating` | Set or change a rating |
 | `GET /recipes/search?q=` | Search the recipe database |
-| `POST /wishlist`, `DELETE /wishlist/{id}` | *Vill laga* list |
+| `POST /wishlist`, `DELETE /wishlist/{id}` | Wishlist |
 | `GET /settings`, `PUT /settings` | Family settings |
 
 Admin pages (review queues, feature corrections, config, metrics, debug views) are server-rendered PHP behind admin login.
@@ -520,7 +521,7 @@ Admin pages (review queues, feature corrections, config, metrics, debug views) a
 
 - **Auth:** a 15-minute access token plus a refresh token per device, hashed in `device_token`.
 - **Offline:** each app caches the current week's chosen dinners with full recipes. Day-after answers and ratings are queued and sent when online.
-- **Reminders:** planning and day-after notifications use Firebase Cloud Messaging on Android and local scheduled notifications on Windows.
+- **Reminders:** the server sends only event codes and structured parameters (for example, `planning_ready` with `start_date` and `end_date`, or `dinner_confirmation_due` with `recipe_id`). The app builds the notification text from its localisation files. Delivery uses Firebase Cloud Messaging on Android and local scheduled notifications on Windows.
 - **Server-side logic:** all scoring runs on the server, so every device sees the same plan.
 - **Distribution:** Android as a signed APK or a private Play track; Windows as an MSIX installer.
 
@@ -630,7 +631,7 @@ The engine is proven on real recipes and simulated families before the apps are 
 1. **Foundation and seed data (2–3 weeks):** VPS setup, recipe and ingestion schema (including `ingest_url`, `ingredient_unknown`, dish groups, duplicate review and `engine_config`), the Köket adapter, the full first crawl (which also establishes the size of Köket's catalogue), normaliser, deduplication and dish groups, the clean-up pass and the database snapshot. Household, planning, swipe and auth tables are created in phase 2. The phase 1 API contract covers shared recipe/source/ingredient/dish-group schemas and `GET /recipes/{id}`, `GET /recipes/search` and `GET /health`; the remaining `/api/v1` contract starts phase 2.
 2. **Engine, headless (2–3 weeks):** filters, scoring, plan builder, swipe decks, planning modes, replace, after-dinner answers, carry-overs, reasons and onboarding, exposed through `/api/v1` with token auth.
 3. **Simulation and tuning (2 weeks):** simulator, six personas, choosing the 30–40 onboarding dishes from the seeded database (an admin list of the most common dish groups across sites), automatic checks, nightly rebuild, metrics page, config admin and the "why not X" view.
-4. **Client apps (3–4 weeks):** the Flutter app for Android and Windows: onboarding, swipe decks, week view, offline recipe view, after-dinner prompt, ratings, search, *Vill laga* and settings.
+4. **Client apps (3–4 weeks):** the Flutter app for Android and Windows: onboarding, swipe decks, week view, offline recipe view, after-dinner prompt, ratings, search, wishlist and settings.
 5. **More sources (ongoing):** ICA, Arla and Coop adapters and the source re-check.
 6. **Public readiness (later):** source agreements, GDPR features and hardening.
 
