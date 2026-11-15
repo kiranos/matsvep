@@ -29,9 +29,10 @@ Matsvep ("food swipe") is a private family app that suggests weekly dinners. A r
 
 ## Commands
 
-Currently available (PowerShell, with a MySQL 8 client and an existing empty database):
+Currently available (with PHP 8.3 CLI, PDO MySQL, and an existing empty MySQL 8 database):
 
-- Apply the numbered migrations in order: `Get-ChildItem server/migrations/*.sql | Sort-Object Name | ForEach-Object { Get-Content $_.FullName -Raw -Encoding UTF8 | mysql --database=matsvep --default-character-set=utf8mb4; if ($LASTEXITCODE -ne 0) { throw "Migration failed: $($_.Name)" } }`
+- Copy `server/.env.example` to uncommitted `server/.env` and set the database connection values. Run migrations with `php server/bin/migrate.php`.
+- Test SQL splitting with `php server/tests/migration_runner_test.php`.
 - Validate the API description: `npx @redocly/cli@latest lint --extends spec api/openapi.yaml`
 
 `composer.json`, the Flutter app, the simulator and their install/test/lint commands do not exist yet. Add those commands when the corresponding code is created.
