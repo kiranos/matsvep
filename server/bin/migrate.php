@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Matsvep\Database\MigrationRunner;
 
-require_once __DIR__ . '/../src/Database/MigrationRunner.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -24,7 +24,11 @@ try {
     $config = [];
     foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as $key) {
         $fromEnvironment = getenv($key);
-        $config[$key] = $fromEnvironment !== false ? $fromEnvironment : ($fileConfig[$key] ?? '');
+        $value = $fromEnvironment !== false ? $fromEnvironment : ($fileConfig[$key] ?? '');
+        if (!is_string($value)) {
+            throw new RuntimeException("Invalid $key in database configuration.");
+        }
+        $config[$key] = $value;
     }
     foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER'] as $key) {
         if ($config[$key] === '') {

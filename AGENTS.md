@@ -29,13 +29,15 @@ Matsvep ("food swipe") is a private family app that suggests weekly dinners. A r
 
 ## Commands
 
-Currently available (with PHP 8.3 CLI, PDO MySQL, and an existing empty MySQL 8 database):
+With PHP 8.3 CLI, PDO MySQL, Composer 2 and MySQL 8:
 
-- Copy `server/.env.example` to uncommitted `server/.env` and set the database connection values. Run migrations with `php server/bin/migrate.php`.
-- Test SQL splitting with `php server/tests/migration_runner_test.php`.
-- Validate the API description: `npx @redocly/cli@latest lint --extends spec api/openapi.yaml`
+- Install server dependencies: `cd server && composer install`.
+- For local integration tests, copy `server/.env.testing.example` to uncommitted `server/.env.testing` and set credentials for a MySQL user that can create and drop throwaway databases. `DB_NAME` is a prefix; the test adds a random suffix.
+- Run server checks from `server/`: `composer lint`, `composer stan`, `composer test`.
+- To run migrations, copy `server/.env.example` to uncommitted `server/.env`, create an empty database, then run `php server/bin/migrate.php` from the repository root. The runner also accepts `MATS_ENV_FILE` and `DB_*` environment overrides.
+- Validate the API description: `npx @redocly/cli@latest lint --extends spec api/openapi.yaml`.
 
-`composer.json`, the Flutter app, the simulator and their install/test/lint commands do not exist yet. Add those commands when the corresponding code is created.
+The Flutter app and simulator do not exist yet; add their commands when created.
 
 ## Hard rules
 
