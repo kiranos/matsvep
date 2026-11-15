@@ -1,0 +1,305 @@
+openapi: 3.0.3
+info:
+  title: Matsvep API
+  version: 0.1.0
+  description: Phase 1 recipe catalogue contract. Remaining API operations are specified in phase 2.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Check API health
+      security: []
+      responses:
+        '200':
+          description: API process is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /recipes/{id}:
+    get:
+      operationId: getRecipe
+      summary: Get a recipe and its source attribution
+      description: Steps are omitted when the primary source uses index_only display mode.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: Recipe found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /recipes/search:
+    get:
+      operationId: searchRecipes
+      summary: Search the local recipe catalogue
+      description: Returns active recipes matching title or ingredient text. Search uses cursor pagination.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: source_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: cursor
+          in: query
+          description: Opaque cursor returned by the previous page.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeSearchResults'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token issuance is part of the phase 2 auth contract and implementation.
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Unauthorized:
+      description: Missing or invalid access token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    Source:
+      type: object
+      required: [id, name, base_url, display_mode]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        base_url:
+          type: string
+          format: uri
+        display_mode:
+          type: string
+          enum: [full, index_only]
+    Ingredient:
+      type: object
+      required: [id, canonical_name, is_staple]
+      properties:
+        id:
+          type: integer
+          format: int64
+        canonical_name:
+          type: string
+        category:
+          type: string
+          nullable: true
+        is_staple:
+          type: boolean
+    DishGroup:
+      type: object
+      required: [id, core_name, manual_override]
+      properties:
+        id:
+          type: integer
+          format: int64
+        core_name:
+          type: string
+        main_protein:
+          type: string
+          nullable: true
+        manual_override:
+          type: boolean
+    RecipeSourceLink:
+      type: object
+      required: [source, url, is_primary]
+      properties:
+        source:
+          $ref: '#/components/schemas/Source'
+        url:
+          type: string
+          format: uri
+        is_primary:
+          type: boolean
+    RecipeIngredient:
+      type: object
+      required: [position, raw_text, is_main]
+      properties:
+        position:
+          type: integer
+          minimum: 0
+        group_name:
+          type: string
+          nullable: true
+        raw_text:
+          type: string
+        quantity:
+          type: number
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        canonical_ingredient:
+          $ref: '#/components/schemas/Ingredient'
+        is_main:
+          type: boolean
+    RecipeStep:
+      type: object
+      required: [position, text]
+      properties:
+        position:
+          type: integer
+          minimum: 0
+        group_name:
+          type: string
+          nullable: true
+        text:
+          type: string
+    RecipeSummary:
+      type: object
+      required: [id, title, source, source_url, active]
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+        total_time_min:
+          type: integer
+          nullable: true
+        source:
+          $ref: '#/components/schemas/Source'
+        source_url:
+          type: string
+          format: uri
+        dish_group:
+          $ref: '#/components/schemas/DishGroup'
+        active:
+          type: boolean
+    Recipe:
+      allOf:
+        - $ref: '#/components/schemas/RecipeSummary'
+        - type: object
+          required: [source_links, ingredients, steps, tags, source_status]
+          properties:
+            servings:
+              type: number
+              nullable: true
+            cuisine:
+              type: string
+              nullable: true
+            meal_type:
+              type: string
+              nullable: true
+            main_protein:
+              type: string
+              nullable: true
+            carb_base:
+              type: string
+              nullable: true
+            is_vegetarian:
+              type: boolean
+              nullable: true
+            leftover_score:
+              type: number
+              minimum: 0
+              maximum: 1
+              nullable: true
+            festive_score:
+              type: number
+              minimum: 0
+              maximum: 1
+              nullable: true
+            effort:
+              type: integer
+              minimum: 1
+              maximum: 3
+              nullable: true
+            source_status:
+              type: string
+              enum: [ok, source_gone]
+            source_links:
+              type: array
+              items:
+                $ref: '#/components/schemas/RecipeSourceLink'
+            ingredients:
+              type: array
+              items:
+                $ref: '#/components/schemas/RecipeIngredient'
+            steps:
+              type: array
+              description: Empty when the primary source has index_only display mode.
+              items:
+                $ref: '#/components/schemas/RecipeStep'
+            tags:
+              type: array
+              items:
+                type: string
+    RecipeSearchResults:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeSummary'
+        next_cursor:
+          type: string
+          nullable: true
