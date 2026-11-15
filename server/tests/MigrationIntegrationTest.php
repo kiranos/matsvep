@@ -15,6 +15,9 @@ final class MigrationIntegrationTest extends TestCase
     {
         $envFile = __DIR__ . '/../.env.testing';
         if (!is_file($envFile)) {
+            if (getenv('CI') !== false) {
+                self::fail('CI requires .env.testing so the MySQL integration test runs.');
+            }
             self::markTestSkipped('Copy .env.testing.example to .env.testing to run the MySQL integration test.');
         }
 
@@ -43,7 +46,11 @@ final class MigrationIntegrationTest extends TestCase
         }
 
         try {
-            foreach (glob(__DIR__ . '/../migrations/*.sql') ?: [] as $source) {
+            $migrationFiles = glob(__DIR__ . '/../migrations/*.sql');
+            if ($migrationFiles === false || $migrationFiles === []) {
+                throw new RuntimeException('No migration files found.');
+            }
+            foreach ($migrationFiles as $source) {
                 if (!copy($source, $directory . DIRECTORY_SEPARATOR . basename($source))) {
                     throw new RuntimeException('Cannot copy migration file.');
                 }
@@ -57,13 +64,13 @@ final class MigrationIntegrationTest extends TestCase
             ]);
             $runner = new MigrationRunner($db, $directory, $databaseName);
             $applied = $runner->run();
-            self::assertCount(4, $applied);
+            self::assertCount(count($migrationFiles), $applied);
             foreach ($applied as $line) {
                 self::assertStringStartsWith('APPLIED ', $line);
             }
 
             $skipped = $runner->run();
-            self::assertCount(4, $skipped);
+            self::assertCount(count($migrationFiles), $skipped);
             foreach ($skipped as $line) {
                 self::assertStringStartsWith('SKIPPED ', $line);
             }
