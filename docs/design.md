@@ -105,9 +105,11 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `recipe_tag` | recipe\_id, tag | Tags such as *taco*, *gryta*, *ugn*, *fredagsmys* |
 | `recipe_source_link` | recipe\_id, source\_id, url, is\_primary | All source URLs of a merged recipe |
 | `recipe_raw` | recipe\_id, fetched\_at, etag, format (jsonld / html), payload\_gz | Compressed raw snapshot for re-parsing |
+| `ingest_url` | id, source\_id, url, url\_hash (unique per source), discovered\_via (sitemap / category), status (queued / fetched / failed / skipped\_robots / gone), etag, last\_modified, http\_status, attempts, next\_attempt\_at, last\_fetched\_at, recipe\_id (nullable) | Resumable discovery and fetch queue, conditional requests and retry state |
 | `ingredient` | id, canonical\_name, category, is\_staple | Canonical vocabulary; staples (salt, oil, onion) are ignored in similarity |
 | `ingredient_alias` | alias, ingredient\_id | Swedish synonym map |
-| `leftover_keyword` | keyword, signal (dish\_type / method / protein\_form), value (−1 to 1) | Keyword lists behind leftover\_score |
+| `ingredient_unknown` | id, raw\_text, normalised\_token (unique), occurrences, first\_seen\_at, status (pending / mapped / staple / ignored), suggested\_ingredient\_id (nullable), mapped\_ingredient\_id (nullable) | Review queue for ingredient tokens the normaliser cannot map |
+| `leftover_keyword` | keyword, signal\_type (dish\_type / method / protein\_form), value (−1 to 1) | Keyword lists behind leftover\_score |
 | `dish_group` | id, core\_name, main\_protein, manual\_override | Variants of the same dish |
 | `duplicate_candidate` | recipe\_a, recipe\_b, similarity, status (pending / merged / not\_duplicate) | Admin review queue for possible copies |
 
@@ -617,7 +619,7 @@ The data model already supports many households; the blocker for a public launch
 
 The engine is proven on real recipes and simulated families before the apps are built.
 
-1. **Foundation and seed data (2–3 weeks):** VPS setup, schema, the Köket adapter, the full first crawl (which also establishes the size of Köket's catalogue), normaliser, deduplication and dish groups, the clean-up pass and the database snapshot.
+1. **Foundation and seed data (2–3 weeks):** VPS setup, recipe and ingestion schema (including `ingest_url`, `ingredient_unknown`, dish groups, duplicate review and `engine_config`), the Köket adapter, the full first crawl (which also establishes the size of Köket's catalogue), normaliser, deduplication and dish groups, the clean-up pass and the database snapshot. Household, planning, swipe and auth tables are created in phase 2. The phase 1 API contract covers shared recipe/source/ingredient/dish-group schemas and `GET /recipes/{id}`, `GET /recipes/search` and `GET /health`; the remaining `/api/v1` contract starts phase 2.
 2. **Engine, headless (2–3 weeks):** filters, scoring, plan builder, swipe decks, planning modes, replace, after-dinner answers, carry-overs, reasons and onboarding, exposed through `/api/v1` with token auth.
 3. **Simulation and tuning (2 weeks):** simulator, six personas, choosing the 30–40 onboarding dishes from the seeded database (an admin list of the most common dish groups across sites), automatic checks, nightly rebuild, metrics page, config admin and the "why not X" view.
 4. **Client apps (3–4 weeks):** the Flutter app for Android and Windows: onboarding, swipe decks, week view, offline recipe view, after-dinner prompt, ratings, search, *Vill laga* and settings.
