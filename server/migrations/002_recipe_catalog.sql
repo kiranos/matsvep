@@ -4,14 +4,14 @@ CREATE TABLE ingredient (
     category VARCHAR(120) NULL,
     is_staple BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE KEY uq_ingredient_name (canonical_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE ingredient_alias (
     alias VARCHAR(255) NOT NULL PRIMARY KEY,
     ingredient_id BIGINT UNSIGNED NOT NULL,
     KEY ix_ingredient_alias_ingredient (ingredient_id),
     CONSTRAINT fk_ingredient_alias_ingredient FOREIGN KEY (ingredient_id) REFERENCES ingredient (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE dish_group (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -19,7 +19,7 @@ CREATE TABLE dish_group (
     main_protein VARCHAR(120) NULL,
     manual_override BOOLEAN NOT NULL DEFAULT FALSE,
     KEY ix_dish_group_core (core_name, main_protein)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE recipe (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -52,7 +52,7 @@ CREATE TABLE recipe (
     CONSTRAINT ck_recipe_festive CHECK (festive_score BETWEEN 0 AND 1),
     CONSTRAINT ck_recipe_effort CHECK (effort BETWEEN 1 AND 3),
     CONSTRAINT ck_recipe_servings CHECK (servings > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE recipe_ingredient (
     recipe_id BIGINT UNSIGNED NOT NULL,
@@ -66,9 +66,9 @@ CREATE TABLE recipe_ingredient (
     PRIMARY KEY (recipe_id, position),
     KEY ix_recipe_ingredient_ingredient (ingredient_id),
     FULLTEXT KEY ft_recipe_ingredient_text (raw_text),
-    CONSTRAINT fk_recipe_ingredient_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id),
+    CONSTRAINT fk_recipe_ingredient_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id) ON DELETE CASCADE,
     CONSTRAINT fk_recipe_ingredient_ingredient FOREIGN KEY (ingredient_id) REFERENCES ingredient (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE recipe_step (
     recipe_id BIGINT UNSIGNED NOT NULL,
@@ -76,13 +76,13 @@ CREATE TABLE recipe_step (
     group_name VARCHAR(255) NULL,
     text TEXT NOT NULL,
     PRIMARY KEY (recipe_id, position),
-    CONSTRAINT fk_recipe_step_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+    CONSTRAINT fk_recipe_step_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE recipe_tag (
     recipe_id BIGINT UNSIGNED NOT NULL,
     tag VARCHAR(120) NOT NULL,
     PRIMARY KEY (recipe_id, tag),
     KEY ix_recipe_tag_tag (tag),
-    CONSTRAINT fk_recipe_tag_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+    CONSTRAINT fk_recipe_tag_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;

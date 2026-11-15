@@ -6,13 +6,13 @@ CREATE TABLE recipe_source_link (
     url_hash BINARY(32) NOT NULL COMMENT 'SHA-256 of canonical URL',
     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
     primary_recipe_id BIGINT UNSIGNED GENERATED ALWAYS AS
-        (CASE WHEN is_primary THEN recipe_id ELSE NULL END) STORED,
+        (CASE WHEN is_primary THEN recipe_id ELSE NULL END) VIRTUAL,
     UNIQUE KEY uq_source_link_url (source_id, url_hash),
     UNIQUE KEY uq_source_link_primary (primary_recipe_id),
     KEY ix_source_link_recipe (recipe_id),
-    CONSTRAINT fk_source_link_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id),
+    CONSTRAINT fk_source_link_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id) ON DELETE CASCADE,
     CONSTRAINT fk_source_link_source FOREIGN KEY (source_id) REFERENCES source (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE recipe_raw (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -22,8 +22,8 @@ CREATE TABLE recipe_raw (
     format ENUM('jsonld', 'html') NOT NULL,
     payload_gz LONGBLOB NOT NULL,
     KEY ix_recipe_raw_recipe_fetched (recipe_id, fetched_at),
-    CONSTRAINT fk_recipe_raw_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+    CONSTRAINT fk_recipe_raw_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE ingest_url (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -44,7 +44,7 @@ CREATE TABLE ingest_url (
     KEY ix_ingest_recipe (recipe_id),
     CONSTRAINT fk_ingest_source FOREIGN KEY (source_id) REFERENCES source (id),
     CONSTRAINT fk_ingest_recipe FOREIGN KEY (recipe_id) REFERENCES recipe (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE ingredient_unknown (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -62,16 +62,16 @@ CREATE TABLE ingredient_unknown (
     CONSTRAINT fk_unknown_suggested FOREIGN KEY (suggested_ingredient_id) REFERENCES ingredient (id),
     CONSTRAINT fk_unknown_mapped FOREIGN KEY (mapped_ingredient_id) REFERENCES ingredient (id),
     CONSTRAINT ck_unknown_occurrences CHECK (occurrences > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE leftover_keyword (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     keyword VARCHAR(255) NOT NULL,
-    signal ENUM('dish_type', 'method', 'protein_form') NOT NULL,
+    signal_type ENUM('dish_type', 'method', 'protein_form') NOT NULL,
     value DECIMAL(5,4) NOT NULL,
-    UNIQUE KEY uq_leftover_keyword_signal (keyword, signal),
+    UNIQUE KEY uq_leftover_keyword_signal_type (keyword, signal_type),
     CONSTRAINT ck_leftover_keyword_value CHECK (value BETWEEN -1 AND 1)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE duplicate_candidate (
     recipe_a BIGINT UNSIGNED NOT NULL,
@@ -85,4 +85,4 @@ CREATE TABLE duplicate_candidate (
     CONSTRAINT fk_duplicate_b FOREIGN KEY (recipe_b) REFERENCES recipe (id),
     CONSTRAINT ck_duplicate_order CHECK (recipe_a < recipe_b),
     CONSTRAINT ck_duplicate_similarity CHECK (similarity BETWEEN 0 AND 1)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;

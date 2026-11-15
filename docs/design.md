@@ -109,7 +109,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `ingredient` | id, canonical\_name, category, is\_staple | Canonical vocabulary; staples (salt, oil, onion) are ignored in similarity |
 | `ingredient_alias` | alias, ingredient\_id | Swedish synonym map |
 | `ingredient_unknown` | id, raw\_text, normalised\_token (unique), occurrences, first\_seen\_at, status (pending / mapped / staple / ignored), suggested\_ingredient\_id (nullable), mapped\_ingredient\_id (nullable) | Review queue for ingredient tokens the normaliser cannot map |
-| `leftover_keyword` | keyword, signal (dish\_type / method / protein\_form), value (−1 to 1) | Keyword lists behind leftover\_score |
+| `leftover_keyword` | keyword, signal\_type (dish\_type / method / protein\_form), value (−1 to 1) | Keyword lists behind leftover\_score |
 | `dish_group` | id, core\_name, main\_protein, manual\_override | Variants of the same dish |
 | `duplicate_candidate` | recipe\_a, recipe\_b, similarity, status (pending / merged / not\_duplicate) | Admin review queue for possible copies |
 

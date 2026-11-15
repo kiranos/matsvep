@@ -9,7 +9,7 @@ CREATE TABLE source (
     last_crawl_at DATETIME(6) NULL,
     display_mode ENUM('full', 'index_only') NOT NULL DEFAULT 'full',
     UNIQUE KEY uq_source_name (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 CREATE TABLE engine_config (
     `key` VARCHAR(160) NOT NULL PRIMARY KEY,
@@ -17,7 +17,7 @@ CREATE TABLE engine_config (
     type ENUM('integer', 'decimal', 'boolean', 'string', 'json') NOT NULL,
     description VARCHAR(500) NOT NULL,
     version BIGINT UNSIGNED NOT NULL DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 INSERT INTO engine_config (`key`, value, type, description, version) VALUES
     ('crawl.delay_s', '5', 'integer', 'Minimum seconds between requests to the same source', 1),

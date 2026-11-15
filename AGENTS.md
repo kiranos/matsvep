@@ -29,12 +29,12 @@ Matsvep ("food swipe") is a private family app that suggests weekly dinners. A r
 
 ## Commands
 
-Fill these in as soon as they exist, and keep them current:
+Currently available (PowerShell, with a MySQL 8 client and an existing empty database):
 
-- Install: `composer install` (server), `flutter pub get` (app)
-- Test: `composer test` (PHPUnit), `flutter test`
-- Lint and static analysis: `composer lint` (PHP-CS-Fixer), `composer stan` (PHPStan, strict level), `flutter analyze`
-- Simulator: `php server/simulator/run.php --persona=all --weeks=52`
+- Apply the numbered migrations in order: `Get-ChildItem server/migrations/*.sql | Sort-Object Name | ForEach-Object { Get-Content $_.FullName -Raw -Encoding UTF8 | mysql --database=matsvep --default-character-set=utf8mb4; if ($LASTEXITCODE -ne 0) { throw "Migration failed: $($_.Name)" } }`
+- Validate the API description: `npx @redocly/cli@latest lint --extends spec api/openapi.yaml`
+
+`composer.json`, the Flutter app, the simulator and their install/test/lint commands do not exist yet. Add those commands when the corresponding code is created.
 
 ## Hard rules
 
