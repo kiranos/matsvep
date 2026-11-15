@@ -134,6 +134,12 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `meal_log` | id, household\_id, recipe\_id, cooked\_on, plan\_slot\_id | Dinners counted as eaten; drives recency and variety |
 | `engine_config` | key, value, type, description, version | Server-side settings |
 
+**Operational metadata**
+
+| Table | Key columns | Purpose |
+| --- | --- | --- |
+| `schema_migrations` | migration, checksum, status (started / applied), started\_at, applied\_at | Records numbered SQL files and detects changes or interrupted application |
+
 **Derived recipe features**, set by rules during ingestion and correctable per recipe in admin:
 
 - **leftover\_score (batch-friendliness):** how naturally the dish makes many portions, judged by the type of dish, not by servings. Stews, bönchili, bolognese, köttfärssås, boeuf bourguignon, soups, curries, gratins and lasagne score high. Dishes built from individual pieces, such as kycklingbröst, fiskfilé, biff or fläskkotlett, score low. Three keyword signals combine:
@@ -456,6 +462,8 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 ## System architecture
 
 The server is a plain Linux setup on one VPS (e.g. Ubuntu 24.04 LTS or Debian 12): Apache 2.4, PHP 8.3 with PHP-FPM, and MySQL 8, with no containers. The engine is plain PHP classes with no web dependencies, so the same code runs from API requests and from cron. Only cron talks to the recipe sites, so a slow or blocked site never affects the app.
+
+Numbered SQL files in `server/migrations` are applied by the PHP CLI runner. Its `000_schema_migrations.sql` bootstrap creates `schema_migrations`; each later file is recorded with a checksum and applied timestamp. The runner skips matching files and stops if a recorded file changed or a previous run stopped partway through a migration. MySQL DDL can commit before a migration finishes, so an interrupted migration requires manual repair before retrying.
 
 ```
 Windows + Android apps (Flutter)
