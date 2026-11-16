@@ -84,6 +84,40 @@ final class KoketAdapter
         return $counts;
     }
 
+    /** @return array{sampled: int, queued: int, root: int, nested: int} */
+    public function discoverSample(string $xml, string $sitemapUrl, int $size): array
+    {
+        $found = $this->discovery->sitemap($xml, $sitemapUrl);
+        if ($found['sitemaps'] !== []) {
+            throw new RuntimeException('Pilot sampling requires a sitemap URL set, not a sitemap index.');
+        }
+        $sample = (new KoketPilotSampler())->sample($found['recipes'], $size);
+        $root = 0;
+        $queued = 0;
+        $this->db->beginTransaction();
+        try {
+            $query = $this->db->prepare('SELECT COUNT(*) FROM ingest_url WHERE source_id = ?');
+            $query->execute([$this->sourceId]);
+            if ((int) $query->fetchColumn() !== 0) {
+                throw new RuntimeException('Pilot queue already exists; resume it without sampling again.');
+            }
+            foreach ($sample as $item) {
+                $path = parse_url($item['url'], PHP_URL_PATH);
+                if (is_string($path) && substr_count(trim($path, '/'), '/') === 0) {
+                    $root++;
+                }
+                if ($this->queue->enqueue($item['url'], 'sitemap', $item['modified_at'])) {
+                    $queued++;
+                }
+            }
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+        return ['sampled' => count($sample), 'queued' => $queued, 'root' => $root, 'nested' => count($sample) - $root];
+    }
+
     /** @return array{fetched: int, unchanged: int, gone: int, redirected: int, not_recipe: int, failed: int, skipped_robots: int} */
     public function fetchDue(int $limit): array
     {

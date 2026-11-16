@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Matsvep\Ingest\Adapter\KoketAdapter;
+use Matsvep\Ingest\Adapter\KoketPilotReport;
 use Matsvep\Ingest\Http\PoliteFetcher;
 use Matsvep\Ingest\Http\StreamHttpClient;
 
@@ -95,18 +96,69 @@ try {
     try {
         $command = $argv[1] ?? '';
         if ($command === 'discover') {
-            $categories = array_slice($argv, 2);
-            $result = $adapter->discover(rtrim($source['base_url'], '/') . '/sitemap.xml', $categories);
+            $categories = [];
+            $sampleSize = null;
+            $sitemapFile = null;
+            for ($index = 2; $index < $argc; $index++) {
+                $argument = $argv[$index];
+                if ($argument === '--sample' && isset($argv[$index + 1])) {
+                    $value = $argv[++$index];
+                    if (!ctype_digit($value) || (int) $value < 1) {
+                        throw new RuntimeException('--sample requires a positive integer.');
+                    }
+                    $sampleSize = (int) $value;
+                } elseif ($argument === '--sitemap-file' && isset($argv[$index + 1])) {
+                    $sitemapFile = $argv[++$index];
+                } elseif (str_starts_with($argument, '--')) {
+                    throw new RuntimeException("Unknown discover option: $argument");
+                } else {
+                    $categories[] = $argument;
+                }
+            }
+            $sitemapUrl = rtrim($source['base_url'], '/') . '/sitemap.xml';
+            if ($sampleSize !== null) {
+                if ($categories !== []) {
+                    throw new RuntimeException('Sample discovery does not accept category URLs.');
+                }
+                if ($sitemapFile !== null) {
+                    $xml = file_get_contents($sitemapFile);
+                    if ($xml === false) {
+                        throw new RuntimeException('Cannot read the local sitemap file.');
+                    }
+                } else {
+                    $response = $fetcher->get($sitemapUrl);
+                    if ($response->status !== 200) {
+                        throw new RuntimeException("Sitemap fetch failed with HTTP {$response->status}.");
+                    }
+                    $xml = $response->body;
+                }
+                $result = $adapter->discoverSample($xml, $sitemapUrl, $sampleSize);
+            } else {
+                if ($sitemapFile !== null) {
+                    throw new RuntimeException('--sitemap-file requires --sample.');
+                }
+                $result = $adapter->discover($sitemapUrl, $categories);
+            }
         } elseif ($command === 'fetch') {
             $limit = $argv[2] ?? '';
             if (!ctype_digit($limit) || (int) $limit < 1) {
                 throw new RuntimeException('Usage: php bin/crawl-koket.php fetch <positive-limit>');
             }
             $result = $adapter->fetchDue((int) $limit);
+        } elseif ($command === 'report') {
+            $result = (new KoketPilotReport(
+                $db,
+                (int) $source['id'],
+                $settings['crawl.max_attempts'],
+                $delay,
+            ))->build();
         } else {
-            throw new RuntimeException('Usage: php bin/crawl-koket.php discover [category-urls...] | fetch <limit>');
+            throw new RuntimeException(
+                'Usage: php bin/crawl-koket.php discover [--sample N --sitemap-file path | category-urls...] ' .
+                '| fetch <limit> | report'
+            );
         }
-        echo json_encode($result, JSON_THROW_ON_ERROR), PHP_EOL;
+        echo json_encode($result, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), PHP_EOL;
     } finally {
         $release = $db->prepare('SELECT RELEASE_LOCK(?)');
         $release->execute(['matsvep:crawl:koket']);
