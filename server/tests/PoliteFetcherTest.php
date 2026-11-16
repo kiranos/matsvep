@@ -6,8 +6,8 @@ namespace Matsvep\Tests;
 
 use Matsvep\Ingest\Http\HttpResponse;
 use Matsvep\Ingest\Http\PoliteFetcher;
-use Matsvep\Ingest\Http\RobotsDenied;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class PoliteFetcherTest extends TestCase
 {
@@ -17,7 +17,7 @@ final class PoliteFetcherTest extends TestCase
         $robots = file_get_contents(__DIR__ . '/fixtures/koket/robots.txt');
         self::assertNotFalse($robots);
         $client->responses['https://www.koket.se/robots.txt'] = new HttpResponse(200, [], $robots);
-        $client->responses['https://www.koket.se/recept/oven-curry'] = new HttpResponse(200, [], 'recipe');
+        $client->responses['https://www.koket.se/sitemap.xml'] = new HttpResponse(200, [], 'sitemap');
         $time = 0.0;
         $waits = [];
         $fetcher = new PoliteFetcher(
@@ -33,12 +33,12 @@ final class PoliteFetcherTest extends TestCase
                 $time += $seconds;
             },
         );
-        self::assertSame(200, $fetcher->get('https://www.koket.se/recept/oven-curry')->status);
+        self::assertSame(200, $fetcher->get('https://www.koket.se/sitemap.xml')->status);
         self::assertSame([5.0], $waits);
         self::assertCount(2, $client->requests);
         self::assertSame('MatsvepCrawler/1.0', $client->requests[1]['headers']['User-Agent']);
 
-        $this->expectException(RobotsDenied::class);
-        $fetcher->get('https://www.koket.se/blocked/secret');
+        $this->expectException(RuntimeException::class);
+        $fetcher->get('https://other.example/page');
     }
 }

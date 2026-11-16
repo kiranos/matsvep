@@ -12,6 +12,26 @@ use RuntimeException;
 
 final class KoketDiscovery
 {
+    /** @var list<array{path: string, match: string}> */
+    private array $excludedPaths = [];
+
+    public function __construct(?string $exclusionsFile = null)
+    {
+        $path = $exclusionsFile ?? dirname(__DIR__, 3) . '/seeds/koket_non_recipe_paths.csv';
+        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false || array_shift($lines) !== 'path,match') {
+            throw new RuntimeException('Cannot read non-recipe path data.');
+        }
+        foreach ($lines as $line) {
+            $fields = str_getcsv($line);
+            if (count($fields) !== 2 || !is_string($fields[0]) || !is_string($fields[1])
+                || !str_starts_with($fields[0], '/') || !in_array($fields[1], ['exact', 'prefix'], true)) {
+                throw new RuntimeException('Invalid non-recipe path data.');
+            }
+            $this->excludedPaths[] = ['path' => $fields[0], 'match' => $fields[1]];
+        }
+    }
+
     /** @return array{recipes: array<string, DateTimeImmutable|null>, sitemaps: list<string>} */
     public function sitemap(string $xml, string $pageUrl): array
     {
@@ -28,7 +48,7 @@ final class KoketDiscovery
             }
             $locationNode = $node->getElementsByTagNameNS('*', 'loc')->item(0);
             $location = $locationNode !== null ? trim($locationNode->textContent) : '';
-            $url = $this->recipeUrl($location, $pageUrl);
+            $url = $this->candidateUrl($location, $pageUrl);
             if ($url === null) {
                 continue;
             }
@@ -46,7 +66,7 @@ final class KoketDiscovery
             }
             $locationNode = $node->getElementsByTagNameNS('*', 'loc')->item(0);
             $location = $locationNode !== null ? trim($locationNode->textContent) : '';
-            $url = $this->absoluteUrl($location, $pageUrl);
+            $url = $this->canonicalUrl($location, $pageUrl);
             if ($url !== null) {
                 $sitemaps[] = $url;
             }
@@ -64,42 +84,53 @@ final class KoketDiscovery
         $xpath = new DOMXPath($document);
         $recipes = [];
         $pages = [];
-        foreach ($xpath->query('//a[@href]') ?: [] as $anchor) {
+        foreach ($xpath->query('//*[@data-testid="recipe-card"]//*[@data-testid="recipe-card-title"]//a[@href]') ?: [] as $anchor) {
             if (!$anchor instanceof DOMElement) {
                 continue;
             }
             $href = $anchor->getAttribute('href');
-            $url = $this->absoluteUrl($href, $pageUrl);
-            if ($url === null) {
-                continue;
+            $recipe = $this->candidateUrl($href, $pageUrl);
+            if ($recipe !== null) {
+                $recipes[$recipe] = true;
             }
-            $rel = strtolower($anchor->getAttribute('rel'));
-            if (preg_match('/(?:^|\s)next(?:\s|$)/', $rel) === 1) {
-                $pages[$url] = true;
-            } else {
-                $recipe = $this->recipeUrl($url, $pageUrl);
-                if ($recipe !== null) {
-                    $recipes[$recipe] = true;
+        }
+        foreach ($xpath->query('//a[contains(concat(" ", normalize-space(@rel), " "), " next ")] | //link[contains(concat(" ", normalize-space(@rel), " "), " next ")]') ?: [] as $anchor) {
+            if ($anchor instanceof DOMElement) {
+                $url = $this->canonicalUrl($anchor->getAttribute('href'), $pageUrl);
+                if ($url !== null) {
+                    $pages[$url] = true;
                 }
             }
         }
         return ['recipes' => array_keys($recipes), 'pages' => array_keys($pages)];
     }
 
-    public function recipeUrl(string $url, string $pageUrl): ?string
+    public function candidateUrl(string $url, string $pageUrl): ?string
     {
-        $absolute = $this->absoluteUrl($url, $pageUrl);
+        $absolute = $this->canonicalUrl($url, $pageUrl);
         if ($absolute === null) {
             return null;
         }
         $path = parse_url($absolute, PHP_URL_PATH);
-        if (!is_string($path) || !str_starts_with($path, '/recept/')) {
+        if (!is_string($path) || in_array($path, ['/', '/robots.txt', '/sitemap.xml'], true)
+            || str_ends_with($path, '.xml') || $this->isExcluded($path)) {
             return null;
         }
-        return $absolute;
+        return strtok($absolute, '?') ?: null;
     }
 
-    private function absoluteUrl(string $url, string $pageUrl): ?string
+    private function isExcluded(string $path): bool
+    {
+        foreach ($this->excludedPaths as $entry) {
+            if (($entry['match'] === 'exact' && $path === $entry['path'])
+                || ($entry['match'] === 'prefix' && str_starts_with($path, $entry['path']))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function canonicalUrl(string $url, string $pageUrl): ?string
     {
         $url = trim($url);
         if ($url === '' || str_starts_with($url, '#')) {
@@ -112,7 +143,7 @@ final class KoketDiscovery
             $url = 'https://www.koket.se' . (is_string($pagePath) ? $pagePath : '/') . $url;
         } elseif (str_starts_with($url, '/')) {
             $url = 'https://www.koket.se' . $url;
-        } elseif (!str_starts_with($url, 'https://')) {
+        } elseif (!str_starts_with($url, 'https://') && !str_starts_with($url, 'http://')) {
             if (str_contains($url, ':')) {
                 return null;
             }
@@ -130,7 +161,7 @@ final class KoketDiscovery
         }
         $query = parse_url($url, PHP_URL_QUERY);
         $canonical = 'https://www.koket.se' . (rtrim($path, '/') ?: '/');
-        if (is_string($query) && $query !== '' && !str_starts_with($path, '/recept/')) {
+        if (is_string($query) && $query !== '') {
             $canonical .= '?' . $query;
         }
         return $canonical;

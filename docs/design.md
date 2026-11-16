@@ -43,7 +43,7 @@ None of the big Swedish recipe sites offers a public API, so recipes are collect
 
 | Site | Discovery | robots.txt (checked 2026-11-15) | Terms | Status |
 | --- | --- | --- | --- | --- |
-| [Köket.se](https://www.koket.se/) (TV4) | `sitemap.xml` (about 500 recently changed pages) plus recipe category pages under `/recept` | `Allow: /` for all agents | [Private use only](https://www.koket.se/kokets-anvandarvillkor); no public redistribution; copying for private use allowed; page footer says "Do not mine us" | First source |
+| [Köket.se](https://www.koket.se/) (TV4) | Broad `sitemap.xml` as the primary route; category pages as backup for omissions | `Allow: /` for all agents | [Private use only](https://www.koket.se/kokets-anvandarvillkor); no public redistribution; copying for private use allowed; page footer says "Do not mine us" | First source |
 | [ICA.se](https://www.ica.se/robots.txt) | `/recept/sitemaps/` | Open for normal agents; deep recipe paths blocked for AI crawlers | [ICA Gruppen terms](https://icagruppen.se/installningssida/anvandarvillkor): private, non-commercial use; no republishing without written consent | Later source |
 | [Arla.se](https://www.arla.se/robots.txt) | `sitemap.index.xml` | Recipe pages allowed; search, `/recept/?` queries and collection sub-pages blocked | No published site terms; the footer links only to privacy and cookie policies (checked 2026-11-15). Swedish copyright law applies | Later source; OK for private use |
 | [Coop.se](https://www.coop.se/robots.txt) | `sitemap.xml` | Recipe pages allowed; filtered and sorted lists blocked | Only customer-account terms, which reserve Coop's rights in its digital channels; no recipe-specific terms (checked 2026-11-15) | Later source; OK for private use |
@@ -55,9 +55,9 @@ Under Swedish law, ingredient lists and plain method steps usually lack *verksh�
 
 Ingestion runs from cron, never on a user request.
 
-1. **Discover:** read each enabled source's sitemap and category pages and queue new or changed recipe URLs.
-2. **Fetch politely:** obey robots.txt, use an identifying User-Agent, send at most 1 request every 5 s per site, cache ETag and Last-Modified, and back off on 429 or 5xx responses.
-3. **Parse:** read the schema.org `Recipe` in `application/ld+json` first, and fall back to the adapter's CSS selectors for name, ingredients, steps, time, yield and category. Keep a compressed raw snapshot so recipes can be re-parsed when a parser improves.
+1. **Discover:** read each enabled source's sitemap and queue same-host URLs, excluding known non-recipe sections. For Köket, the sitemap is the broad primary route and category pages can supplement its omissions. Köket recipe URLs can be root-level slugs; URL shape alone does not establish that a page is a recipe. Queue new URLs and requeue fetched URLs when a sitemap change date is newer than the last fetch.
+2. **Fetch politely:** obey robots.txt, use an identifying User-Agent, wait at least `crawl.delay_s` between requests per site, and use a `crawl.timeout_s` request timeout. Cache ETag and Last-Modified. Retry failures with capped exponential backoff, respecting a longer `Retry-After` value, and stop after `crawl.max_attempts`. A same-host redirect queues its target and marks the old URL gone; an off-host redirect is a failed fetch.
+3. **Classify and parse:** a fetched page is a recipe if it has schema.org `Recipe` JSON-LD or Köket's recipe `page-type` meta tag. Mark other pages `not_recipe` without retrying them. Read JSON-LD first, then fall back to the adapter's HTML selectors for name, ingredients, steps, time, yield and tags. Preserve available ingredient and step section names. Store source cuisine and category as `recipe_tag` rows; the derived `cuisine` and `meal_type` fields are filled by later normalisation. Keep a compressed raw snapshot so recipes can be re-parsed when a parser improves.
 4. **Normalise:** map ingredient lines to canonical ingredients through a Swedish synonym table ("kycklingfilé", "kycklinglårfilé" → *kyckling*). Unknown words go to an admin review queue.
 5. **Derive features:** main protein, carb base, cuisine, meal type, vegetarian flag, effort, festive score and leftover score (see Data model).
 6. **Deduplicate and group:** merge copies and link variants of the same dish (below).
@@ -105,7 +105,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `recipe_tag` | recipe\_id, tag | Tags such as *taco*, *gryta*, *ugn*, *fredagsmys* |
 | `recipe_source_link` | recipe\_id, source\_id, url, is\_primary | All source URLs of a merged recipe |
 | `recipe_raw` | recipe\_id, fetched\_at, etag, format (jsonld / html), payload\_gz | Compressed raw snapshot for re-parsing |
-| `ingest_url` | id, source\_id, url, url\_hash (unique per source), discovered\_via (sitemap / category), status (queued / fetched / failed / skipped\_robots / gone), etag, last\_modified, http\_status, attempts, next\_attempt\_at, last\_fetched\_at, recipe\_id (nullable) | Resumable discovery and fetch queue, conditional requests and retry state |
+| `ingest_url` | id, source\_id, url, url\_hash (unique per source), discovered\_via (sitemap / category), status (queued / fetched / failed / skipped\_robots / gone / not\_recipe), etag, last\_modified, http\_status, attempts, next\_attempt\_at, last\_fetched\_at, recipe\_id (nullable) | Resumable discovery and fetch queue, conditional requests and retry state; `not_recipe` is terminal |
 | `ingredient` | id, canonical\_name, category, is\_staple | Canonical vocabulary; staples (salt, oil, onion) are ignored in similarity |
 | `ingredient_alias` | alias, ingredient\_id | Swedish synonym map |
 | `ingredient_unknown` | id, raw\_text, normalised\_token (unique), occurrences, first\_seen\_at, status (pending / mapped / staple / ignored), suggested\_ingredient\_id (nullable), mapped\_ingredient\_id (nullable) | Review queue for ingredient tokens the normaliser cannot map |
@@ -457,6 +457,8 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Dedupe | `dedupe.auto_merge` / `.review` / `.group_overlap` | 0.95 / 0.80 / 0.5 | Thresholds for merging copies and grouping variants |
 | Dedupe | `dedupe.source_priority` | koket, ica, arla, coop | Tie-breaker for the kept copy |
 | Crawl | `crawl.delay_s` / `crawl.recheck_share` | 5 / 0.01 | Seconds between requests per site; nightly re-check share |
+| Crawl | `crawl.retry_base_s` / `crawl.retry_max_s` / `crawl.max_attempts` | 60 / 3600 / 5 | Exponential retry base, delay cap and maximum attempts; a longer server `Retry-After` takes precedence over the cap |
+| Crawl | `crawl.timeout_s` | 30 | HTTP request timeout in seconds |
 
 **Family settings** (in the app): favourite share (default 70%), plan days (all 7 or Sun–Thu), planning mode (whole week or split) and block vegetarian (off). The weekday-to-profile map lives in `day_profile`; a new profile, such as `guests`, needs one new DayFit rule plus config rows.
 
@@ -537,7 +539,7 @@ The recipe database is filled and the engine is proven on simulated families bef
 
 ### Seeding the database
 
-- **Full first crawl:** Köket's sitemap lists only about 500 recently changed pages, so the first crawl also walks the recipe category pages under `/recept`. At 1 request every 5 s, 10,000 recipes take about 14 hours, so the crawl runs over a night or two and resumes where it stopped. After that, the nightly job only fetches new or changed recipes.
+- **Full first crawl:** The saved Köket sitemap contains 41,747 `<url>` entries, all with `lastmod`. Excluding 241 known non-recipe section URLs leaves about 41,506 possible recipe URLs (30,176 root-level and 11,330 nested). This is a URL-pattern upper bound: root-level chef pages and other non-recipe pages are classified after fetching. Neither of the two saved recipe pages appears in this sitemap, so it is broad but incomplete. Use it as the primary discovery route and supplement it with category pages to find omissions. At one request every 5 seconds, fetching all 41,506 sitemap candidates requires at least about 58 hours, plus discovery, backup discovery and processing time; run bounded batches across several days and resume from `ingest_url`. Later runs recheck new or changed sitemap entries.
 - **Clean-up pass:** work through the unknown-ingredient queue and the duplicate review queue, and spot-check protein, cuisine and leftover tags on about 200 recipes. Fixes go into synonym and keyword lists, not individual recipes. This is the main manual effort of the phase, and tag quality directly drives suggestion quality.
 - **Snapshot:** a compressed dump of the seeded database is the fixed dataset for all simulations and golden tests. It contains collected recipes, so it is kept in private storage only.
 

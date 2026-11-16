@@ -34,38 +34,43 @@ final class KoketRecipeStore
             $recipeId = $existingRecipeId;
             if ($recipeId === null) {
                 $insert = $this->db->prepare(
-                    'INSERT INTO recipe (source_id, url, title, image_url, total_time_min, servings, cuisine, meal_type, ' .
+                    'INSERT INTO recipe (source_id, url, title, image_url, total_time_min, servings, ' .
                     'source_status, parsed_at, parser_version, active) ' .
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ok', UTC_TIMESTAMP(6), 'koket_v1', TRUE)"
+                    "VALUES (?, ?, ?, ?, ?, ?, 'ok', UTC_TIMESTAMP(6), 'koket_v2', TRUE)"
                 );
                 $insert->execute([
                     $this->sourceId, $url, $recipe->title, $recipe->imageUrl, $recipe->totalTimeMinutes,
-                    $recipe->servings, $recipe->cuisine, $recipe->mealType,
+                    $recipe->servings,
                 ]);
                 $recipeId = (int) $this->db->lastInsertId();
             } else {
                 $update = $this->db->prepare(
-                    'UPDATE recipe SET title = ?, image_url = ?, total_time_min = ?, servings = ?, cuisine = ?, ' .
-                    "meal_type = ?, source_status = 'ok', parsed_at = UTC_TIMESTAMP(6), parser_version = 'koket_v1' " .
+                    'UPDATE recipe SET title = ?, image_url = ?, total_time_min = ?, servings = ?, ' .
+                    "source_status = 'ok', parsed_at = UTC_TIMESTAMP(6), parser_version = 'koket_v2' " .
                     'WHERE id = ? AND source_id = ?'
                 );
                 $update->execute([
                     $recipe->title, $recipe->imageUrl, $recipe->totalTimeMinutes, $recipe->servings,
-                    $recipe->cuisine, $recipe->mealType, $recipeId, $this->sourceId,
+                    $recipeId, $this->sourceId,
                 ]);
                 $this->db->prepare('DELETE FROM recipe_ingredient WHERE recipe_id = ?')->execute([$recipeId]);
                 $this->db->prepare('DELETE FROM recipe_step WHERE recipe_id = ?')->execute([$recipeId]);
+                $this->db->prepare('DELETE FROM recipe_tag WHERE recipe_id = ?')->execute([$recipeId]);
             }
 
             $ingredient = $this->db->prepare(
-                'INSERT INTO recipe_ingredient (recipe_id, position, raw_text) VALUES (?, ?, ?)'
+                'INSERT INTO recipe_ingredient (recipe_id, position, group_name, raw_text) VALUES (?, ?, ?, ?)'
             );
             foreach ($recipe->ingredients as $index => $line) {
-                $ingredient->execute([$recipeId, $index + 1, $line]);
+                $ingredient->execute([$recipeId, $index + 1, $line['group_name'], $line['text']]);
             }
-            $step = $this->db->prepare('INSERT INTO recipe_step (recipe_id, position, text) VALUES (?, ?, ?)');
-            foreach ($recipe->steps as $index => $text) {
-                $step->execute([$recipeId, $index + 1, $text]);
+            $step = $this->db->prepare('INSERT INTO recipe_step (recipe_id, position, group_name, text) VALUES (?, ?, ?, ?)');
+            foreach ($recipe->steps as $index => $line) {
+                $step->execute([$recipeId, $index + 1, $line['group_name'], $line['text']]);
+            }
+            $tag = $this->db->prepare('INSERT IGNORE INTO recipe_tag (recipe_id, tag) VALUES (?, ?)');
+            foreach ($recipe->tags as $value) {
+                $tag->execute([$recipeId, $value]);
             }
 
             $link = $this->db->prepare(

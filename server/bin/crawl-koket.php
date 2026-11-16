@@ -60,16 +60,32 @@ try {
         || !is_string($source['base_url'] ?? null)) {
         throw new RuntimeException('Enabled Koket source is missing.');
     }
-    $delayQuery = $db->prepare('SELECT value FROM engine_config WHERE `key` = ?');
-    $delayQuery->execute(['crawl.delay_s']);
-    $configuredDelay = $delayQuery->fetchColumn();
-    if (!is_string($configuredDelay) || !ctype_digit($configuredDelay)) {
-        throw new RuntimeException('Invalid crawl.delay_s configuration.');
+    $settingQuery = $db->prepare('SELECT value FROM engine_config WHERE `key` = ?');
+    $settings = [];
+    foreach (['crawl.delay_s', 'crawl.retry_base_s', 'crawl.retry_max_s', 'crawl.max_attempts', 'crawl.timeout_s'] as $key) {
+        $settingQuery->execute([$key]);
+        $value = $settingQuery->fetchColumn();
+        if (!is_string($value) || !ctype_digit($value) || (int) $value < 1) {
+            throw new RuntimeException("Invalid $key configuration.");
+        }
+        $settings[$key] = (int) $value;
     }
     $sourceDelay = $source['crawl_delay_s'] ?? null;
-    $delay = max((int) $configuredDelay, is_numeric($sourceDelay) ? (int) $sourceDelay : 0);
-    $fetcher = new PoliteFetcher(new StreamHttpClient(), $source['base_url'], $config['CRAWL_USER_AGENT'], $delay);
-    $adapter = new KoketAdapter($db, (int) $source['id'], $fetcher, $delay);
+    $delay = max($settings['crawl.delay_s'], is_numeric($sourceDelay) ? (int) $sourceDelay : 0);
+    $fetcher = new PoliteFetcher(
+        new StreamHttpClient($settings['crawl.timeout_s']),
+        $source['base_url'],
+        $config['CRAWL_USER_AGENT'],
+        $delay,
+    );
+    $adapter = new KoketAdapter(
+        $db,
+        (int) $source['id'],
+        $fetcher,
+        $settings['crawl.retry_base_s'],
+        $settings['crawl.retry_max_s'],
+        $settings['crawl.max_attempts'],
+    );
 
     $lockQuery = $db->prepare('SELECT GET_LOCK(?, 0)');
     $lockQuery->execute(['matsvep:crawl:koket']);
@@ -80,9 +96,6 @@ try {
         $command = $argv[1] ?? '';
         if ($command === 'discover') {
             $categories = array_slice($argv, 2);
-            if ($categories === []) {
-                $categories = [rtrim($source['base_url'], '/') . '/recept'];
-            }
             $result = $adapter->discover(rtrim($source['base_url'], '/') . '/sitemap.xml', $categories);
         } elseif ($command === 'fetch') {
             $limit = $argv[2] ?? '';

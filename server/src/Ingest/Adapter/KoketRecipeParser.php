@@ -12,13 +12,41 @@ use RuntimeException;
 
 final class KoketRecipeParser
 {
+    public function isRecipe(string $html): bool
+    {
+        $document = $this->document($html);
+        $xpath = new DOMXPath($document);
+        $pageType = $this->xpathText(
+            $xpath,
+            'string((//meta[translate(@name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz") = "page-type" '
+                . 'or translate(@property, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz") = "page-type"]/@content)[1])',
+        );
+        if (strtolower($pageType) === 'recipe') {
+            return true;
+        }
+        return $this->jsonLdRecipe($xpath) !== null;
+    }
+
     public function parse(string $html): ParsedRecipe
+    {
+        $document = $this->document($html);
+        $xpath = new DOMXPath($document);
+        $recipe = $this->jsonLdRecipe($xpath);
+        return $recipe !== null ? $this->fromJsonLd($recipe, $xpath) : $this->fromHtml($xpath);
+    }
+
+    private function document(string $html): DOMDocument
     {
         $document = new DOMDocument();
         if (!@$document->loadHTML($html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
             throw new RuntimeException('Cannot parse recipe HTML.');
         }
-        $xpath = new DOMXPath($document);
+        return $document;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function jsonLdRecipe(DOMXPath $xpath): ?array
+    {
         foreach ($xpath->query('//script[contains(translate(@type, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "application/ld+json")]') ?: [] as $script) {
             if (!$script instanceof DOMNode) {
                 continue;
@@ -30,10 +58,10 @@ final class KoketRecipeParser
             }
             $recipe = $this->findRecipe($data);
             if ($recipe !== null) {
-                return $this->fromJsonLd($recipe);
+                return $recipe;
             }
         }
-        return $this->fromHtml($xpath);
+        return null;
     }
 
     /** @return array<string, mixed>|null */
@@ -66,11 +94,12 @@ final class KoketRecipeParser
     }
 
     /** @param array<string, mixed> $recipe */
-    private function fromJsonLd(array $recipe): ParsedRecipe
+    private function fromJsonLd(array $recipe, DOMXPath $xpath): ParsedRecipe
     {
         $title = $this->text($recipe['name'] ?? null);
-        $ingredients = $this->strings($recipe['recipeIngredient'] ?? null);
-        $steps = $this->instructions($recipe['recipeInstructions'] ?? null);
+        $headings = $this->sectionHeadings($xpath);
+        $ingredients = $this->ingredientLines($recipe['recipeIngredient'] ?? null, $headings);
+        $steps = $this->instructions($recipe['recipeInstructions'] ?? null, $headings);
         if ($title === null || $ingredients === [] || $steps === []) {
             throw new RuntimeException('Recipe JSON-LD lacks required fields.');
         }
@@ -80,17 +109,35 @@ final class KoketRecipeParser
         if (is_array($yield)) {
             $yield = $yield[0] ?? null;
         }
+        $tags = array_values(array_unique(array_merge(
+            $this->textList($recipe['recipeCuisine'] ?? null),
+            $this->textList($recipe['recipeCategory'] ?? null),
+        )));
         return new ParsedRecipe(
             $title,
             $ingredients,
             $steps,
+            $tags,
             $this->image($recipe['image'] ?? null),
             $time,
             $this->servings($yield),
-            $this->text($recipe['recipeCuisine'] ?? null),
-            $this->text($recipe['recipeCategory'] ?? null),
             'jsonld',
         );
+    }
+
+    /** @return list<string> */
+    private function sectionHeadings(DOMXPath $xpath): array
+    {
+        $headings = [];
+        foreach ($xpath->query('//h3[contains(@class, "sectionTitle")]') ?: [] as $node) {
+            if ($node instanceof DOMNode) {
+                $text = trim($node->textContent);
+                if ($text !== '') {
+                    $headings[] = $text;
+                }
+            }
+        }
+        return array_values(array_unique($headings));
     }
 
     private function fromHtml(DOMXPath $xpath): ParsedRecipe
@@ -103,7 +150,7 @@ final class KoketRecipeParser
             }
             $text = trim($node->textContent);
             if ($text !== '') {
-                $ingredients[] = $text;
+                $ingredients[] = ['text' => $text, 'group_name' => null];
             }
         }
         $steps = [];
@@ -113,7 +160,7 @@ final class KoketRecipeParser
             }
             $text = trim($node->textContent);
             if ($text !== '') {
-                $steps[] = $text;
+                $steps[] = ['text' => $text, 'group_name' => null];
             }
         }
         if ($title === '' || $ingredients === [] || $steps === []) {
@@ -126,11 +173,10 @@ final class KoketRecipeParser
             $title,
             $ingredients,
             $steps,
+            [],
             $image !== '' ? $image : null,
             $this->minutes($time),
             $this->servings($yield),
-            null,
-            null,
             'html',
         );
     }
@@ -151,8 +197,12 @@ final class KoketRecipeParser
     }
 
     /** @return list<string> */
-    private function strings(mixed $value): array
+    private function textList(mixed $value): array
     {
+        if (is_string($value)) {
+            $text = $this->text($value);
+            return $text !== null ? [$text] : [];
+        }
         if (!is_array($value)) {
             return [];
         }
@@ -166,27 +216,62 @@ final class KoketRecipeParser
         return $result;
     }
 
-    /** @return list<string> */
-    private function instructions(mixed $value): array
+    /**
+     * @param list<string> $headings
+     * @return list<array{text: string, group_name: string|null}>
+     */
+    private function ingredientLines(mixed $value, array $headings): array
+    {
+        $result = [];
+        $group = null;
+        $this->appendLines($value, $headings, $group, $result);
+        return $result;
+    }
+
+    /**
+     * @param list<string> $headings
+     * @return list<array{text: string, group_name: string|null}>
+     */
+    private function instructions(mixed $value, array $headings): array
+    {
+        $result = [];
+        $group = null;
+        $this->appendLines($value, $headings, $group, $result);
+        return $result;
+    }
+
+    /**
+     * @param list<string> $headings
+     * @param list<array{text: string, group_name: string|null}> $result
+     */
+    private function appendLines(mixed $value, array $headings, ?string &$group, array &$result): void
     {
         if (is_string($value)) {
             $text = $this->text($value);
-            return $text !== null ? [$text] : [];
+            if ($text !== null) {
+                if (in_array($text, $headings, true)) {
+                    $group = $text;
+                } else {
+                    $result[] = ['text' => $text, 'group_name' => $group];
+                }
+            }
+            return;
         }
         if (!is_array($value)) {
-            return [];
-        }
-        if (isset($value['text'])) {
-            return $this->instructions($value['text']);
+            return;
         }
         if (isset($value['itemListElement'])) {
-            return $this->instructions($value['itemListElement']);
+            $group = $this->text($value['name'] ?? null) ?? $group;
+            $this->appendLines($value['itemListElement'], $headings, $group, $result);
+            return;
         }
-        $result = [];
+        if (isset($value['text'])) {
+            $this->appendLines($value['text'], $headings, $group, $result);
+            return;
+        }
         foreach ($value as $item) {
-            array_push($result, ...$this->instructions($item));
+            $this->appendLines($item, $headings, $group, $result);
         }
-        return $result;
     }
 
     private function image(mixed $value): ?string

@@ -10,37 +10,81 @@ use PHPUnit\Framework\TestCase;
 
 final class KoketParserTest extends TestCase
 {
-    public function testJsonLdGraphIsPreferred(): void
+    public function testRealRecipePagesPreserveTagsAndSectionNames(): void
     {
-        $recipe = (new KoketRecipeParser())->parse($this->fixture('recipe-jsonld.html'));
-        self::assertSame('Oven curry', $recipe->title);
-        self::assertSame(['2 onions', '1 tbsp oil'], $recipe->ingredients);
-        self::assertSame(['Chop the onions.', 'Bake until tender.'], $recipe->steps);
-        self::assertSame(75, $recipe->totalTimeMinutes);
-        self::assertSame(4.0, $recipe->servings);
-        self::assertSame('jsonld', $recipe->format);
+        $parser = new KoketRecipeParser();
+        $soup = $this->fixture('recipe-soup.html');
+        self::assertTrue($parser->isRecipe($soup));
+        $withoutJsonLd = preg_replace('~<script[^>]*type="application/ld\+json"[^>]*>.*?</script>~is', '', $soup);
+        self::assertIsString($withoutJsonLd);
+        self::assertTrue($parser->isRecipe($withoutJsonLd));
+        $first = $parser->parse($soup);
+        self::assertSame('jsonld', $first->format);
+        self::assertCount(21, $first->ingredients);
+        self::assertCount(19, $first->steps);
+        self::assertCount(1, $first->tags);
+        self::assertNotNull($first->ingredients[0]['group_name']);
+        self::assertSame($first->ingredients[0]['group_name'], $first->steps[0]['group_name']);
+        self::assertNotSame($first->ingredients[0]['group_name'], $first->ingredients[20]['group_name']);
+
+        $second = $parser->parse($this->fixture('recipe-2.html'));
+        self::assertCount(10, $second->ingredients);
+        self::assertCount(14, $second->steps);
+        self::assertCount(2, $second->tags);
+        self::assertNotNull($second->ingredients[0]['group_name']);
+        self::assertNotSame($second->steps[0]['group_name'], $second->steps[13]['group_name']);
     }
 
-    public function testHtmlFallbackUsesSavedFixture(): void
+    public function testRealChefAndCategoryPagesAreNotRecipes(): void
     {
-        $recipe = (new KoketRecipeParser())->parse($this->fixture('recipe-html.html'));
-        self::assertSame('Bean stew', $recipe->title);
-        self::assertSame(['1 cup beans', '2 tomatoes'], $recipe->ingredients);
-        self::assertSame(40, $recipe->totalTimeMinutes);
-        self::assertSame('html', $recipe->format);
+        $parser = new KoketRecipeParser();
+        self::assertFalse($parser->isRecipe($this->fixture('chef-page.html')));
+        self::assertFalse($parser->isRecipe($this->fixture('category.html')));
     }
 
-    public function testSitemapAndCategoryDiscoveryRejectExternalUrls(): void
+    public function testRealSitemapAndCategoryDiscoverRootLevelRecipesButExcludeSections(): void
     {
         $discovery = new KoketDiscovery();
-        $sitemap = $discovery->sitemap($this->fixture('sitemap.xml'), 'https://www.koket.se/sitemap.xml');
-        self::assertSame(['https://www.koket.se/recept/oven-curry'], array_keys($sitemap['recipes']));
-        $category = $discovery->category($this->fixture('category.html'), 'https://www.koket.se/recept');
+        $xml = $this->fixture('sitemap.xml');
+        $document = new \DOMDocument();
+        self::assertTrue($document->loadXML($xml, LIBXML_NONET));
+        $xpath = new \DOMXPath($document);
+        self::assertSame(40.0, $xpath->evaluate('count(//*[local-name()="url"])'));
+        self::assertSame(38.0, $xpath->evaluate('count(//*[local-name()="url"]/*[local-name()="lastmod"])'));
+
+        $sitemap = $discovery->sitemap($xml, 'https://www.koket.se/sitemap.xml');
+        self::assertCount(33, $sitemap['recipes']);
+        self::assertArrayHasKey($this->canonical('recipe-soup.html'), $sitemap['recipes']);
+        self::assertArrayHasKey($this->canonical('recipe-2.html'), $sitemap['recipes']);
+        self::assertArrayHasKey($this->canonical('chef-page.html'), $sitemap['recipes']);
+        self::assertNull($discovery->candidateUrl($this->canonical('category.html'), $this->canonical('category.html')));
         self::assertSame(
-            ['https://www.koket.se/recept/oven-curry', 'https://www.koket.se/recept/bean-stew'],
-            $category['recipes'],
+            $this->canonical('recipe-soup.html'),
+            $discovery->canonicalUrl(
+                str_replace('https://', 'http://', $this->canonical('recipe-soup.html')),
+                $this->canonical('category.html'),
+            ),
         );
-        self::assertSame(['https://www.koket.se/recept?page=2'], $category['pages']);
+        foreach (array_slice(array_keys($sitemap['recipes']), 0, 10) as $url) {
+            self::assertStringStartsWith('https://www.koket.se/', $url);
+        }
+
+        $category = $discovery->category($this->fixture('category.html'), $this->canonical('category.html'));
+        self::assertCount(28, $category['recipes']);
+        foreach ($category['recipes'] as $url) {
+            self::assertStringStartsWith('https://www.koket.se/', $url);
+        }
+        self::assertSame([], $category['pages']);
+    }
+
+    private function canonical(string $name): string
+    {
+        $document = new \DOMDocument();
+        @$document->loadHTML($this->fixture($name), LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+        $xpath = new \DOMXPath($document);
+        $url = $xpath->evaluate('string((//link[@rel="canonical"]/@href)[1])');
+        self::assertIsString($url);
+        return $url;
     }
 
     private function fixture(string $name): string

@@ -1,6 +1,4 @@
 User-agent: *
-Disallow: /private/
-Allow: /private/public/
+Allow: /
 
-User-agent: MatsvepCrawler
-Disallow: /blocked/
+Sitemap: https://www.koket.se/sitemap.xml

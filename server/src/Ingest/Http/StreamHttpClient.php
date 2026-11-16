@@ -8,6 +8,13 @@ use RuntimeException;
 
 final class StreamHttpClient implements HttpClient
 {
+    public function __construct(private readonly int $timeoutSeconds)
+    {
+        if ($timeoutSeconds < 1) {
+            throw new RuntimeException('HTTP timeout must be positive.');
+        }
+    }
+
     /** @param array<string, string> $headers */
     public function get(string $url, array $headers): HttpResponse
     {
@@ -23,6 +30,7 @@ final class StreamHttpClient implements HttpClient
             'header' => implode("\r\n", $lines),
             'ignore_errors' => true,
             'follow_location' => 0,
+            'timeout' => $this->timeoutSeconds,
         ]]);
         $stream = @fopen($url, 'rb', false, $context);
         if ($stream === false) {

@@ -44,30 +44,33 @@ final class IngestUrlRepository
         return false;
     }
 
-    /** @return list<array{id: int, url: string, etag: string|null, last_modified: string|null, attempts: int, recipe_id: int|null}> */
-    public function due(int $limit): array
+    /** @return list<array{id: int, url: string, discovered_via: string, etag: string|null, last_modified: string|null, attempts: int, recipe_id: int|null}> */
+    public function due(int $limit, int $maxAttempts): array
     {
-        if ($limit < 1) {
-            throw new RuntimeException('Fetch limit must be positive.');
+        if ($limit < 1 || $maxAttempts < 1) {
+            throw new RuntimeException('Fetch limit and maximum attempts must be positive.');
         }
         $query = $this->db->prepare(
-            "SELECT id, url, etag, last_modified, attempts, recipe_id FROM ingest_url " .
-            "WHERE source_id = ? AND status IN ('queued', 'failed') " .
-            'AND (next_attempt_at IS NULL OR next_attempt_at <= UTC_TIMESTAMP(6)) ' .
+            'SELECT id, url, discovered_via, etag, last_modified, attempts, recipe_id FROM ingest_url ' .
+            "WHERE source_id = ? AND attempts < ? AND (status = 'queued' OR " .
+            "(status = 'failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= UTC_TIMESTAMP(6))) " .
             'ORDER BY id LIMIT ?'
         );
         $query->bindValue(1, $this->sourceId, PDO::PARAM_INT);
-        $query->bindValue(2, $limit, PDO::PARAM_INT);
+        $query->bindValue(2, $maxAttempts, PDO::PARAM_INT);
+        $query->bindValue(3, $limit, PDO::PARAM_INT);
         $query->execute();
         $rows = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            if (!is_array($row) || !isset($row['id'], $row['url'], $row['attempts'])
-                || !is_numeric($row['id']) || !is_string($row['url']) || !is_numeric($row['attempts'])) {
+            if (!is_array($row) || !isset($row['id'], $row['url'], $row['discovered_via'], $row['attempts'])
+                || !is_numeric($row['id']) || !is_string($row['url'])
+                || !is_string($row['discovered_via']) || !is_numeric($row['attempts'])) {
                 throw new RuntimeException('Invalid ingest URL row.');
             }
             $rows[] = [
                 'id' => (int) $row['id'],
                 'url' => $row['url'],
+                'discovered_via' => $row['discovered_via'],
                 'etag' => is_string($row['etag'] ?? null) ? $row['etag'] : null,
                 'last_modified' => is_string($row['last_modified'] ?? null) ? $row['last_modified'] : null,
                 'attempts' => (int) $row['attempts'],
@@ -90,29 +93,39 @@ final class IngestUrlRepository
     public function markNotModified(int $id, int $status): void
     {
         $query = $this->db->prepare(
-            "UPDATE ingest_url SET status = 'fetched', http_status = ?, attempts = attempts + 1, " .
+            "UPDATE ingest_url SET status = 'fetched', http_status = ?, attempts = 0, " .
             'last_fetched_at = UTC_TIMESTAMP(6), next_attempt_at = NULL WHERE id = ? AND source_id = ?'
         );
         $query->execute([$status, $id, $this->sourceId]);
     }
 
-    public function markFailed(int $id, ?int $status, int $delaySeconds): void
+    public function markFailed(int $id, ?int $status, ?int $delaySeconds): void
     {
         $query = $this->db->prepare(
             "UPDATE ingest_url SET status = 'failed', http_status = ?, attempts = attempts + 1, " .
-            'next_attempt_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND) WHERE id = ? AND source_id = ?'
+            'next_attempt_at = IF(? IS NULL, NULL, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND)) ' .
+            'WHERE id = ? AND source_id = ?'
         );
-        $query->execute([$status, $delaySeconds, $id, $this->sourceId]);
+        $query->execute([$status, $delaySeconds, $delaySeconds, $id, $this->sourceId]);
     }
 
     public function markFetched(int $id, int $recipeId, int $status, ?string $etag, ?string $lastModified): void
     {
         $query = $this->db->prepare(
             "UPDATE ingest_url SET status = 'fetched', recipe_id = ?, http_status = ?, " .
-            'etag = ?, last_modified = ?, attempts = attempts + 1, ' .
+            'etag = ?, last_modified = ?, attempts = 0, ' .
             'last_fetched_at = UTC_TIMESTAMP(6), next_attempt_at = NULL WHERE id = ? AND source_id = ?'
         );
         $query->execute([$recipeId, $status, $etag, $lastModified, $id, $this->sourceId]);
+    }
+
+    public function markNotRecipe(int $id, int $status): void
+    {
+        $query = $this->db->prepare(
+            "UPDATE ingest_url SET status = 'not_recipe', http_status = ?, attempts = 0, " .
+            'last_fetched_at = UTC_TIMESTAMP(6), next_attempt_at = NULL WHERE id = ? AND source_id = ?'
+        );
+        $query->execute([$status, $id, $this->sourceId]);
     }
 
     private function updateSimple(int $id, string $status, ?int $httpStatus): void
