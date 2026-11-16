@@ -96,6 +96,14 @@ final class KoketAdapterIntegrationTest extends TestCase
                 },
             );
             $adapter = new KoketAdapter($db, $sourceId, $fetcher, 2, 5, 3);
+            $localDiscovery = $adapter->discover(
+                'https://www.koket.se/sitemap.xml',
+                [],
+                $this->fixture('sitemap.xml')
+            );
+            self::assertSame(33, $localDiscovery['sitemap']);
+            self::assertSame(0, count($client->requests));
+            $db->prepare('DELETE FROM ingest_url')->execute();
             $discovered = $adapter->discover('https://www.koket.se/sitemap.xml', [$categoryUrl]);
             self::assertSame(3, $discovered['sitemap']);
             self::assertGreaterThan(20, $discovered['category']);
@@ -120,14 +128,58 @@ final class KoketAdapterIntegrationTest extends TestCase
             self::assertSame('not_recipe', $this->row($db, $chefUrl)['status']);
             self::assertFalse($queue->enqueue($chefUrl, 'sitemap'));
 
+            $aliasUrl = 'https://www.koket.se/recipes/soup-alias';
+            self::assertTrue($queue->enqueue($aliasUrl, 'category'));
+            $client->responses[$aliasUrl] = new HttpResponse(200, [], $this->fixture('recipe-soup.html'));
+            $aliasResult = $adapter->fetchDue(10);
+            self::assertSame(1, $aliasResult['fetched'], json_encode($aliasResult, JSON_THROW_ON_ERROR));
+            self::assertSame(2, $this->countRows($db, 'SELECT COUNT(*) FROM recipe'));
+            self::assertSame(2, $this->countRows($db, 'SELECT COUNT(*) FROM recipe_raw'));
+            self::assertNotNull($queue->linkedRecipeId($aliasUrl));
+            $report = (new \Matsvep\Ingest\Adapter\KoketPilotReport($db, $sourceId, 3, 5))->build();
+            self::assertSame(1, $report['nested_root_duplicates']);
+            self::assertIsArray($report['completeness']);
+            self::assertSame(2, $report['completeness']['recipes']);
+            self::assertSame(10, $report['completeness']['ingredients']['min']);
+            self::assertSame(14, $report['completeness']['steps']['min']);
+
+            $setStoredUrl = $db->prepare('UPDATE recipe SET url = ? WHERE id = ?');
+            $setStoredUrl->execute([$aliasUrl, $queue->linkedRecipeId($aliasUrl)]);
+            $legacyReport = (new \Matsvep\Ingest\Adapter\KoketPilotReport($db, $sourceId, 3, 5))->build();
+            self::assertSame(1, $legacyReport['nested_root_duplicates']);
+            $setStoredUrl->execute([$soupUrl, $queue->linkedRecipeId($aliasUrl)]);
+
+            $db->prepare("UPDATE ingest_url SET status = 'queued', recipe_id = NULL WHERE url = ?")
+                ->execute([$aliasUrl]);
+            $requestsBefore = count($client->requests);
+            self::assertSame(1, $adapter->fetchDue(10)['duplicate']);
+            self::assertCount($requestsBefore, $client->requests);
+            self::assertSame('duplicate', $this->row($db, $aliasUrl)['status']);
+
+            $newNestedUrl = 'https://www.koket.se/recipes/new-soup-alias';
+            $newCanonicalUrl = 'https://www.koket.se/new-soup-canonical';
+            self::assertTrue($queue->enqueue($newNestedUrl, 'sitemap'));
+            $client->responses[$newNestedUrl] = new HttpResponse(
+                200,
+                [],
+                str_replace($soupUrl, $newCanonicalUrl, $this->fixture('recipe-soup.html'))
+            );
+            self::assertSame(1, $adapter->fetchDue(10)['fetched']);
+            $canonicalRecipe = $db->prepare('SELECT url FROM recipe WHERE id = ?');
+            $canonicalRecipe->execute([$queue->linkedRecipeId($newNestedUrl)]);
+            self::assertSame($newCanonicalUrl, $canonicalRecipe->fetchColumn());
+            self::assertSame($queue->linkedRecipeId($newNestedUrl), $queue->linkedRecipeId($newCanonicalUrl));
+            self::assertTrue($queue->enqueue($newCanonicalUrl, 'sitemap'));
+            $requestsBefore = count($client->requests);
+            self::assertSame(1, $adapter->fetchDue(10)['duplicate']);
+            self::assertCount($requestsBefore, $client->requests);
+
             $requeue = $db->prepare("UPDATE ingest_url SET status = 'queued', next_attempt_at = NULL WHERE url = ?");
             $requeue->execute([$soupUrl]);
             $client->responses[$soupUrl] = new HttpResponse(304, [], '');
             self::assertSame(1, $adapter->fetchDue(10)['unchanged']);
             self::assertSame(0, $this->attempts($db, $soupUrl));
-            $lastRequest = end($client->requests);
-            self::assertNotFalse($lastRequest);
-            self::assertSame('"version-one"', $lastRequest['headers']['If-None-Match']);
+            self::assertSame('"version-one"', $this->lastHeader($client, 'If-None-Match'));
 
             $retryUrl = $sitemapUrls[1];
             self::assertTrue($queue->enqueue($retryUrl, 'sitemap'));
@@ -216,6 +268,16 @@ final class KoketAdapterIntegrationTest extends TestCase
         $query = $db->prepare($sql);
         $query->execute();
         return (int) $query->fetchColumn();
+    }
+
+    private function lastHeader(FakeHttpClient $client, string $name): ?string
+    {
+        foreach (array_reverse($client->requests) as $request) {
+            if (isset($request['headers'][$name])) {
+                return $request['headers'][$name];
+            }
+        }
+        return null;
     }
 
     private function canonical(string $name): string

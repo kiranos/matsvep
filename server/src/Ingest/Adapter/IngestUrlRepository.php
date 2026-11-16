@@ -128,6 +128,25 @@ final class IngestUrlRepository
         $query->execute([$status, $id, $this->sourceId]);
     }
 
+    public function linkedRecipeId(string $url): ?int
+    {
+        $query = $this->db->prepare(
+            'SELECT recipe_id FROM recipe_source_link WHERE source_id = ? AND url_hash = UNHEX(?)'
+        );
+        $query->execute([$this->sourceId, hash('sha256', $url)]);
+        $value = $query->fetchColumn();
+        return is_numeric($value) ? (int) $value : null;
+    }
+
+    public function markDuplicate(int $id, int $recipeId): void
+    {
+        $query = $this->db->prepare(
+            "UPDATE ingest_url SET status = 'duplicate', recipe_id = ?, attempts = 0, " .
+            'next_attempt_at = NULL WHERE id = ? AND source_id = ?'
+        );
+        $query->execute([$recipeId, $id, $this->sourceId]);
+    }
+
     private function updateSimple(int $id, string $status, ?int $httpStatus): void
     {
         $query = $this->db->prepare(

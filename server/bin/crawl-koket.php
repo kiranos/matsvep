@@ -134,10 +134,22 @@ try {
                 }
                 $result = $adapter->discoverSample($xml, $sitemapUrl, $sampleSize);
             } else {
+                $xml = null;
                 if ($sitemapFile !== null) {
-                    throw new RuntimeException('--sitemap-file requires --sample.');
+                    $xml = file_get_contents($sitemapFile);
+                    if ($xml === false) {
+                        throw new RuntimeException('Cannot read the local sitemap file.');
+                    }
                 }
-                $result = $adapter->discover($sitemapUrl, $categories);
+                $result = $adapter->discover($sitemapUrl, $categories, $xml);
+                if ($xml !== null) {
+                    $mark = $db->prepare(
+                        'INSERT INTO crawl_discovery (source_id, sitemap_hash, completed_at) ' .
+                        'VALUES (?, UNHEX(?), UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE ' .
+                        'sitemap_hash = VALUES(sitemap_hash), completed_at = VALUES(completed_at)'
+                    );
+                    $mark->execute([(int) $source['id'], hash('sha256', $xml)]);
+                }
             }
         } elseif ($command === 'fetch') {
             $limit = $argv[2] ?? '';
@@ -145,17 +157,17 @@ try {
                 throw new RuntimeException('Usage: php bin/crawl-koket.php fetch <positive-limit>');
             }
             $result = $adapter->fetchDue((int) $limit);
-        } elseif ($command === 'report') {
+        } elseif ($command === 'report' || $command === 'progress') {
             $result = (new KoketPilotReport(
                 $db,
                 (int) $source['id'],
                 $settings['crawl.max_attempts'],
                 $delay,
-            ))->build();
+            ))->build($command === 'report');
         } else {
             throw new RuntimeException(
-                'Usage: php bin/crawl-koket.php discover [--sample N --sitemap-file path | category-urls...] ' .
-                '| fetch <limit> | report'
+                'Usage: php bin/crawl-koket.php discover [--sample N] [--sitemap-file path] [category-urls...] ' .
+                '| fetch <limit> | report | progress'
             );
         }
         echo json_encode($result, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), PHP_EOL;

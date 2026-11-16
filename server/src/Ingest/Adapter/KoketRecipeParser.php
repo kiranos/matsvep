@@ -35,6 +35,34 @@ final class KoketRecipeParser
         return $recipe !== null ? $this->fromJsonLd($recipe, $xpath) : $this->fromHtml($xpath);
     }
 
+    public function canonicalUrl(string $html, string $fetchedUrl): string
+    {
+        // The link normally appears early in the page. Avoid parsing a full saved snapshot for reporting.
+        if (preg_match_all('/<link\b[^>]*>/i', $html, $links) !== false) {
+            foreach ($links[0] as $link) {
+                if (preg_match('/\brel\s*=\s*["\']([^"\']+)["\']/i', $link, $rel) !== 1
+                    || !in_array('canonical', preg_split('/\s+/', strtolower($rel[1])) ?: [], true)
+                    || preg_match('/\bhref\s*=\s*["\']([^"\']+)["\']/i', $link, $href) !== 1) {
+                    continue;
+                }
+                $url = (new KoketDiscovery())->canonicalUrl(html_entity_decode($href[1]), $fetchedUrl);
+                if ($url !== null) {
+                    return $url;
+                }
+            }
+        }
+        $xpath = new DOMXPath($this->document($html));
+        $recipe = $this->jsonLdRecipe($xpath);
+        $candidate = $recipe['url'] ?? null;
+        if (is_string($candidate)) {
+            $url = (new KoketDiscovery())->canonicalUrl($candidate, $fetchedUrl);
+            if ($url !== null) {
+                return $url;
+            }
+        }
+        return $fetchedUrl;
+    }
+
     private function document(string $html): DOMDocument
     {
         $document = new DOMDocument();

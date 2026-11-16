@@ -127,6 +127,10 @@ final class KoketPilotTest extends TestCase
             self::assertNotNull($report['queue']['next_retry_at']);
             self::assertCount(30, $report['pending_retries']);
             self::assertSame(2, $report['classification']['recipes']);
+            self::assertIsArray($report['completeness']);
+            self::assertSame(2, $report['completeness']['recipes']);
+            self::assertSame(0, $report['nested_root_duplicates']);
+            self::assertFalse($report['discovery_complete']);
             self::assertSame(1, $report['classification']['not_recipe']);
             self::assertSame(1.0, $report['recipe_paths']['root_share']);
             self::assertSame(30, $report['failure_http_statuses'][503]);

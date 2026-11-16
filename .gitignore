@@ -6,3 +6,4 @@ server/.phpunit.result.cache
 server/.php-cs-fixer.cache
 server/tests/fixtures/koket/local/
 server/pilot-report.txt
+server/crawl-report.txt

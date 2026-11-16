@@ -14,6 +14,24 @@ final class KoketParserTest extends TestCase
     {
         $parser = new KoketRecipeParser();
         $soup = $this->fixture('recipe-soup.html');
+        self::assertSame(
+            $this->canonical('recipe-soup.html'),
+            $parser->canonicalUrl($soup, 'https://www.koket.se/recipes/alias')
+        );
+        $withoutCanonical = preg_replace('~<link[^>]*rel="canonical"[^>]*>~i', '', $soup);
+        self::assertIsString($withoutCanonical);
+        self::assertSame(
+            'https://www.koket.se/recipes/alias',
+            $parser->canonicalUrl($withoutCanonical, 'https://www.koket.se/recipes/alias')
+        );
+        self::assertSame(
+            $this->canonical('recipe-soup.html'),
+            $parser->canonicalUrl(
+                '<script type="application/ld+json">{"@type":"Recipe","url":"' .
+                $this->canonical('recipe-soup.html') . '"}</script>',
+                'https://www.koket.se/recipes/alias'
+            )
+        );
         self::assertTrue($parser->isRecipe($soup));
         $withoutJsonLd = preg_replace('~<script[^>]*type="application/ld\+json"[^>]*>.*?</script>~is', '', $soup);
         self::assertIsString($withoutJsonLd);
