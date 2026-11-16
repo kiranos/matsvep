@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up Matsvep at 08:30 nightly
+
+[Timer]
+OnCalendar=*-*-* 08:30:00
+Persistent=true
+Unit=matsvep-backup.service
+
+[Install]
+WantedBy=timers.target
