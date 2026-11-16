@@ -150,6 +150,7 @@ final class KoketRecipeParser
             $time,
             $this->servings($yield),
             'jsonld',
+            json_encode($recipe, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         );
     }
 
@@ -206,6 +207,7 @@ final class KoketRecipeParser
             $this->minutes($time),
             $this->servings($yield),
             'html',
+            null,
         );
     }
 

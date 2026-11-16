@@ -20,6 +20,7 @@ final class ParsedRecipe
         public readonly ?int $totalTimeMinutes,
         public readonly ?float $servings,
         public readonly string $format,
+        public readonly ?string $jsonLdPayload,
     ) {
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Ingest\Adapter;
 
+use Closure;
 use Matsvep\Ingest\Http\PoliteFetcher;
 use Matsvep\Ingest\Http\RobotsDenied;
 use PDO;
@@ -35,11 +36,11 @@ final class KoketAdapter
 
     /**
      * @param list<string> $categoryUrls
-     * @return array{sitemap: int, category: int}
+     * @return array{sitemap: int, category: int, sitemap_hash: string}
      */
     public function discover(string $sitemapUrl, array $categoryUrls, ?string $sitemapXml = null): array
     {
-        $counts = ['sitemap' => 0, 'category' => 0];
+        $counts = ['sitemap' => 0, 'category' => 0, 'sitemap_hash' => ''];
         $pendingSitemaps = [$sitemapUrl];
         $visited = [];
         while ($pendingSitemaps !== []) {
@@ -58,6 +59,9 @@ final class KoketAdapter
                 $xml = $response->body;
             }
             $found = $this->discovery->sitemap($xml, $url);
+            if ($url === $sitemapUrl) {
+                $counts['sitemap_hash'] = hash('sha256', $xml);
+            }
             foreach ($found['recipes'] as $recipeUrl => $modifiedAt) {
                 if ($this->queue->enqueue($recipeUrl, 'sitemap', $modifiedAt)) {
                     $counts['sitemap']++;
@@ -123,12 +127,19 @@ final class KoketAdapter
         return ['sampled' => count($sample), 'queued' => $queued, 'root' => $root, 'nested' => count($sample) - $root];
     }
 
-    /** @return array{fetched: int, duplicate: int, unchanged: int, gone: int, redirected: int, not_recipe: int, failed: int, skipped_robots: int} */
-    public function fetchDue(int $limit): array
+    /**
+     * @param Closure():bool|null $shouldStop
+     * @return array{fetched: int, duplicate: int, unchanged: int, gone: int, redirected: int,
+     *   not_recipe: int, failed: int, skipped_robots: int}
+     */
+    public function fetchDue(int $limit, ?Closure $shouldStop = null): array
     {
         $counts = ['fetched' => 0, 'duplicate' => 0, 'unchanged' => 0, 'gone' => 0, 'redirected' => 0, 'not_recipe' => 0,
             'failed' => 0, 'skipped_robots' => 0];
         foreach ($this->queue->due($limit, $this->maxAttempts) as $item) {
+            if ($shouldStop !== null && $shouldStop()) {
+                break;
+            }
             if ($item['recipe_id'] === null && ($linkedId = $this->queue->linkedRecipeId($item['url'])) !== null) {
                 $this->queue->markDuplicate($item['id'], $linkedId);
                 $counts['duplicate']++;

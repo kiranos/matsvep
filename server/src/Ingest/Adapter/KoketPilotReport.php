@@ -166,8 +166,11 @@ final class KoketPilotReport
     private function nestedRootDuplicates(): int
     {
         $query = $this->db->prepare(
-            "SELECT i.url AS fetched_url, r.url AS stored_url, raw.payload_gz FROM ingest_url i " .
+            "SELECT i.url AS fetched_url, r.url AS stored_url, primary_link.url AS primary_url, " .
+            'raw.payload_gz FROM ingest_url i ' .
             'JOIN recipe r ON r.id = i.recipe_id ' .
+            'LEFT JOIN recipe_source_link primary_link ON primary_link.recipe_id = r.id ' .
+            'AND primary_link.is_primary = TRUE ' .
             'LEFT JOIN recipe_raw raw ON raw.id = (SELECT MAX(id) FROM recipe_raw WHERE recipe_id = r.id) ' .
             'AND r.url LIKE ? ' .
             "WHERE i.source_id = ? AND i.status = 'fetched' AND i.url LIKE ?"
@@ -181,8 +184,9 @@ final class KoketPilotReport
             if (!is_string($fetchedUrl) || !is_string($storedUrl) || $this->isRoot($fetchedUrl)) {
                 continue;
             }
-            $canonicalUrl = $storedUrl;
-            if (!$this->isRoot($storedUrl) && is_string($row['payload_gz'])) {
+            $primaryUrl = $row['primary_url'];
+            $canonicalUrl = is_string($primaryUrl) ? $primaryUrl : $storedUrl;
+            if (!$this->isRoot($canonicalUrl) && is_string($row['payload_gz'])) {
                 $html = gzdecode($row['payload_gz']);
                 if ($html !== false) {
                     $canonicalUrl = $parser->canonicalUrl($html, $fetchedUrl);

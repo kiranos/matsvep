@@ -118,6 +118,18 @@ final class KoketAdapterIntegrationTest extends TestCase
             self::assertSame(1, $result['not_recipe']);
             self::assertSame(2, $this->countRows($db, 'SELECT COUNT(*) FROM recipe'));
             self::assertSame(2, $this->countRows($db, 'SELECT COUNT(*) FROM recipe_raw'));
+            $snapshot = $db->prepare('SELECT format, payload_gz FROM recipe_raw ORDER BY id LIMIT 1');
+            $snapshot->execute();
+            $rawRow = $snapshot->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($rawRow);
+            self::assertSame('jsonld', $rawRow['format']);
+            self::assertIsString($rawRow['payload_gz']);
+            $rawJson = gzdecode($rawRow['payload_gz']);
+            self::assertIsString($rawJson);
+            $rawRecipe = json_decode($rawJson, true, 512, JSON_THROW_ON_ERROR);
+            self::assertIsArray($rawRecipe);
+            self::assertSame('Recipe', $rawRecipe['@type']);
+            self::assertStringNotContainsString('<html', $rawJson);
             self::assertSame(3, $this->countRows($db, 'SELECT COUNT(*) FROM recipe_tag'));
             self::assertSame(0, $this->countRows($db, 'SELECT COUNT(*) FROM recipe WHERE cuisine IS NOT NULL OR meal_type IS NOT NULL'));
             self::assertGreaterThan(0, $this->countRows(
@@ -218,6 +230,22 @@ final class KoketAdapterIntegrationTest extends TestCase
             $client->responses[$soupUrl] = new HttpResponse(404, [], '');
             self::assertSame(1, $adapter->fetchDue(10)['gone']);
             self::assertSame(1, $this->countRows($db, "SELECT COUNT(*) FROM recipe WHERE source_status = 'source_gone'"));
+
+            $htmlUrl = 'https://www.koket.se/html-fallback-fixture';
+            self::assertTrue($queue->enqueue($htmlUrl, 'sitemap'));
+            $html = $this->fixture('html-fallback.html');
+            $client->responses[$htmlUrl] = new HttpResponse(200, [], $html);
+            self::assertSame(1, $adapter->fetchDue(10)['fetched']);
+            $htmlSnapshot = $db->prepare(
+                'SELECT raw.format, raw.payload_gz FROM recipe_raw raw JOIN ingest_url ingest ' .
+                'ON ingest.recipe_id = raw.recipe_id WHERE ingest.url = ? ORDER BY raw.id DESC LIMIT 1'
+            );
+            $htmlSnapshot->execute([$htmlUrl]);
+            $htmlRow = $htmlSnapshot->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($htmlRow);
+            self::assertSame('html', $htmlRow['format']);
+            self::assertIsString($htmlRow['payload_gz']);
+            self::assertSame($html, gzdecode($htmlRow['payload_gz']));
         } finally {
             $admin->exec("DROP DATABASE IF EXISTS `$databaseName`");
         }

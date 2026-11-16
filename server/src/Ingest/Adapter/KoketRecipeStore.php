@@ -26,7 +26,11 @@ final class KoketRecipeStore
         ParsedRecipe $recipe,
         HttpResponse $response,
     ): int {
-        $compressed = gzencode($response->body);
+        $payload = $recipe->format === 'jsonld' ? $recipe->jsonLdPayload : $response->body;
+        if (!is_string($payload)) {
+            throw new RuntimeException('Missing JSON-LD recipe snapshot.');
+        }
+        $compressed = gzencode($payload);
         if ($compressed === false) {
             throw new RuntimeException('Cannot compress recipe snapshot.');
         }

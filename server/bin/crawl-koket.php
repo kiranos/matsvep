@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Matsvep\Ingest\Adapter\KoketAdapter;
+use Matsvep\Ingest\Adapter\KoketCrawlRunner;
 use Matsvep\Ingest\Adapter\KoketPilotReport;
 use Matsvep\Ingest\Http\PoliteFetcher;
 use Matsvep\Ingest\Http\StreamHttpClient;
@@ -63,10 +64,12 @@ try {
     }
     $settingQuery = $db->prepare('SELECT value FROM engine_config WHERE `key` = ?');
     $settings = [];
-    foreach (['crawl.delay_s', 'crawl.retry_base_s', 'crawl.retry_max_s', 'crawl.max_attempts', 'crawl.timeout_s'] as $key) {
+    foreach (['crawl.delay_s', 'crawl.retry_base_s', 'crawl.retry_max_s', 'crawl.max_attempts',
+        'crawl.timeout_s', 'crawl.discovery_max_age_days', 'crawl.batch_size', 'crawl.max_retry_wait_s'] as $key) {
         $settingQuery->execute([$key]);
         $value = $settingQuery->fetchColumn();
-        if (!is_string($value) || !ctype_digit($value) || (int) $value < 1) {
+        if (!is_string($value) || !ctype_digit($value)
+            || ((int) $value < 1 && $key !== 'crawl.max_retry_wait_s')) {
             throw new RuntimeException("Invalid $key configuration.");
         }
         $settings[$key] = (int) $value;
@@ -142,14 +145,12 @@ try {
                     }
                 }
                 $result = $adapter->discover($sitemapUrl, $categories, $xml);
-                if ($xml !== null) {
-                    $mark = $db->prepare(
-                        'INSERT INTO crawl_discovery (source_id, sitemap_hash, completed_at) ' .
-                        'VALUES (?, UNHEX(?), UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE ' .
-                        'sitemap_hash = VALUES(sitemap_hash), completed_at = VALUES(completed_at)'
-                    );
-                    $mark->execute([(int) $source['id'], hash('sha256', $xml)]);
-                }
+                $mark = $db->prepare(
+                    'INSERT INTO crawl_discovery (source_id, sitemap_hash, completed_at) ' .
+                    'VALUES (?, UNHEX(?), UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE ' .
+                    'sitemap_hash = VALUES(sitemap_hash), completed_at = VALUES(completed_at)'
+                );
+                $mark->execute([(int) $source['id'], $result['sitemap_hash']]);
             }
         } elseif ($command === 'fetch') {
             $limit = $argv[2] ?? '';
@@ -164,10 +165,43 @@ try {
                 $settings['crawl.max_attempts'],
                 $delay,
             ))->build($command === 'report');
+        } elseif ($command === 'crawl') {
+            if ($argc !== 4 || ($argv[2] ?? '') !== '--hours' || !is_numeric($argv[3])
+                || (float) $argv[3] <= 0) {
+                throw new RuntimeException('Usage: php bin/crawl-koket.php crawl --hours <positive-number>');
+            }
+            if (!function_exists('pcntl_async_signals')) {
+                throw new RuntimeException('The crawl command requires the PHP pcntl extension.');
+            }
+            $stop = false;
+            pcntl_async_signals(true);
+            pcntl_signal(SIGINT, static function () use (&$stop): void {
+                $stop = true;
+            });
+            pcntl_signal(SIGTERM, static function () use (&$stop): void {
+                $stop = true;
+            });
+            $result = (new KoketCrawlRunner(
+                $db,
+                (int) $source['id'],
+                $adapter,
+                new KoketPilotReport($db, (int) $source['id'], $settings['crawl.max_attempts'], $delay),
+                rtrim($source['base_url'], '/') . '/sitemap.xml',
+                __DIR__ . '/../var/crawl-report.json',
+                $settings['crawl.discovery_max_age_days'],
+                $settings['crawl.batch_size'],
+                $settings['crawl.max_retry_wait_s'],
+                $delay,
+                null,
+                null,
+                static function () use (&$stop): bool {
+                    return $stop;
+                },
+            ))->run((float) $argv[3]);
         } else {
             throw new RuntimeException(
                 'Usage: php bin/crawl-koket.php discover [--sample N] [--sitemap-file path] [category-urls...] ' .
-                '| fetch <limit> | report | progress'
+                '| fetch <limit> | report | progress | crawl --hours N'
             );
         }
         echo json_encode($result, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), PHP_EOL;
