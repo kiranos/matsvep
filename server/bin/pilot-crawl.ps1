@@ -31,6 +31,9 @@ $modules = & $phpPath -m
 if ($LASTEXITCODE -ne 0 -or $modules -notcontains 'pdo_mysql') {
     throw 'The pilot requires the PHP PDO MySQL extension.'
 }
+if ($modules -notcontains 'openssl') {
+    throw 'The pilot requires the PHP OpenSSL extension for HTTPS. Enable extension=openssl in php.ini.'
+}
 if (-not (Test-Path -LiteralPath $vendorFile)) {
     throw 'server/vendor is missing. Run composer install from server first.'
 }
