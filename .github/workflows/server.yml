@@ -1,0 +1,45 @@
+name: Server
+
+on:
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptesting"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring
+          coverage: none
+          tools: composer:v2
+      - name: Install dependencies
+        working-directory: server
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Configure test database
+        working-directory: server
+        run: |
+          cp .env.testing.example .env.testing
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=testing/' .env.testing
+      - name: Lint
+        working-directory: server
+        run: composer lint
+      - name: Static analysis
+        working-directory: server
+        run: composer stan
+      - name: Tests
+        working-directory: server
+        run: composer test

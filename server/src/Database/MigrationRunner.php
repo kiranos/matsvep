@@ -126,6 +126,10 @@ final class MigrationRunner
         $query->execute();
         $history = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (!is_array($row) || !isset($row['migration'], $row['checksum'], $row['status'])
+                || !is_string($row['migration']) || !is_string($row['checksum']) || !is_string($row['status'])) {
+                throw new RuntimeException('Invalid migration history row.');
+            }
             $history[$row['migration']] = ['checksum' => $row['checksum'], 'status' => $row['status']];
         }
         return $history;
