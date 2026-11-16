@@ -4,3 +4,4 @@ server/.env.testing
 vendor/
 server/.phpunit.result.cache
 server/.php-cs-fixer.cache
+server/tests/fixtures/koket/local/

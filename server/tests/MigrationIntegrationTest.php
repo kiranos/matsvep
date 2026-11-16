@@ -69,6 +69,28 @@ final class MigrationIntegrationTest extends TestCase
                 self::assertStringStartsWith('APPLIED ', $line);
             }
 
+            $source = $db->prepare('SELECT enabled, base_url FROM source WHERE adapter = ?');
+            $source->execute(['koket']);
+            $sourceRow = $source->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($sourceRow);
+            $enabled = $sourceRow['enabled'] ?? null;
+            if (!is_int($enabled) && !is_string($enabled)) {
+                throw new RuntimeException('Invalid source enabled value.');
+            }
+            self::assertSame(0, (int) $enabled);
+            self::assertSame('https://www.koket.se', $sourceRow['base_url']);
+
+            $settings = $db->prepare('SELECT `key`, value FROM engine_config WHERE `key` IN (?, ?, ?, ?)');
+            $settings->execute(['crawl.retry_base_s', 'crawl.retry_max_s', 'crawl.max_attempts', 'crawl.timeout_s']);
+            $values = $settings->fetchAll(PDO::FETCH_KEY_PAIR);
+            ksort($values);
+            self::assertSame([
+                'crawl.max_attempts' => '5',
+                'crawl.retry_base_s' => '60',
+                'crawl.retry_max_s' => '3600',
+                'crawl.timeout_s' => '30',
+            ], $values);
+
             $skipped = $runner->run();
             self::assertCount(count($migrationFiles), $skipped);
             foreach ($skipped as $line) {

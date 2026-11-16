@@ -35,6 +35,7 @@ With PHP 8.3 CLI, PDO MySQL, Composer 2 and MySQL 8:
 - For local integration tests, copy `server/.env.testing.example` to uncommitted `server/.env.testing` and set credentials for a MySQL user that can create and drop throwaway databases. `DB_NAME` is a prefix; the test adds a random suffix.
 - Run server checks from `server/`: `composer lint`, `composer stan`, `composer test`.
 - To run migrations, copy `server/.env.example` to uncommitted `server/.env`, create an empty database, then run `php server/bin/migrate.php` from the repository root. The runner also accepts `MATS_ENV_FILE` and `DB_*` environment overrides.
+- Migration 004 creates a disabled Köket source. To enable crawling after reviewing its settings, run `UPDATE source SET enabled = TRUE WHERE adapter = 'koket' AND base_url = 'https://www.koket.se';` in the intended database. Set `CRAWL_USER_AGENT` in uncommitted `server/.env` to an identifying value with a contact address. From `server/`, run `php bin/crawl-koket.php discover [category-urls...]` to queue URLs and `php bin/crawl-koket.php fetch <limit>` from cron to fetch a bounded batch. Discovery reads `/sitemap.xml`; pass category pages as arguments when needed. Never run the crawler from a user request or during development tests.
 - Validate the API description: `npx @redocly/cli@latest lint --extends spec api/openapi.yaml`.
 
 The Flutter app and simulator do not exist yet; add their commands when created.
