@@ -13,17 +13,23 @@ The operator runs these commands on a private Ubuntu 24.04 VPS. The repository s
    cd /srv/matsvep
    ```
 
-3. Run `sudo bash deploy/setup-ubuntu.sh` from the checkout. It prompts for the public domain, email, active SSH port and a new database application password. Keep the password private. The script requires Ubuntu 24.04 and an interactive terminal, installs Apache 2.4, PHP 8.3-FPM and CLI, MySQL 8, Composer and Certbot, and can be rerun. It creates the non-root `matsvep` service account, a local `matsvep` database, and a `matsvep_app` user with only SELECT, INSERT, UPDATE and DELETE on that database. Schema migrations run separately through the local MySQL root socket; the application password cannot change the schema. The script writes `server/.env` as `root:matsvep` with mode 0640 and enables the Köket source.
+3. Run `sudo bash deploy/setup-ubuntu.sh` from the checkout. It prompts for the public domain, email, active SSH port and a new database application password. Keep the password private. The script requires Ubuntu 24.04 and an interactive terminal, installs Apache 2.4, PHP 8.3-FPM and CLI, MySQL 8, Composer and Certbot, and can be rerun. It creates the non-root `matsvep` service account, a local `matsvep` database, and a `matsvep_app` user with only SELECT, INSERT, UPDATE and DELETE on that database. Schema migrations run separately through the local MySQL root socket; the application password cannot change the schema. The script writes `server/.env` as `root:matsvep` with mode 0640. It installs and enables `unattended-upgrades` for security updates.
 4. The script enables UFW after allowing the SSH port you entered plus TCP 80 and 443. It obtains a Let's Encrypt certificate with Certbot's Apache plugin and configures HTTPS redirection. Check that DNS points to this VPS before running it. The VPS timezone is set to `Europe/Stockholm`.
-5. Check the services and timers:
+5. Check the services and backup timer before enabling crawling:
 
    ```bash
    sudo systemctl status apache2 php8.3-fpm mysql
    sudo systemctl list-timers 'matsvep-*.timer'
-   sudo systemctl status matsvep-crawl.timer matsvep-backup.timer
+   sudo systemctl status matsvep-backup.timer apt-daily-upgrade.timer
    ```
 
+6. When ready to start collecting recipes, run `sudo bash deploy/setup-ubuntu.sh --enable-crawl` from `/srv/matsvep`. This separate step enables the Köket source and starts the crawl timer. **The full crawl starts at 01:00 on the first night after you enable it.** Setup alone does not enable the source or crawl timer.
+
 The crawl timer starts at 01:00 local time. `Persistent=false` skips a missed run. The service executes `php bin/crawl-koket.php crawl --hours 6` as `matsvep` and has `RuntimeMaxSec=7h` as a hard stop. It uses `Type=exec` because systemd does not apply `RuntimeMaxSec` to `Type=oneshot`. The crawler's database lock prevents overlapping runs. The backup timer runs at 08:30 and retains fourteen days of archives.
+
+## SSH key-only login
+
+After setup, you may switch SSH to key-only login manually. **First open a second SSH session and confirm your key can log in and use `sudo`; keep the original session open.** Then edit an SSH server drop-in to set `PasswordAuthentication no` and `KbdInteractiveAuthentication no`. Check the effective settings with `sudo sshd -T`, validate with `sudo sshd -t`, and reload SSH. Test a new key-based session before closing the original one. The setup script does not change SSH authentication, so it cannot lock you out during provisioning.
 
 ## Deploy updates
 
@@ -35,7 +41,7 @@ git pull --ff-only origin main
 sudo bash deploy/setup-ubuntu.sh
 ```
 
-The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes service files and reloads Apache. The operator still supplies the domain, email and SSH port interactively. Check `sudo systemctl status matsvep-crawl.timer` afterward.
+The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes service files and reloads Apache. The operator still supplies the domain, email and SSH port interactively. A previously enabled crawl timer stays enabled; setup does not enable it on a fresh VPS. Check `sudo systemctl status matsvep-crawl.timer` if crawling has been enabled.
 
 ## Check crawl progress
 

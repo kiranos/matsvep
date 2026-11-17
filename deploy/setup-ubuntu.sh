@@ -14,6 +14,20 @@ source /etc/os-release
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 [[ $project_root == /srv/matsvep ]] ||
     fail 'Clone the private repository at /srv/matsvep before running setup.'
+if [[ ${1:-} == --enable-crawl ]]; then
+    [[ $# -eq 1 ]] || fail 'Usage: sudo bash deploy/setup-ubuntu.sh --enable-crawl'
+    [[ -f $project_root/server/.env && -f $project_root/server/vendor/autoload.php &&
+        -f /etc/systemd/system/matsvep-crawl.timer ]] ||
+        fail 'Run the initial setup successfully before enabling the crawl.'
+    source_count=$(mysql --protocol=socket -uroot --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM matsvep.source WHERE adapter = 'koket' AND base_url = 'https://www.koket.se'")
+    [[ $source_count == 1 ]] || fail 'The Köket source is missing or duplicated.'
+    mysql --protocol=socket -uroot \
+        -e "UPDATE matsvep.source SET enabled = TRUE WHERE adapter = 'koket' AND base_url = 'https://www.koket.se'"
+    systemctl enable --now matsvep-crawl.timer
+    printf 'Koket crawl enabled; the first scheduled run is the next 01:00.\n'
+    exit 0
+fi
 operator=$(stat -c '%U' "$project_root")
 [[ $operator != root ]] || fail 'The repository must be owned by the non-root deploy operator.'
 [[ $operator == "${SUDO_USER:-$operator}" ]] ||
@@ -37,7 +51,7 @@ rotate_password=false
 if [[ ${1:-} == --rotate-db-password ]]; then
     rotate_password=true
 elif [[ $# -ne 0 ]]; then
-    fail 'Usage: sudo bash deploy/setup-ubuntu.sh [--rotate-db-password]'
+    fail 'Usage: sudo bash deploy/setup-ubuntu.sh [--rotate-db-password|--enable-crawl]'
 fi
 db_password=''
 if [[ -f $env_file && $rotate_password == false ]]; then
@@ -58,9 +72,14 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y apache2 php8.3-fpm php8.3-cli php8.3-mysql php8.3-xml \
     php8.3-mbstring php8.3-curl php8.3-zip php8.3-intl mysql-server \
-    composer git unzip ufw certbot python3-certbot-apache
+    composer git unzip ufw certbot python3-certbot-apache unattended-upgrades
 systemctl enable --now mysql apache2 php8.3-fpm
 timedatectl set-timezone Europe/Stockholm
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'APT'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT
+systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
 php -r 'exit(function_exists("pcntl_async_signals") ? 0 : 1);' ||
     fail 'PHP CLI needs the pcntl extension for clean crawl shutdown.'
 
@@ -101,11 +120,6 @@ chgrp -R matsvep "$project_root/server/vendor"
 chmod -R g+rX "$project_root/server/vendor"
 DB_HOST=localhost DB_PORT=3306 DB_NAME=matsvep DB_USER=root DB_PASSWORD='' \
     php "$project_root/server/bin/migrate.php"
-mysql --protocol=socket -uroot <<SQL
-UPDATE matsvep.source SET enabled = TRUE
-WHERE adapter = 'koket' AND base_url = 'https://www.koket.se';
-SQL
-
 install -d -o root -g root -m 0755 /var/www/matsvep
 printf 'Matsvep\n' > /var/www/matsvep/index.html
 cat > /etc/apache2/sites-available/matsvep.conf <<APACHE
@@ -147,5 +161,5 @@ systemd-analyze verify /etc/systemd/system/matsvep-crawl.service \
     /etc/systemd/system/matsvep-crawl.timer \
     /etc/systemd/system/matsvep-backup.service \
     /etc/systemd/system/matsvep-backup.timer
-systemctl enable --now matsvep-crawl.timer matsvep-backup.timer
-printf 'Setup complete. Check timers with systemctl list-timers matsvep-*.timer\n'
+systemctl enable --now matsvep-backup.timer
+printf 'Setup complete. Run sudo bash deploy/setup-ubuntu.sh --enable-crawl when ready.\n'
