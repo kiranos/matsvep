@@ -23,13 +23,16 @@ if ($null -eq $php) {
     throw 'PHP was not found. Install PHP 8.3 CLI and add it to PATH.'
 }
 $phpPath = $php.Source
-$version = & $phpPath -r 'echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;'
+$version = & $phpPath -r 'echo PHP_MAJOR_VERSION, chr(46), PHP_MINOR_VERSION;'
 if ($LASTEXITCODE -ne 0 -or $version -ne '8.3') {
     throw 'The pilot requires PHP 8.3 CLI.'
 }
-$pdoMysql = & $phpPath -r 'echo extension_loaded("pdo_mysql") ? "yes" : "no";'
-if ($LASTEXITCODE -ne 0 -or $pdoMysql -ne 'yes') {
+$modules = & $phpPath -m
+if ($LASTEXITCODE -ne 0 -or $modules -notcontains 'pdo_mysql') {
     throw 'The pilot requires the PHP PDO MySQL extension.'
+}
+if ($modules -notcontains 'openssl') {
+    throw 'The pilot requires the PHP OpenSSL extension for HTTPS. Enable extension=openssl in php.ini.'
 }
 if (-not (Test-Path -LiteralPath $vendorFile)) {
     throw 'server/vendor is missing. Run composer install from server first.'
