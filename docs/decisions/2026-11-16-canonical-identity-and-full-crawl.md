@@ -1,0 +1,7 @@
+# Canonical recipe identity and resumable full crawl
+
+The 500-URL pilot classified 448 pages as recipes, 51 as non-recipes and one as gone. Of the fetched recipe URLs, 134 were nested paths. We therefore keep sitemap discovery as the main route, but identify each recipe by the same-host canonical link in the page, or by JSON-LD `url` when the link is absent. The fetched URL remains a source link. A queued URL whose source link already identifies a stored recipe is marked `duplicate` without a request. An unseen alias must be fetched once before its canonical identity can be known.
+
+Migration 005 adds the terminal `duplicate` ingest status and a `crawl_discovery` marker. Migration 006 seeds the live rediscovery age, batch size and maximum retry wait. The production Linux crawler reads the live sitemap when the queue is empty or the marker is over seven days old, and writes the marker only after discovery completes. An interrupted discovery can repeat idempotently. Operators run `crawl --hours N`, with a six-hour nightly systemd invocation. The command handles stop signals between requests and atomically writes its report after each run. Reports contain counts and URLs only. Existing pilot snapshots are read to count nested-to-root canonical aliases without refetching.
+
+New JSON-LD parses store only the extracted `Recipe` object in `recipe_raw.payload_gz`. Full HTML is retained only for the HTML fallback. Existing pilot rows retain their earlier full-HTML snapshots; migrations do not rewrite collected content.

@@ -8,6 +8,7 @@ use DOMDocument;
 use DOMXPath;
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Ingest\Adapter\KoketAdapter;
+use Matsvep\Ingest\Adapter\KoketCrawlRunner;
 use Matsvep\Ingest\Adapter\KoketDiscovery;
 use Matsvep\Ingest\Adapter\KoketPilotReport;
 use Matsvep\Ingest\Adapter\KoketPilotSampler;
@@ -127,12 +128,58 @@ final class KoketPilotTest extends TestCase
             self::assertNotNull($report['queue']['next_retry_at']);
             self::assertCount(30, $report['pending_retries']);
             self::assertSame(2, $report['classification']['recipes']);
+            self::assertIsArray($report['completeness']);
+            self::assertSame(2, $report['completeness']['recipes']);
+            self::assertSame(0, $report['nested_root_duplicates']);
+            self::assertFalse($report['discovery_complete']);
             self::assertSame(1, $report['classification']['not_recipe']);
             self::assertSame(1.0, $report['recipe_paths']['root_share']);
             self::assertSame(30, $report['failure_http_statuses'][503]);
             self::assertCount(10, $report['failure_examples']['http_503']);
             self::assertArrayHasKey('(root)', $report['not_recipe_prefixes']);
             self::assertArrayNotHasKey('ingredients', $report);
+
+            $reportFile = sys_get_temp_dir() . '/matsvep-crawl-' . bin2hex(random_bytes(6)) . '.json';
+            try {
+                $runner = new KoketCrawlRunner(
+                    $db,
+                    $sourceId,
+                    $adapter,
+                    new KoketPilotReport($db, $sourceId, 3, 5),
+                    $sitemapUrl,
+                    $reportFile,
+                    7,
+                    50,
+                    300,
+                    5,
+                    static function () use (&$time): float {
+                        return $time;
+                    },
+                    static function (int $seconds) use (&$time): void {
+                        $time += $seconds;
+                    },
+                );
+                $firstRun = $runner->run(0.01);
+                self::assertTrue($firstRun['discovered']);
+                self::assertSame(0, $firstRun['batches']);
+                self::assertFileExists($reportFile);
+                $savedReport = file_get_contents($reportFile);
+                self::assertIsString($savedReport);
+                $decodedReport = json_decode($savedReport, true, 512, JSON_THROW_ON_ERROR);
+                self::assertIsArray($decodedReport);
+                self::assertTrue($decodedReport['discovery_complete']);
+                $requestsAfterDiscovery = count($client->requests);
+                self::assertFalse($runner->run(0.01)['discovered']);
+                self::assertCount($requestsAfterDiscovery, $client->requests);
+                $db->prepare('UPDATE crawl_discovery SET completed_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 8 DAY) ' .
+                    'WHERE source_id = ?')->execute([$sourceId]);
+                self::assertTrue($runner->run(0.01)['discovered']);
+                self::assertCount($requestsAfterDiscovery + 1, $client->requests);
+            } finally {
+                if (is_file($reportFile)) {
+                    unlink($reportFile);
+                }
+            }
         } finally {
             $admin->exec("DROP DATABASE IF EXISTS `$databaseName`");
         }
