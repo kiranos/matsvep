@@ -1,6 +1,6 @@
-# Ubuntu 24.04 deployment
+# Ubuntu 26.04 deployment
 
-The operator runs these commands on a private Ubuntu 24.04 VPS. The repository scripts do not deploy automatically. The current Apache site serves a small placeholder while the phase 1 crawler runs from PHP CLI; a web entry point will be deployed when the API exists.
+The operator runs these commands on a private Ubuntu 26.04 VPS. The repository scripts do not deploy automatically. The current Apache site serves a small placeholder while the phase 1 crawler runs from PHP CLI; a web entry point will be deployed when the API exists.
 
 ## First setup
 
@@ -13,12 +13,12 @@ The operator runs these commands on a private Ubuntu 24.04 VPS. The repository s
    cd /srv/matsvep
    ```
 
-3. Run `sudo bash deploy/setup-ubuntu.sh` from the checkout. It prompts for the public domain, email, active SSH port and a new database application password. Keep the password private. The script requires Ubuntu 24.04 and an interactive terminal, installs Apache 2.4, PHP 8.3-FPM and CLI, MySQL 8, Composer and Certbot, and can be rerun. It creates the non-root `matsvep` service account, a local `matsvep` database, and a `matsvep_app` user with only SELECT, INSERT, UPDATE and DELETE on that database. Schema migrations run separately through the local MySQL root socket; the application password cannot change the schema. The script writes `server/.env` as `root:matsvep` with mode 0640. It installs and enables `unattended-upgrades` for security updates.
-4. The script enables UFW after allowing the SSH port you entered plus TCP 80 and 443. It obtains a Let's Encrypt certificate with Certbot's Apache plugin and configures HTTPS redirection. Check that DNS points to this VPS before running it. The VPS timezone is set to `Europe/Stockholm`.
+3. Run `sudo bash deploy/setup-ubuntu.sh` from the checkout. It prompts for the public domain, email, active SSH port and a new database application password. Keep the password private. The script requires Ubuntu 26.04 and an interactive terminal, installs Apache 2.4, PHP 8.5-FPM and CLI, MySQL 8.4, Composer and Certbot, and can be rerun. It creates the non-root `matsvep` service account, a local `matsvep` database, and a `matsvep_app` user with only SELECT, INSERT, UPDATE and DELETE on that database. Schema migrations run separately through the local MySQL root socket; the application password cannot change the schema. The script writes `server/.env` as `root:matsvep` with mode 0640. It installs and enables `unattended-upgrades` for security updates.
+4. The script verifies that the default CLI is PHP 8.5, CLI `pcntl` is available, and the local server is MySQL 8.4. It enables UFW after allowing the SSH port you entered plus TCP 80 and 443. It obtains a Let's Encrypt certificate with Certbot's Apache plugin and configures HTTPS redirection. Check that DNS points to this VPS before running it. The VPS timezone is set to `Europe/Stockholm`.
 5. Check the services and backup timer before enabling crawling:
 
    ```bash
-   sudo systemctl status apache2 php8.3-fpm mysql
+   sudo systemctl status apache2 php8.5-fpm mysql
    sudo systemctl list-timers 'matsvep-*.timer'
    sudo systemctl status matsvep-backup.timer apt-daily-upgrade.timer
    ```
@@ -102,4 +102,4 @@ Inspect the report and table counts before resuming scheduled crawling. Database
 
 Run `sudo bash deploy/setup-ubuntu.sh --rotate-db-password` from `/srv/matsvep`. It prompts for a new password, updates the local MySQL account and rewrites the restricted `server/.env`; it does not print the secret. Stop an active crawl before rotation and start it again afterward. Rotate the private repository deploy key in GitHub and on the VPS separately. Certbot manages certificate renewal; check `sudo systemctl list-timers '*certbot*'` and `sudo certbot renew --dry-run`.
 
-The setup follows the Ubuntu 24.04 package versions and Certbot Apache integration. The timers use systemd calendar scheduling, and the backup uses MySQL's consistent InnoDB dump mode. See [Ubuntu 24.04 release notes](https://documentation.ubuntu.com/release-notes/24.04/), [systemd service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html), [systemd timer](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html), and [MySQL mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html).
+The setup uses Ubuntu 26.04 PHP 8.5 packages and its MySQL 8.4 server and Certbot Apache integration. The timers use systemd calendar scheduling, and the backup uses MySQL's consistent InnoDB dump mode. See [Ubuntu 26.04 release notes](https://documentation.ubuntu.com/release-notes/26.04/), [systemd service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html), [systemd timer](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html), and [MySQL mysqldump](https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html).

@@ -50,7 +50,7 @@ final class KoketAdapterIntegrationTest extends TestCase
             $db = new PDO($dsn . ';dbname=' . $databaseName, $config['DB_USER'], $config['DB_PASSWORD'], [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_EMULATE_PREPARES => false,
-                PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
+                \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
             ]);
             (new MigrationRunner($db, __DIR__ . '/../migrations', $databaseName))->run();
             $sourceQuery = $db->prepare('SELECT id FROM source WHERE adapter = ?');

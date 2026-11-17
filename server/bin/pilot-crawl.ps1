@@ -20,12 +20,13 @@ if ($SampleSize -lt 1 -or $BatchSize -lt 1 -or $MaxRetryWaitSeconds -lt 0) {
 }
 $php = Get-Command $PhpCommand -ErrorAction SilentlyContinue
 if ($null -eq $php) {
-    throw 'PHP was not found. Install PHP 8.3 CLI and add it to PATH.'
+    throw 'PHP was not found. Install PHP 8.5 or newer CLI and add it to PATH.'
 }
 $phpPath = $php.Source
 $version = & $phpPath -r 'echo PHP_MAJOR_VERSION, chr(46), PHP_MINOR_VERSION;'
-if ($LASTEXITCODE -ne 0 -or $version -ne '8.3') {
-    throw 'The pilot requires PHP 8.3 CLI.'
+if ($LASTEXITCODE -ne 0 -or $version -notmatch '^[0-9]+\.[0-9]+$' -or
+    [version]$version -lt [version]'8.5') {
+    throw 'The pilot requires PHP 8.5 or newer CLI.'
 }
 $modules = & $phpPath -m
 if ($LASTEXITCODE -ne 0 -or $modules -notcontains 'pdo_mysql') {

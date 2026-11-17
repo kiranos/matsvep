@@ -13,7 +13,7 @@ Design principles:
 - **Learns fast, stays stable:** ratings update the recipe and the family's taste profile, with confidence weighting so no single rating dominates.
 - **The family is the unit:** the family cooks one meal, decides together and rates together. There are no individual profiles.
 - **Built for one family, ready for many:** every table is keyed by `household_id`.
-- **Simple stack:** PHP 8.3, MySQL 8 and Apache on one Linux VPS with scheduled CLI jobs, plus native Windows and Android apps built with Flutter.
+- **Simple stack:** PHP 8.5, MySQL 8.4 and Apache on one Linux VPS with scheduled CLI jobs, plus native Windows and Android apps built with Flutter.
 
 ## Requirements
 
@@ -465,7 +465,7 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 
 ## System architecture
 
-The server is a plain Linux setup on one VPS (e.g. Ubuntu 24.04 LTS or Debian 12): Apache 2.4, PHP 8.3 with PHP-FPM, and MySQL 8, with no containers. The engine is plain PHP classes with no web dependencies, so the same code runs from API requests and scheduled CLI jobs. Only the scheduled crawler talks to recipe sites, so a slow or blocked site never affects the app. On Ubuntu 24.04, setup installs the crawler but leaves the Köket source and crawl timer disabled until the operator explicitly enables them. The first full crawl starts at 01:00 local time on the next night, runs for up to six hours, and has a seven-hour service hard limit; missed runs are skipped. Unattended security updates are enabled, while switching SSH to key-only login remains an operator action after verifying a second session. A separate 08:30 timer makes a consistent gzipped MySQL backup and keeps fourteen days locally. The operator copies backups off the server. See `docs/deployment.md` for setup, updates, monitoring, restore and secret rotation.
+The server is a plain Linux setup on one Ubuntu 26.04 LTS VPS: Apache 2.4, PHP 8.5 with PHP-FPM, and MySQL 8.4, with no containers. The engine is plain PHP classes with no web dependencies, so the same code runs from API requests and scheduled CLI jobs. Only the scheduled crawler talks to recipe sites, so a slow or blocked site never affects the app. Setup installs the crawler but leaves the Köket source and crawl timer disabled until the operator explicitly enables them. The first full crawl starts at 01:00 local time on the next night, runs for up to six hours, and has a seven-hour service hard limit; missed runs are skipped. Unattended security updates are enabled, while switching SSH to key-only login remains an operator action after verifying a second session. A separate 08:30 timer makes a consistent gzipped MySQL backup and keeps fourteen days locally. The operator copies backups off the server. See `docs/deployment.md` for setup, updates, monitoring, restore and secret rotation.
 
 Numbered SQL files in `server/migrations` are applied by the PHP CLI runner. Its `000_schema_migrations.sql` bootstrap creates `schema_migrations`; each later file is recorded with a checksum and applied timestamp. The runner skips matching files and stops if a recorded file changed or a previous run stopped partway through a migration. MySQL DDL can commit before a migration finishes, so an interrupted migration requires manual repair before retrying.
 
@@ -473,7 +473,7 @@ Numbered SQL files in `server/migrations` are applied by the PHP CLI runner. Its
 Windows + Android apps (Flutter)
         |  HTTPS /api/v1
         v
-+----------------------- Linux VPS: Apache + PHP 8.3 ------------------------+
++----------------------- Linux VPS: Apache + PHP 8.5 ------------------------+
 |  JSON API + admin  -->  Recommendation engine        Cron jobs (PHP CLI)    |
 |  decks, picks,          hard filters + scoring        crawl sources nightly  |
 |  ratings, onboarding,   plan builder + swap pass      rebuild affinities 03:00|
@@ -481,7 +481,7 @@ Windows + Android apps (Flutter)
 +---------------------------------------------------------------------------+
         |                        |                          |          |
         v                        v                          v          v (polite crawl)
-                     MySQL 8 (recipes, history, affinities, config)   Recipe sites
+                     MySQL 8.4 (recipes, history, affinities, config)   Recipe sites
                                                                        (Köket, ICA, Arla, Coop)
 ```
 
@@ -578,7 +578,7 @@ The code is written by an AI coding agent, such as Claude Code or OpenAI Codex. 
 ```
 /docs/design.md        ← this document in Markdown (source of truth)
 /docs/decisions/       ← a short note for every later design change
-/server/               ← PHP 8.3: src/Engine, src/Ingest, src/Api, migrations/, tests/
+/server/               ← PHP 8.5: src/Engine, src/Ingest, src/Api, migrations/, tests/
 /server/simulator/     ← personas and the headless simulator
 /app/                  ← Flutter app for Android and Windows
 /api/openapi.yaml      ← API contract shared by server and app
@@ -588,7 +588,7 @@ CLAUDE.md / AGENTS.md  ← instructions the agent reads on every task
 **Instruction file:** Claude Code reads `CLAUDE.md` and Codex reads `AGENTS.md`; keep one file under both names. It states:
 
 - What the app is, in 5 lines, with a pointer to `/docs/design.md`.
-- Versions: PHP 8.3, MySQL 8, Apache, Flutter stable, Linux server.
+- Versions: PHP 8.5, MySQL 8.4, Apache, Flutter stable, Linux server.
 - Commands: install, test, lint, run the simulator.
 - Hard rules:
   - No AI or ML libraries in the app.

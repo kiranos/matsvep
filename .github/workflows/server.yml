@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8.4
         env:
           MYSQL_ROOT_PASSWORD: testing
         ports:
@@ -22,13 +22,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring
           coverage: none
           tools: composer:v2
       - name: Install dependencies
         working-directory: server
         run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Validate Composer metadata
+        working-directory: server
+        run: composer validate --strict
       - name: Configure test database
         working-directory: server
         run: |
@@ -42,4 +45,4 @@ jobs:
         run: composer stan
       - name: Tests
         working-directory: server
-        run: composer test
+        run: composer test -- --display-deprecations --display-phpunit-deprecations --fail-on-deprecation --fail-on-phpunit-deprecation

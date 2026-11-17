@@ -8,8 +8,8 @@ fail() { printf 'Setup failed: %s\n' "$*" >&2; exit 1; }
 [[ -r /etc/os-release ]] || fail 'Cannot identify the operating system.'
 # shellcheck source=/dev/null
 source /etc/os-release
-[[ ${ID:-} == ubuntu && ${VERSION_ID:-} == 24.04 ]] ||
-    fail 'This setup supports Ubuntu 24.04 only.'
+[[ ${ID:-} == ubuntu && ${VERSION_ID:-} == 26.04 ]] ||
+    fail 'This setup supports Ubuntu 26.04 only.'
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 [[ $project_root == /srv/matsvep ]] ||
@@ -70,18 +70,22 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y apache2 php8.3-fpm php8.3-cli php8.3-mysql php8.3-xml \
-    php8.3-mbstring php8.3-curl php8.3-zip php8.3-intl mysql-server \
+apt-get install -y apache2 php8.5-fpm php8.5-cli php8.5-mysql php8.5-xml \
+    php8.5-mbstring php8.5-curl php8.5-zip php8.5-intl mysql-server \
     composer git unzip ufw certbot python3-certbot-apache unattended-upgrades
-systemctl enable --now mysql apache2 php8.3-fpm
+systemctl enable --now mysql apache2 php8.5-fpm
+php -r 'exit(PHP_VERSION_ID >= 80500 && PHP_VERSION_ID < 80600 ? 0 : 1);' ||
+    fail 'The default PHP CLI must be PHP 8.5.'
+[[ $(mysql --protocol=socket -uroot --batch --skip-column-names -e 'SELECT VERSION()') == 8.4.* ]] ||
+    fail 'The local MySQL server must be MySQL 8.4.'
 timedatectl set-timezone Europe/Stockholm
 cat > /etc/apt/apt.conf.d/20auto-upgrades <<'APT'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT
 systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
-php -r 'exit(function_exists("pcntl_async_signals") ? 0 : 1);' ||
-    fail 'PHP CLI needs the pcntl extension for clean crawl shutdown.'
+php8.5 -r 'exit(extension_loaded("pcntl") && function_exists("pcntl_async_signals") ? 0 : 1);' ||
+    fail 'PHP 8.5 CLI needs the pcntl extension for clean crawl shutdown.'
 
 if ! id -u matsvep >/dev/null 2>&1; then
     useradd --system --create-home --home-dir /var/lib/matsvep \
@@ -136,7 +140,7 @@ cat > /etc/apache2/sites-available/matsvep.conf <<APACHE
 </VirtualHost>
 APACHE
 a2enmod proxy_fcgi setenvif rewrite headers >/dev/null
-a2enconf php8.3-fpm >/dev/null
+a2enconf php8.5-fpm >/dev/null
 a2ensite matsvep.conf >/dev/null
 a2dissite 000-default.conf >/dev/null 2>&1 || true
 apache2ctl configtest

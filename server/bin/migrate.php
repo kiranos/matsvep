@@ -54,7 +54,7 @@ try {
     $db = new PDO($dsn, $config['DB_USER'], $config['DB_PASSWORD'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_EMULATE_PREPARES => false,
-        PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
+        \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
     ]);
     $runner = new MigrationRunner($db, __DIR__ . '/../migrations', $config['DB_NAME']);
     foreach ($runner->run() as $line) {
