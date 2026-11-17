@@ -39,8 +39,10 @@ read -r -p 'Public domain for HTTPS: ' domain
     fail 'Enter a valid DNS name.'
 read -r -p 'Email for HTTPS renewal and crawler contact: ' email
 [[ $email =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$ ]] || fail 'Enter a valid email address.'
-default_ssh_port=${SSH_CONNECTION##* }
-[[ $default_ssh_port =~ ^[0-9]+$ ]] || default_ssh_port=22
+ssh_session=${SSH_CONNECTION:-${SSH_CLIENT:-}}
+default_ssh_port=${ssh_session##* }
+[[ $default_ssh_port =~ ^[0-9]+$ && $default_ssh_port -ge 1 && $default_ssh_port -le 65535 ]] ||
+    default_ssh_port=22
 read -r -p "SSH port to allow in UFW [$default_ssh_port]: " ssh_port
 ssh_port=${ssh_port:-$default_ssh_port}
 [[ $ssh_port =~ ^[0-9]+$ && $ssh_port -ge 1 && $ssh_port -le 65535 ]] ||
