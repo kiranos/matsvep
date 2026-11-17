@@ -1,6 +1,6 @@
 # Ubuntu 26.04 deployment
 
-The operator runs these commands on a private Ubuntu 26.04 VPS. The repository scripts do not deploy automatically. The current Apache site serves a small placeholder while the phase 1 crawler runs from PHP CLI; a web entry point will be deployed when the API exists.
+Run these commands in a terminal on the Ubuntu 26.04 VPS itself; a local server console works and no SSH login to another machine is needed. The repository scripts do not deploy automatically. The current Apache site serves a small placeholder while the phase 1 crawler runs from PHP CLI; a web entry point will be deployed when the API exists.
 
 ## First setup
 
@@ -14,7 +14,7 @@ The operator runs these commands on a private Ubuntu 26.04 VPS. The repository s
    ```
 
 3. Run `sudo bash deploy/setup-ubuntu.sh` from the checkout. It prompts for the public domain, email, active SSH port and a new database application password. Keep the password private. The script requires Ubuntu 26.04 and an interactive terminal, installs Apache 2.4, PHP 8.5-FPM and CLI, MySQL 8.4, Composer and Certbot, and can be rerun. It creates the non-root `matsvep` service account, a local `matsvep` database, and a `matsvep_app` user with only SELECT, INSERT, UPDATE and DELETE on that database. Schema migrations run separately through the local MySQL root socket; the application password cannot change the schema. The script writes `server/.env` as `root:matsvep` with mode 0640. It installs and enables `unattended-upgrades` for security updates.
-4. The script verifies that the default CLI is PHP 8.5, CLI `pcntl` is available, and the local server is MySQL 8.4. It enables UFW after allowing the SSH port you entered plus TCP 80 and 443. It obtains a Let's Encrypt certificate with Certbot's Apache plugin and configures HTTPS redirection. Check that DNS points to this VPS before running it. The VPS timezone is set to `Europe/Stockholm`.
+4. The script verifies that the default CLI is PHP 8.5, CLI `pcntl` is available, and the local server is MySQL 8.4. It enables UFW after allowing the SSH port you entered plus TCP 80 and 443. On a local console, the SSH port prompt defaults to 22; enter the server's actual SSH port if it differs. The script does not connect over SSH. It obtains a Let's Encrypt certificate with Certbot's Apache plugin and configures HTTPS redirection. Check that DNS points to this VPS before running it. The VPS timezone is set to `Europe/Stockholm`.
 5. Check the services and backup timer before enabling crawling:
 
    ```bash
