@@ -13,7 +13,7 @@ Design principles:
 - **Learns fast, stays stable:** ratings update the recipe and the family's taste profile, with confidence weighting so no single rating dominates.
 - **The family is the unit:** the family cooks one meal, decides together and rates together. There are no individual profiles.
 - **Built for one family, ready for many:** every table is keyed by `household_id`.
-- **Simple stack:** PHP 8.3, MySQL 8 and Apache on one Linux VPS with cron, plus native Windows and Android apps built with Flutter.
+- **Simple stack:** PHP 8.3, MySQL 8 and Apache on one Linux VPS with scheduled CLI jobs, plus native Windows and Android apps built with Flutter.
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Under Swedish law, ingredient lists and plain method steps usually lack *verksh�
 
 ### Ingestion pipeline
 
-Ingestion runs from cron, never on a user request.
+Ingestion runs from a systemd timer, never on a user request.
 
 1. **Discover:** read each enabled source's sitemap and queue same-host URLs, excluding known non-recipe sections. For Köket, the sitemap is the broad primary route and category pages can supplement its omissions. Köket recipe URLs can be root-level slugs; URL shape alone does not establish that a page is a recipe. Queue new URLs and requeue fetched URLs when a sitemap change date is newer than the last fetch.
 2. **Fetch politely:** obey robots.txt, use an identifying User-Agent, wait at least `crawl.delay_s` between requests per site, and use a `crawl.timeout_s` request timeout. Cache ETag and Last-Modified. Retry failures with capped exponential backoff, respecting a longer `Retry-After` value, and stop after `crawl.max_attempts`. A same-host redirect queues its target and marks the old URL gone; an off-host redirect is a failed fetch.
@@ -465,7 +465,7 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 
 ## System architecture
 
-The server is a plain Linux setup on one VPS (e.g. Ubuntu 24.04 LTS or Debian 12): Apache 2.4, PHP 8.3 with PHP-FPM, and MySQL 8, with no containers. The engine is plain PHP classes with no web dependencies, so the same code runs from API requests and from cron. Only cron talks to the recipe sites, so a slow or blocked site never affects the app.
+The server is a plain Linux setup on one VPS (e.g. Ubuntu 24.04 LTS or Debian 12): Apache 2.4, PHP 8.3 with PHP-FPM, and MySQL 8, with no containers. The engine is plain PHP classes with no web dependencies, so the same code runs from API requests and scheduled CLI jobs. Only the scheduled crawler talks to recipe sites, so a slow or blocked site never affects the app. On Ubuntu 24.04, setup installs the crawler but leaves the Köket source and crawl timer disabled until the operator explicitly enables them. The first full crawl starts at 01:00 local time on the next night, runs for up to six hours, and has a seven-hour service hard limit; missed runs are skipped. Unattended security updates are enabled, while switching SSH to key-only login remains an operator action after verifying a second session. A separate 08:30 timer makes a consistent gzipped MySQL backup and keeps fourteen days locally. The operator copies backups off the server. See `docs/deployment.md` for setup, updates, monitoring, restore and secret rotation.
 
 Numbered SQL files in `server/migrations` are applied by the PHP CLI runner. Its `000_schema_migrations.sql` bootstrap creates `schema_migrations`; each later file is recorded with a checksum and applied timestamp. The runner skips matching files and stops if a recorded file changed or a previous run stopped partway through a migration. MySQL DDL can commit before a migration finishes, so an interrupted migration requires manual repair before retrying.
 

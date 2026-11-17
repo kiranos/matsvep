@@ -1,0 +1,25 @@
+[Unit]
+Description=Matsvep nightly Köket crawl
+After=network-online.target mysql.service
+Wants=network-online.target
+Requires=mysql.service
+
+[Service]
+Type=exec
+User=matsvep
+Group=matsvep
+WorkingDirectory=/srv/matsvep/server
+ExecStart=/usr/bin/php bin/crawl-koket.php crawl --hours 6
+RuntimeMaxSec=7h
+TimeoutStopSec=120s
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/matsvep/server/var
+
+[Install]
+WantedBy=multi-user.target
