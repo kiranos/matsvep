@@ -15,6 +15,19 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
+$rawArguments = $_SERVER['argv'] ?? null;
+if (!is_array($rawArguments)) {
+    throw new RuntimeException('Missing CLI arguments.');
+}
+$argv = array_map(static function (mixed $argument): string {
+    if (!is_string($argument)) {
+        throw new RuntimeException('Invalid CLI argument.');
+    }
+
+    return $argument;
+}, array_values($rawArguments));
+$argc = count($argv);
+
 try {
     $envFile = getenv('MATS_ENV_FILE') ?: __DIR__ . '/../.env';
     $fileConfig = is_file($envFile) ? parse_ini_file($envFile, false, INI_SCANNER_RAW) : [];
