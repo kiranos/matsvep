@@ -60,7 +60,7 @@ final class MigrationIntegrationTest extends TestCase
             $db = new PDO($dsn . ';dbname=' . $databaseName, $config['DB_USER'], $config['DB_PASSWORD'], [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_EMULATE_PREPARES => false,
-                PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
+                \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
             ]);
             $runner = new MigrationRunner($db, $directory, $databaseName);
             $applied = $runner->run();

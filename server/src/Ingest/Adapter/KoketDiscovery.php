@@ -23,7 +23,7 @@ final class KoketDiscovery
             throw new RuntimeException('Cannot read non-recipe path data.');
         }
         foreach ($lines as $line) {
-            $fields = str_getcsv($line);
+            $fields = str_getcsv($line, ',', '"', '');
             if (count($fields) !== 2 || !is_string($fields[0]) || !is_string($fields[1])
                 || !str_starts_with($fields[0], '/') || !in_array($fields[1], ['exact', 'prefix'], true)) {
                 throw new RuntimeException('Invalid non-recipe path data.');
