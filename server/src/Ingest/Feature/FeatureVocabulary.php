@@ -24,6 +24,15 @@ final class FeatureVocabulary
     /** @var list<string> */
     public readonly array $cutUpTerms;
 
+    /** @var list<string> */
+    public readonly array $longCookTerms;
+
+    /** @var array<string, float> */
+    public readonly array $durationUnits;
+
+    /** @var list<string> */
+    public readonly array $dinnerExclusions;
+
     /** @var array<string, list<array{keyword: string, value: float}>> */
     public readonly array $leftoverKeywords;
 
@@ -92,6 +101,16 @@ final class FeatureVocabulary
             $cutUpTerms[] = $row['term'];
         }
         $this->cutUpTerms = $cutUpTerms;
+        $this->longCookTerms = $this->readTerms($seedDirectory . '/feature_long_cook_terms.csv');
+        $this->dinnerExclusions = $this->readTerms($seedDirectory . '/feature_dinner_exclusions.csv');
+        $durationUnits = [];
+        foreach (CsvTable::read($seedDirectory . '/feature_duration_units.csv', ['unit', 'minutes']) as $row) {
+            if ($row['unit'] === '' || !is_numeric($row['minutes']) || (float) $row['minutes'] <= 0) {
+                throw new RuntimeException('Invalid duration unit seed row.');
+            }
+            $durationUnits[mb_strtolower($row['unit'])] = (float) $row['minutes'];
+        }
+        $this->durationUnits = $durationUnits;
         $keywords = ['dish_type' => [], 'method' => [], 'protein_form' => []];
         $query = $db->prepare('SELECT keyword, signal_type, value FROM leftover_keyword');
         $query->execute();
@@ -106,6 +125,19 @@ final class FeatureVocabulary
             ];
         }
         $this->leftoverKeywords = $keywords;
+    }
+
+    /** @return list<string> */
+    private function readTerms(string $path): array
+    {
+        $terms = [];
+        foreach (CsvTable::read($path, ['term']) as $row) {
+            if ($row['term'] === '') {
+                throw new RuntimeException('Invalid feature term seed row.');
+            }
+            $terms[] = $row['term'];
+        }
+        return $terms;
     }
 
     public function contains(string $text, string $term): bool

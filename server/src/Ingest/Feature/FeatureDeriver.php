@@ -62,7 +62,7 @@ final class FeatureDeriver
         );
         $update = $this->db->prepare(
             'UPDATE recipe SET main_protein = ?, carb_base = ?, cuisine = ?, meal_type = ?, ' .
-            'is_vegetarian = ?, leftover_score = ?, festive_score = ?, effort = ? WHERE id = ?'
+            'is_dinner_candidate = ?, is_vegetarian = ?, leftover_score = ?, festive_score = ?, effort = ? WHERE id = ?'
         );
         $count = 0;
         $this->db->beginTransaction();
@@ -123,7 +123,7 @@ final class FeatureDeriver
      * @param array<int, list<array<string, mixed>>> $parts
      * @param list<string> $tags
      * @param list<string> $steps
-     * @return array{?string, ?string, ?string, ?string, ?int, float, float, int}
+     * @return array{?string, ?string, ?string, ?string, int, ?int, float, float, int}
      */
     private function deriveOne(
         array $recipe,
@@ -197,6 +197,9 @@ final class FeatureDeriver
         $stepText = implode(' ', $steps);
         $dishSignal = $this->signal('dish_type', $recipe['title'] . ' ' . implode(' ', $tags));
         $methodSignal = $this->signal('method', $stepText);
+        if ($this->hasLongCookingStep($steps)) {
+            $methodSignal = max($methodSignal, $this->config->decimal('feature.leftover_long_cook_signal'));
+        }
         $proteinSignal = $this->signal('protein_form', implode(' ', $ingredientTexts));
         if ($dishSignal > 0 && $proteinSignal < 0 && $this->hasCutUpTerm($stepText)) {
             $proteinSignal = $this->config->decimal('feature.leftover_cut_up_signal');
@@ -209,6 +212,9 @@ final class FeatureDeriver
                 + $this->config->decimal('feature.leftover_protein_weight') * $proteinSignal
             ),
         );
+        $dinnerCandidate = $mealType === 'main' || ($mealType === null
+            && ($protein !== null || $carb !== null)
+            && !$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags)));
         $time = is_numeric($recipe['total_time_min'] ?? null)
             ? (int) $recipe['total_time_min'] : null;
         $timeShare = $time === null ? 0.0 : min(
@@ -225,7 +231,7 @@ final class FeatureDeriver
             || $ingredientCount >= $this->config->integer('feature.effort_hard_ingredient_count')
             ? 3 : (($time !== null && $time <= $this->config->integer('feature.effort_easy_time_min')
                 && $ingredientCount <= $this->config->integer('feature.effort_easy_ingredient_count')) ? 1 : 2);
-        return [$protein, $carb, $cuisine, $mealType, $vegetarian, round($leftover, 4), round($festive, 4), $effort];
+        return [$protein, $carb, $cuisine, $mealType, $dinnerCandidate ? 1 : 0, $vegetarian, round($leftover, 4), round($festive, 4), $effort];
     }
 
     /** @param array<string, mixed> $line */
@@ -282,6 +288,39 @@ final class FeatureDeriver
             }
         }
         return $value;
+    }
+
+    /** @param list<string> $steps */
+    private function hasLongCookingStep(array $steps): bool
+    {
+        $minimum = $this->config->integer('feature.leftover_long_cook_min');
+        foreach ($steps as $step) {
+            $hasTerm = false;
+            foreach ($this->vocabulary->longCookTerms as $term) {
+                $hasTerm = $hasTerm || $this->vocabulary->contains($step, $term);
+            }
+            if (!$hasTerm) {
+                continue;
+            }
+            preg_match_all('/([0-9]+(?:[.,][0-9]+)?)\s*([\p{L}]+)/u', $step, $matches, PREG_SET_ORDER);
+            foreach ($matches as $match) {
+                $multiplier = $this->vocabulary->durationUnits[mb_strtolower($match[2])] ?? null;
+                if ($multiplier !== null && (float) str_replace(',', '.', $match[1]) * $multiplier >= $minimum) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private function hasDinnerExclusion(string $text): bool
+    {
+        foreach ($this->vocabulary->dinnerExclusions as $term) {
+            if ($this->vocabulary->contains($text, $term)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function hasCutUpTerm(string $text): bool

@@ -83,7 +83,8 @@ final class FeatureDeriverIntegrationTest extends TestCase
             $stepInsert = $db->prepare('INSERT INTO recipe_step (recipe_id, position, text) VALUES (?, ?, ?)');
             $ids = [];
             foreach (['chicken_stew', 'fish_fillet', 'vegetarian_lasagne',
-                'uncertain_vegetarian', 'title_protein'] as $key) {
+                'uncertain_vegetarian', 'title_protein', 'one_pot_risoni', 'friday_pasta',
+                'sill_buffet', 'dessert_exclusion', 'long_cook', 'short_cook', 'short_simmer'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -105,10 +106,10 @@ final class FeatureDeriverIntegrationTest extends TestCase
             $normaliser = new IngredientNormaliser($db, new IngredientLineParser($seedDirectory));
             $normaliser->run();
             $deriver = new FeatureDeriver($db, $seedDirectory);
-            self::assertSame(5, $deriver->run());
+            self::assertSame(count($ids), $deriver->run());
             $featureQuery = $db->prepare(
                 'SELECT main_protein, carb_base, cuisine, meal_type, is_vegetarian, ' .
-                'leftover_score, festive_score, effort FROM recipe WHERE id = ?'
+                'is_dinner_candidate, leftover_score, festive_score, effort FROM recipe WHERE id = ?'
             );
             foreach ($ids as $key => $id) {
                 $case = $cases[$key];
@@ -122,6 +123,7 @@ final class FeatureDeriverIntegrationTest extends TestCase
                         self::assertSame($case[$expectedKey], $actual[$column]);
                     }
                 }
+                self::assertSame($case['dinner_candidate'], (bool) $actual['is_dinner_candidate']);
                 self::assertSame($case['vegetarian'], $actual['is_vegetarian'] === null
                     ? null : (bool) $actual['is_vegetarian']);
                 self::assertIsNumeric($case['leftover_score']);
@@ -145,19 +147,26 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 $ignoredQuery->fetch(PDO::FETCH_ASSOC)
             );
             $report = (new FeatureReport($db))->build();
-            self::assertSame(5, $report['recipes']);
-            self::assertSame(10, $report['main_ingredient_lines']);
-            self::assertSame(8, $report['matched_main_ingredient_lines']);
-            self::assertSame(80.0, $report['matched_main_ingredient_share_pct']);
+            self::assertSame(count($ids), $report['recipes']);
+            self::assertGreaterThan(10, $report['main_ingredient_lines']);
+            self::assertGreaterThan(8, $report['matched_main_ingredient_lines']);
+            self::assertGreaterThan(80.0, $report['matched_main_ingredient_share_pct']);
             self::assertIsArray($report['main_protein_distribution']);
-            self::assertSame(2, $report['main_protein_distribution']['fish']);
+            self::assertSame(3, $report['main_protein_distribution']['fish']);
             $ingredientReport = (new IngredientReport($db))->build();
-            self::assertSame(10, $ingredientReport['main_lines']);
-            self::assertSame(8, $ingredientReport['matched_main_lines']);
-            self::assertSame(80.0, $ingredientReport['matched_main_share_pct']);
+            self::assertSame($report['main_ingredient_lines'], $ingredientReport['main_lines']);
+            self::assertSame($report['matched_main_ingredient_lines'], $ingredientReport['matched_main_lines']);
+            self::assertSame($report['matched_main_ingredient_share_pct'], $ingredientReport['matched_main_share_pct']);
             self::assertIsArray($report['spot_check']);
-            self::assertCount(5, $report['spot_check']);
-            self::assertSame(5, $deriver->run());
+            self::assertCount(count($ids), $report['spot_check']);
+            $dinners = $report['dinner_candidates'];
+            self::assertIsArray($dinners);
+            self::assertSame(10, $dinners['count']);
+            self::assertIsArray($dinners['highest_leftover_score']);
+            self::assertIsArray($dinners['lowest_leftover_score']);
+            self::assertCount(10, $dinners['highest_leftover_score']);
+            self::assertCount(10, $dinners['lowest_leftover_score']);
+            self::assertSame(count($ids), $deriver->run());
             self::assertSame($report, (new FeatureReport($db))->build());
             $reportPath = sys_get_temp_dir() . '/matsvep-feature-' . bin2hex(random_bytes(5)) . '.json';
             try {

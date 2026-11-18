@@ -254,6 +254,9 @@ components:
             carb_base:
               type: string
               nullable: true
+            is_dinner_candidate:
+              type: boolean
+              nullable: true
             is_vegetarian:
               type: boolean
               nullable: true

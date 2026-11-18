@@ -3,60 +3,278 @@
     "url": "https://www.koket.se/test-chicken-stew",
     "title": "Kycklinggryta med ris",
     "time": 45,
-    "ingredients": ["500 g kycklinglårfilé", "2 dl ris", "1 lök", "200 g okändrot"],
-    "steps": ["Strimla kycklingen och låt puttra"],
-    "tags": ["Huvudrätt", "Sverige/Norden"],
-    "protein": "chicken", "carb": "rice", "cuisine": "swedish", "meal_type": "main", "vegetarian": false,
-    "leftover_score": 0.95, "effort": 2
+    "ingredients": [
+      "500 g kycklinglårfilé",
+      "2 dl ris",
+      "1 lök",
+      "200 g okändrot"
+    ],
+    "steps": [
+      "Strimla kycklingen och låt puttra"
+    ],
+    "tags": [
+      "Huvudrätt",
+      "Sverige/Norden"
+    ],
+    "protein": "chicken",
+    "carb": "rice",
+    "cuisine": "swedish",
+    "meal_type": "main",
+    "vegetarian": false,
+    "leftover_score": 0.975,
+    "effort": 2,
+    "dinner_candidate": true
   },
   "fish_fillet": {
     "url": "https://www.koket.se/test-fish-fillet",
     "title": "Torskfilé med potatis",
     "time": 20,
-    "ingredients": ["400 g torskfilé", "600 g potatis", "1 pensel"],
-    "steps": ["Stek i panna"],
-    "tags": ["Huvudrätt"],
-    "protein": "fish", "carb": "potato", "meal_type": "main", "vegetarian": false,
-    "leftover_score": 0.315, "effort": 1
+    "ingredients": [
+      "400 g torskfilé",
+      "600 g potatis",
+      "1 pensel"
+    ],
+    "steps": [
+      "Stek i panna"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "fish",
+    "carb": "potato",
+    "meal_type": "main",
+    "vegetarian": false,
+    "leftover_score": 0.355,
+    "effort": 1,
+    "dinner_candidate": true
   },
   "vegetarian_lasagne": {
     "url": "https://www.koket.se/test-vegetarian-lasagne",
     "title": "Lasagne med tofu",
     "time": 120,
-    "ingredients": ["300 g tofu", "200 g lasagneplattor", "1 msk olja"],
-    "steps": ["Låt puttra"],
-    "tags": ["Huvudrätt", "Italien", "Fest"],
-    "protein": "vegetarian", "carb": "pasta", "cuisine": "italian", "meal_type": "main", "vegetarian": true,
-    "leftover_score": 0.9, "festive_score": 0.65, "effort": 3
+    "ingredients": [
+      "300 g tofu",
+      "200 g lasagneplattor",
+      "1 msk olja"
+    ],
+    "steps": [
+      "Låt puttra"
+    ],
+    "tags": [
+      "Huvudrätt",
+      "Italien",
+      "Fest"
+    ],
+    "protein": "vegetarian",
+    "carb": "pasta",
+    "cuisine": "italian",
+    "meal_type": "main",
+    "vegetarian": true,
+    "leftover_score": 0.95,
+    "festive_score": 0.65,
+    "effort": 3,
+    "dinner_candidate": true
   },
   "uncertain_vegetarian": {
     "url": "https://www.koket.se/test-uncertain-vegetarian",
     "title": "Rotfruktsrätt",
     "time": 40,
-    "ingredients": ["200 g morot", "150 g okändrot"],
-    "steps": ["Tillaga i ugn"],
-    "tags": ["Huvudrätt"],
-    "meal_type": "main", "vegetarian": null,
-    "leftover_score": 0.5, "effort": 2
+    "ingredients": [
+      "200 g morot",
+      "150 g okändrot"
+    ],
+    "steps": [
+      "Tillaga i ugn"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "meal_type": "main",
+    "vegetarian": null,
+    "leftover_score": 0.5,
+    "effort": 2,
+    "dinner_candidate": true
   },
   "title_protein": {
     "url": "https://www.koket.se/test-title-protein",
     "title": "Tonfisksallad",
     "time": 20,
-    "ingredients": ["1 förp märkesprodukt", "1 sallad"],
-    "steps": ["Blanda"],
-    "tags": ["Huvudrätt"],
-    "protein": "fish", "meal_type": "main", "vegetarian": false,
-    "leftover_score": 0.5, "effort": 1
+    "ingredients": [
+      "1 förp märkesprodukt",
+      "1 sallad"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "fish",
+    "meal_type": "main",
+    "vegetarian": false,
+    "leftover_score": 0.5,
+    "effort": 1,
+    "dinner_candidate": true
   },
   "alias_checks": {
-    "lökar": "gul lök", "sparrisar": "sparris", "basilikablad": "basilika",
-    "myntablad": "mynta", "salladsblad": "sallad", "mâchesallad": "sallad",
-    "salladsmix": "sallad", "röd spansk peppar": "chili",
-    "kallrökt lax": "lax", "räkor med skal": "räkor",
-    "chorizokorvar": "chorizo", "ryggbiff": "ryggbiff", "renstek": "renstek",
-    "kalvfilé": "kalvfilé", "kalvlägg": "kalvlägg",
-    "revbensspjäll": "revbensspjäll", "rödspättafiléer": "rödspätta",
-    "matjessillfiléer": "sill"
+    "lökar": "gul lök",
+    "sparrisar": "sparris",
+    "basilikablad": "basilika",
+    "myntablad": "mynta",
+    "salladsblad": "sallad",
+    "mâchesallad": "sallad",
+    "salladsmix": "sallad",
+    "röd spansk peppar": "chili",
+    "kallrökt lax": "lax",
+    "räkor med skal": "räkor",
+    "chorizokorvar": "chorizo",
+    "ryggbiff": "ryggbiff",
+    "renstek": "renstek",
+    "kalvfilé": "kalvfilé",
+    "kalvlägg": "kalvlägg",
+    "revbensspjäll": "revbensspjäll",
+    "rödspättafiléer": "rödspätta",
+    "matjessillfiléer": "sill",
+    "orzo": "risoni",
+    "linguine": "linguine",
+    "fusilli": "fusilli"
+  },
+  "one_pot_risoni": {
+    "url": "https://www.koket.se/test-one-pot-risoni",
+    "title": "One pot risoni med tomat",
+    "time": 50,
+    "ingredients": [
+      "250 g risoni",
+      "400 g tomater"
+    ],
+    "steps": [
+      "Låt puttra i 45 minuter"
+    ],
+    "tags": [],
+    "carb": "pasta",
+    "vegetarian": true,
+    "dinner_candidate": true,
+    "leftover_score": 0.95,
+    "effort": 2
+  },
+  "friday_pasta": {
+    "url": "https://www.koket.se/test-friday-pasta",
+    "title": "Leilas fredagspasta",
+    "time": 30,
+    "ingredients": [
+      "250 g linguine",
+      "200 g chorizo"
+    ],
+    "steps": [
+      "Koka pastan"
+    ],
+    "tags": [],
+    "protein": "sausage",
+    "carb": "pasta",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "leftover_score": 0.5,
+    "effort": 1
+  },
+  "sill_buffet": {
+    "url": "https://www.koket.se/test-sill",
+    "title": "Kräftsill",
+    "time": 20,
+    "ingredients": [
+      "300 g sill",
+      "1 dl gräddfil"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Frukost"
+    ],
+    "protein": "fish",
+    "meal_type": "buffet",
+    "vegetarian": false,
+    "dinner_candidate": false,
+    "leftover_score": 0.5,
+    "effort": 1
+  },
+  "dessert_exclusion": {
+    "url": "https://www.koket.se/test-dessert",
+    "title": "Dessert med pasta",
+    "time": 20,
+    "ingredients": [
+      "200 g pasta"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [],
+    "meal_type": "dessert",
+    "carb": "pasta",
+    "vegetarian": true,
+    "dinner_candidate": false,
+    "leftover_score": 0.5,
+    "effort": 1
+  },
+  "long_cook": {
+    "url": "https://www.koket.se/test-long-cook",
+    "title": "Osso buco",
+    "time": 100,
+    "ingredients": [
+      "500 g högrev"
+    ],
+    "steps": [
+      "Låt sjuda i 1,5 timmar"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "beef",
+    "meal_type": "main",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "leftover_score": 0.99,
+    "effort": 3
+  },
+  "short_cook": {
+    "url": "https://www.koket.se/test-short-cook",
+    "title": "Biff med potatis",
+    "time": 25,
+    "ingredients": [
+      "400 g ryggbiff",
+      "500 g potatis"
+    ],
+    "steps": [
+      "Stek i panna i 10 minuter"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "beef",
+    "carb": "potato",
+    "meal_type": "main",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "leftover_score": 0.355,
+    "effort": 1
+  },
+  "short_simmer": {
+    "url": "https://www.koket.se/test-short-simmer",
+    "title": "Högrevsgryta",
+    "time": 35,
+    "ingredients": [
+      "500 g högrev"
+    ],
+    "steps": [
+      "Låt sjuda i 30 minuter"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "beef",
+    "meal_type": "main",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "leftover_score": 0.96,
+    "effort": 2
   }
 }

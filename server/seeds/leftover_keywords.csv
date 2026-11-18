@@ -22,3 +22,11 @@ linser,protein_form,0.8
 filé,protein_form,-0.8
 kotlett,protein_form,-1
 biff,protein_form,-0.8
+masala,dish_type,1
+one pot,dish_type,1
+osso buco,dish_type,1
+lägg,dish_type,0.8
+långkok,dish_type,1
+grill,method,-0.6
+stek,method,-0.4
+i ugnen,method,0.3

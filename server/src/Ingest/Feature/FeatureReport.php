@@ -21,14 +21,15 @@ final class FeatureReport
     {
         $query = $this->db->prepare(
             'SELECT id, url, title, main_protein, carb_base, cuisine, meal_type, is_vegetarian, ' .
-            'leftover_score, festive_score, effort FROM recipe WHERE active = TRUE ORDER BY id'
+            'is_dinner_candidate, leftover_score, festive_score, effort FROM recipe WHERE active = TRUE ORDER BY id'
         );
         $query->execute();
         $recipes = $query->fetchAll(PDO::FETCH_ASSOC);
         $buckets = $this->config->integer('feature.report_leftover_buckets');
         $sampleSize = $this->config->integer('feature.report_sample_size');
         $sampleSeed = $this->config->string('feature.report_sample_seed');
-        if ($buckets < 1 || $sampleSize < 1) {
+        $rankedSize = $this->config->integer('feature.report_ranked_size');
+        if ($buckets < 1 || $sampleSize < 1 || $rankedSize < 1) {
             throw new RuntimeException('Invalid feature report configuration.');
         }
         $proteins = [];
@@ -36,6 +37,11 @@ final class FeatureReport
         $mealTypes = [];
         $leftovers = [];
         $sample = [];
+        $dinnerProteins = [];
+        $dinnerCuisines = [];
+        $dinnerMealTypes = [];
+        $dinnerLeftovers = [];
+        $rankedDinners = [];
         foreach ($recipes as $row) {
             if (!is_array($row) || !is_numeric($row['id'] ?? null)
                 || !is_string($row['url'] ?? null) || !is_string($row['title'] ?? null)) {
@@ -52,6 +58,27 @@ final class FeatureReport
             } else {
                 $leftovers['unclassified'] = ($leftovers['unclassified'] ?? 0) + 1;
             }
+            $row['is_dinner_candidate'] = $row['is_dinner_candidate'] === null
+                ? null : (bool) $row['is_dinner_candidate'];
+            if ($row['is_dinner_candidate'] === true) {
+                $this->increment($dinnerProteins, $row['main_protein'] ?? null);
+                $this->increment($dinnerCuisines, $row['cuisine'] ?? null);
+                $this->increment($dinnerMealTypes, $row['meal_type'] ?? null);
+                if (is_numeric($row['leftover_score'] ?? null)) {
+                    $score = (float) $row['leftover_score'];
+                    $bucket = min($buckets - 1, (int) floor($score * $buckets));
+                    $label = sprintf('%.2f-%.2f', $bucket / $buckets, ($bucket + 1) / $buckets);
+                    $dinnerLeftovers[$label] = ($dinnerLeftovers[$label] ?? 0) + 1;
+                    $rankedDinners[] = [
+                        'id' => (int) $row['id'],
+                        'url' => $row['url'],
+                        'title' => $row['title'],
+                        'leftover_score' => $score,
+                    ];
+                } else {
+                    $dinnerLeftovers['unclassified'] = ($dinnerLeftovers['unclassified'] ?? 0) + 1;
+                }
+            }
             $row['is_vegetarian'] = $row['is_vegetarian'] === null
                 ? null : (bool) $row['is_vegetarian'];
             $row['leftover_score'] = is_numeric($row['leftover_score'])
@@ -65,6 +92,12 @@ final class FeatureReport
         ksort($cuisines);
         ksort($mealTypes);
         ksort($leftovers);
+        ksort($dinnerProteins);
+        ksort($dinnerCuisines);
+        ksort($dinnerMealTypes);
+        ksort($dinnerLeftovers);
+        usort($rankedDinners, static fn (array $a, array $b): int =>
+            $a['leftover_score'] <=> $b['leftover_score'] ?: $a['id'] <=> $b['id']);
         usort($sample, static fn (array $a, array $b): int => strcmp($a['sort'], $b['sort']));
         $mainQuery = $this->db->prepare(
             "SELECT COUNT(*) AS total, COALESCE(SUM(normalise_status = 'matched'), 0) AS matched " .
@@ -88,6 +121,15 @@ final class FeatureReport
             'cuisine_distribution' => $cuisines,
             'meal_type_distribution' => $mealTypes,
             'leftover_score_distribution' => $leftovers,
+            'dinner_candidates' => [
+                'count' => array_sum($dinnerMealTypes),
+                'main_protein_distribution' => $dinnerProteins,
+                'cuisine_distribution' => $dinnerCuisines,
+                'meal_type_distribution' => $dinnerMealTypes,
+                'leftover_score_distribution' => $dinnerLeftovers,
+                'lowest_leftover_score' => array_slice($rankedDinners, 0, $rankedSize),
+                'highest_leftover_score' => array_slice(array_reverse($rankedDinners), 0, $rankedSize),
+            ],
             'spot_check' => array_column(array_slice($sample, 0, $sampleSize), 'recipe'),
         ];
     }
