@@ -1,0 +1,21 @@
+{
+  "range_notes": {"raw": "2–3 st TOMATER (ca 600 g), finhackade", "ingredient": "TOMATER", "note": "ca 600 g; finhackade"},
+  "reversed_range": {"raw": "250-200 g färska räkor"},
+  "half_unicode": {"raw": "½ tsk salt"},
+  "half_ascii": {"raw": "1/2 tsk salt"},
+  "mixed_fraction": {"raw": "1 1/2 dl crème fraîche"},
+  "cloves": {"raw": "2 klyftor vitlök"},
+  "eggs": {"raw": "2 ägg"},
+  "split_pair": {"raw": "salt och peppar", "first": "salt", "second": "peppar"},
+  "split_with_note": {"raw": "olja och smör till stekning", "first": "olja", "second": "smör", "note": "till stekning"},
+  "unsafe_quantity": {"raw": "1 msk salt och peppar"},
+  "unsafe_alternative": {"raw": "smör eller olja"},
+  "citrus_note": {"raw": "0,5 citron, saft och skal", "ingredient": "citron", "note": "saft och skal"},
+  "descriptor": {"raw": "finhackad gul lök", "ingredient": "gul lök", "note": "finhackad"},
+  "unknown_unit": {"raw": "1 mått kaffe", "unit_word": "mått"},
+  "compound_suggestion": {"raw": "hemkokt kycklingbuljong", "token": "hemkokt kycklingbuljong", "suggestion": "kycklingbuljong"},
+  "unknown_spice_one": {"raw": "1 msk okändkrydda", "token": "okändkrydda"},
+  "unknown_spice_two": {"raw": "2 msk okändkrydda"},
+  "spelling_variant": {"raw": "1 dl crème fraiche"},
+  "soup_first_ingredient": "blomkål"
+}
