@@ -55,6 +55,9 @@ final class IngredientNormaliser
             '(raw_text, normalised_token, occurrences, first_seen_at, suggested_ingredient_id) ' .
             'VALUES (?, ?, 1, UTC_TIMESTAMP(6), ?)'
         );
+        $updateSuggestion = $this->db->prepare(
+            "UPDATE ingredient_unknown SET suggested_ingredient_id = ? WHERE id = ? AND status = 'pending'"
+        );
         $lines = 0;
         $matched = 0;
         $unsafe = 0;
@@ -71,35 +74,40 @@ final class IngredientNormaliser
                 $raw = $row['raw_text'];
                 $parsed = $this->parser->parse($raw);
                 $parts = $parsed->unsafeSplit ? [$parsed->ingredientText] : $parsed->parts;
+                $forceUnsafe = $parsed->unsafeSplit;
                 $partCount = 0;
                 $matchedCount = 0;
                 $singleId = null;
                 $notes = $parsed->note === null ? [] : [$parsed->note];
+                if ($parsed->alternative) {
+                    $parts = [];
+                    foreach ($parsed->parts as $alternative) {
+                        $choice = $this->resolve($alternative);
+                        if ($choice['id'] !== null) {
+                            $parts = [$choice['text']];
+                            array_push($notes, ...$choice['notes']);
+                            break;
+                        }
+                    }
+                    $forceUnsafe = $parts === [];
+                }
                 $unparsedUnit = null;
                 $unit = $parsed->unit;
                 $cleanParts = [];
                 foreach ($parts as $part) {
-                    $text = $part;
-                    $id = $this->matcher->match($text);
-                    if ($id === null) {
-                        [$cleaned, $descriptors] = $this->parser->stripDescriptors($text);
-                        if ($cleaned !== '' && $cleaned !== $text) {
-                            $candidate = $this->matcher->match($cleaned);
-                            if ($candidate !== null) {
-                                $text = $cleaned;
-                                $id = $candidate;
-                                array_push($notes, ...$descriptors);
-                            }
-                        }
-                    }
+                    $resolved = $this->resolve($part);
+                    $text = $resolved['text'];
+                    $id = $resolved['id'];
+                    array_push($notes, ...$resolved['notes']);
                     if ($id === null && $parsed->quantity !== null && !$parsed->explicitUnit
                         && count($parts) === 1
                         && preg_match('/^(\S+)\s+(.+)$/u', $text, $word) === 1) {
-                        $candidate = $this->matcher->match($word[2]);
-                        if ($candidate !== null) {
+                        $candidate = $this->resolve($word[2]);
+                        if (!$this->parser->isDescriptor($word[1]) && $candidate['id'] !== null) {
                             $unparsedUnit = mb_substr($word[1], 0, 80);
-                            $text = $word[2];
-                            $id = $candidate;
+                            $text = $candidate['text'];
+                            $id = $candidate['id'];
+                            array_push($notes, ...$candidate['notes']);
                             $unit = null;
                         }
                     }
@@ -120,6 +128,7 @@ final class IngredientNormaliser
                                     throw new RuntimeException('Invalid unknown ingredient reference.');
                                 }
                                 $unknownId = (int) $unknown['id'];
+                                $updateSuggestion->execute([$this->matcher->suggest($text), $unknownId]);
                             }
                         }
                     }
@@ -133,17 +142,17 @@ final class IngredientNormaliser
                     }
                     $insertPart->execute([$recipe, $position, $partCount, mb_substr($text, 0, 255), $id, $unknownId]);
                 }
-                $status = $parsed->unsafeSplit ? 'unsafe_split'
+                $status = $forceUnsafe ? 'unsafe_split'
                     : ($matchedCount === $partCount && $partCount > 0 ? 'matched'
                         : ($matchedCount > 0 ? 'partial' : 'unknown'));
                 $update->execute([
-                    mb_substr(implode(' + ', $cleanParts), 0, 255),
+                    mb_substr($cleanParts === [] ? $parsed->ingredientText : implode(' + ', $cleanParts), 0, 255),
                     $notes === [] ? null : implode('; ', array_unique($notes)),
                     $parsed->quantity,
                     $parsed->quantityMax,
                     $unit,
                     $unparsedUnit,
-                    $parsed->unsafeSplit ? null : $singleId,
+                    $forceUnsafe ? null : $singleId,
                     $status,
                     $recipe,
                     $position,
@@ -164,5 +173,21 @@ final class IngredientNormaliser
             throw $error;
         }
         return ['lines' => $lines, 'matched' => $matched, 'unsafe_split' => $unsafe];
+    }
+
+    /** @return array{text: string, id: ?int, notes: list<string>} */
+    private function resolve(string $text): array
+    {
+        $id = $this->matcher->match($text);
+        if ($id !== null) {
+            return ['text' => $text, 'id' => $id, 'notes' => []];
+        }
+        foreach ($this->parser->stripCandidates($text) as $candidate) {
+            $id = $this->matcher->match($candidate['text']);
+            if ($id !== null) {
+                return ['text' => $candidate['text'], 'id' => $id, 'notes' => $candidate['notes']];
+            }
+        }
+        return ['text' => $text, 'id' => null, 'notes' => []];
     }
 }

@@ -1,5 +1,5 @@
 canonical_name,category,is_staple,aliases
-"gul lök",vegetable,1,"gula lökar|gul lök"
+"gul lök",vegetable,1,"gula lökar|gul lök|lök"
 rödlök,vegetable,0,rödlökar
 silverlök,vegetable,0,
 schalottenlök,vegetable,0,schalottenlökar
@@ -11,7 +11,7 @@ morot,vegetable,0,morötter
 palsternacka,vegetable,0,palsternackor
 rotselleri,vegetable,0,
 stjälkselleri,vegetable,0,
-potatis,vegetable,0,potatisar
+potatis,vegetable,0,potatisar|färskpotatis|mandelpotatis
 sötpotatis,vegetable,0,sötpotatisar
 tomat,vegetable,0,tomater
 körsbärstomat,vegetable,0,körsbärstomater
@@ -24,7 +24,7 @@ chili,vegetable,0,chilifrukt|chilifrukter
 "röd chili",vegetable,0,"röda chilifrukter"
 "grön chili",vegetable,0,"gröna chilifrukter"
 jalapeño,vegetable,0,
-spenat,vegetable,0,spenatblad
+spenat,vegetable,0,spenatblad|babyspenat
 bladspenat,vegetable,0,
 grönkål,vegetable,0,
 vitkål,vegetable,0,
@@ -36,7 +36,7 @@ brysselkål,vegetable,0,brysselkålar
 sallad,vegetable,0,
 isbergssallad,vegetable,0,
 romansallad,vegetable,0,
-ruccola,vegetable,0,"rucola|rucolasallad"
+ruccola,vegetable,0,rucola|rucolasallad
 zucchini,vegetable,0,squash
 aubergine,vegetable,0,äggplanta
 pumpa,vegetable,0,
@@ -93,19 +93,19 @@ russin,fruit,0,
 kokosflingor,fruit,0,
 kyckling,protein,0,
 kycklingfilé,protein,0,kycklingfiléer|kycklingfile
-kycklinglår,protein,0,kycklinglårfilé
+kycklinglår,protein,0,kycklinglårfilé|kycklinglårfiléer
 kycklingklubba,protein,0,kycklingklubbor
-kycklingfärs,protein,0,
+kycklingfärs,protein,0,kycklingköttfärs
 kalkon,protein,0,
 nötfärs,protein,0,köttfärs
-blandfärs,protein,0,
-fläskfärs,protein,0,
+blandfärs,protein,0,"blandad köttfärs"
+fläskfärs,protein,0,fläskköttfärs
 vegefärs,protein,0,
-högrev,protein,0,
+högrev,protein,0,högrevsbitar
 oxfilé,protein,0,
 entrecôte,protein,0,
 lövbiff,protein,0,
-fläskfilé,protein,0,fläskfile|fläskfiléer
+fläskfilé,protein,0,fläskfile|fläskfiléer|fläskytterfilé
 fläskkotlett,protein,0,
 sidfläsk,protein,0,
 bacon,protein,0,baconskivor
@@ -116,9 +116,9 @@ salami,protein,0,
 skinka,protein,0,
 lammfärs,protein,0,
 lammstek,protein,0,
-lax,protein,0,
+lax,protein,0,laxbitar
 laxfilé,protein,0,laxfiléer|laxfile
-torsk,protein,0,
+torsk,protein,0,torskfilé|torskfiléer
 torskrygg,protein,0,
 sej,protein,0,
 rödspätta,protein,0,
@@ -126,7 +126,7 @@ makrill,protein,0,
 sill,protein,0,
 ansjovis,protein,0,
 tonfisk,protein,0,
-räkor,protein,0,"räka|skalade räkor"
+räkor,protein,0,"räka|skalade räkor|färska räkor"
 kräftstjärtar,protein,0,
 musslor,protein,0,
 blåmusslor,protein,0,
@@ -134,7 +134,7 @@ bläckfisk,protein,0,
 ägg,protein,0,ägg
 äggula,protein,0,äggulor
 äggvita,protein,0,äggvitor
-tofu,protein,0,
+tofu,protein,0,"fast tofu"
 tempeh,protein,0,
 smör,dairy,1,
 vispgrädde,dairy,0,grädde
@@ -143,14 +143,14 @@ gräddfil,dairy,0,
 "crème fraîche",dairy,0,"creme fraiche|crème fraiche|creme fraîche"
 "turkisk yoghurt",dairy,0,"turkisk yogurt"
 "grekisk yoghurt",dairy,0,"grekisk yogurt"
-"naturell yoghurt",dairy,0,yoghurt|yogurt
+"naturell yoghurt",dairy,0,yoghurt|yogurt|matyoghurt
 filmjölk,dairy,0,
 mjölk,dairy,0,standardmjölk
 havredryck,dairy,0,
 mandeldryck,dairy,0,
 kokosmjölk,dairy,0,
 "kondenserad mjölk",dairy,0,
-färskost,dairy,0,"cream cheese"
+färskost,dairy,0,"cream cheese|philadelphia|cantadou"
 ricotta,dairy,0,
 mascarpone,dairy,0,
 keso,dairy,0,"cottage cheese"
@@ -171,7 +171,7 @@ majsmjöl,grain,0,
 potatismjöl,grain,0,
 mandelmjöl,grain,0,
 havremjöl,grain,0,
-ströbröd,grain,0,ströbröd
+ströbröd,grain,0,ströbröd|pankoströbröd
 panko,grain,0,
 havregryn,grain,0,
 ris,grain,0,"kokt ris"
@@ -199,11 +199,11 @@ surdegsbröd,grain,0,
 knäckebröd,grain,0,
 smördeg,grain,0,
 pizzadeg,grain,0,
-kikärtor,legume,0,kikärta
+kikärtor,legume,0,"kikärta|kokta kikärtor"
 "svarta bönor",legume,0,"svart böna"
 "vita bönor",legume,0,"vit böna"
 kidneybönor,legume,0,kidneyböna
-"röda linser",legume,0,"röd lins"
+"röda linser",legume,0,"röd lins|torkade röda linser"
 "gröna linser",legume,0,"grön lins"
 "gula ärtor",legume,0,
 jordnötter,legume,0,
@@ -242,7 +242,7 @@ jäst,pantry,0,
 torrjäst,pantry,0,
 kakao,pantry,0,
 "mörk choklad",pantry,0,
-"vit choklad",pantry,0,
+"vit choklad",pantry,0,"vit bakchoklad"
 mjölkchoklad,pantry,0,
 vaniljstång,pantry,0,
 gelatin,pantry,0,gelatinblad
@@ -283,7 +283,7 @@ kaffe,pantry,0,
 espresso,pantry,0,
 kokosgrädde,pantry,0,
 jordnötssmör,pantry,0,
-tahini,pantry,0,
+tahini,pantry,0,tahinipasta
 pesto,pantry,0,
 harissa,pantry,0,
 currypasta,pantry,0,
@@ -302,7 +302,7 @@ dragon,herb_spice,0,
 mejram,herb_spice,0,
 lagerblad,herb_spice,0,
 grönpeppar,herb_spice,0,
-kryddpeppar,herb_spice,0,
+kryddpeppar,herb_spice,0,kryddpepparkorn
 cayennepeppar,herb_spice,0,
 paprikapulver,herb_spice,0,
 "rökt paprikapulver",herb_spice,0,
@@ -311,8 +311,8 @@ chilipulver,herb_spice,0,
 spiskummin,herb_spice,0,
 kummin,herb_spice,0,
 kardemumma,herb_spice,0,
-kanel,herb_spice,0,"malen kanel"
-nejlika,herb_spice,0,
+kanel,herb_spice,0,"malen kanel|kanelstång"
+nejlika,herb_spice,0,nejlikor
 muskon,herb_spice,0,muskot
 gurkmeja,herb_spice,0,
 currypulver,herb_spice,0,
@@ -321,7 +321,7 @@ vitlökspulver,herb_spice,0,
 lökpulver,herb_spice,0,
 fänkålsfrön,herb_spice,0,
 senapsfrön,herb_spice,0,
-korianderfrön,herb_spice,0,
+korianderfrön,herb_spice,0,korianderfrö
 anis,herb_spice,0,
 stjärnanis,herb_spice,0,
 saffran,herb_spice,0,
@@ -332,3 +332,30 @@ vinäger,pantry,0,
 sirap,pantry,0,
 is,pantry,0,
 rörsocker,pantry,0,
+kolja,protein,0,koljafilé
+karré,protein,0,fläskkarré
+grytbitar,protein,0,"nötgrytbitar|grytbitar av nöt"
+löjrom,protein,0,
+forellrom,protein,0,
+pilgrimsmusslor,protein,0,pilgrimsmussla
+chèvre,dairy,0,"chevre|chèvreost"
+hårdost,dairy,0,
+"pak choi",vegetable,0,"pak choy"
+citrongräs,herb_spice,0,
+citronmeliss,herb_spice,0,
+"garam masala",herb_spice,0,
+"sambal oelek",pantry,0,
+chilisås,pantry,0,
+rabarber,fruit,0,
+fiskfond,pantry,0,
+ättiksprit,pantry,0,"ättiksprit 12 %"
+frityrolja,pantry,0,
+majsolja,pantry,0,
+solrosolja,pantry,0,
+solroskärnor,legume,0,
+vallmofrö,legume,0,vallmofrön
+kokos,fruit,0,"riven kokos"
+vaniljextrakt,pantry,0,vaniljpaste
+"mjölkfritt margarin",pantry,0,
+örtsalt,pantry,0,
+"färska örter",herb_spice,0,"färsk ört"

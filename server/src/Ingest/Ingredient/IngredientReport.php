@@ -50,6 +50,7 @@ final class IngredientReport
         if ($unknown === false || $units === false || $unsafe === false) {
             throw new RuntimeException('Cannot read ingredient report details.');
         }
+        [$proteinLines, $matchedProteinLines] = $this->proteinCoverage();
         return [
             'lines' => $total,
             'matched_lines' => $this->count($counts, 'matched'),
@@ -61,10 +62,66 @@ final class IngredientReport
             'quantity_and_unit_lines' => $this->count($counts, 'quantity_and_unit_lines'),
             'quantity_and_unit_share_pct' => $this->share($this->count($counts, 'quantity_and_unit_lines'), $total),
             'unsafe_split_lines' => $this->count($counts, 'unsafe_split'),
+            'protein_candidate_lines' => $proteinLines,
+            'protein_matched_lines' => $matchedProteinLines,
+            'protein_matched_share_pct' => $this->share($matchedProteinLines, $proteinLines),
             'top_unknown_tokens' => $unknown->fetchAll(PDO::FETCH_ASSOC),
             'top_unparsed_unit_words' => $units->fetchAll(PDO::FETCH_ASSOC),
             'unsafe_split_examples' => $unsafe->fetchAll(PDO::FETCH_ASSOC),
         ];
+    }
+
+    /** @return array{int, int} */
+    private function proteinCoverage(): array
+    {
+        $aliases = $this->db->prepare(
+            "SELECT a.alias FROM ingredient_alias a JOIN ingredient i ON i.id = a.ingredient_id " .
+            "WHERE i.category IN ('protein', 'legume')"
+        );
+        $aliases->execute();
+        $terms = [];
+        foreach ($aliases->fetchAll(PDO::FETCH_COLUMN) as $alias) {
+            if (is_string($alias)) {
+                $terms[] = mb_strtolower($alias);
+            }
+        }
+        $file = fopen(dirname(__DIR__, 3) . '/seeds/ingredient_protein_terms.csv', 'rb');
+        if ($file === false) {
+            throw new RuntimeException('Cannot read protein report vocabulary.');
+        }
+        try {
+            if (fgetcsv($file, escape: '') !== ['token']) {
+                throw new RuntimeException('Invalid protein report vocabulary.');
+            }
+            while (($row = fgetcsv($file, escape: '')) !== false) {
+                if (count($row) !== 1 || !is_string($row[0]) || $row[0] === '') {
+                    throw new RuntimeException('Invalid protein report vocabulary.');
+                }
+                $terms[] = mb_strtolower($row[0]);
+            }
+        } finally {
+            fclose($file);
+        }
+        $pattern = '/(?<!\p{L})(?:' . implode('|', array_map(
+            static fn (string $term): string => preg_quote($term, '/'),
+            array_unique($terms),
+        )) . ')/u';
+        $lines = $this->db->prepare(
+            'SELECT ingredient_text, normalise_status FROM recipe_ingredient WHERE ingredient_text IS NOT NULL'
+        );
+        $lines->execute();
+        $candidateCount = 0;
+        $matchedCount = 0;
+        while (($row = $lines->fetch(PDO::FETCH_ASSOC)) !== false) {
+            if (!is_string($row['ingredient_text'] ?? null)) {
+                throw new RuntimeException('Invalid stored ingredient text.');
+            }
+            if (preg_match($pattern, mb_strtolower($row['ingredient_text'])) === 1) {
+                $candidateCount++;
+                $matchedCount += $row['normalise_status'] === 'matched' ? 1 : 0;
+            }
+        }
+        return [$candidateCount, $matchedCount];
     }
 
     private function share(int $count, int $total): float

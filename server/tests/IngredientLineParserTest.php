@@ -57,7 +57,13 @@ final class IngredientLineParserTest extends TestCase
         );
         self::assertSame($this->value('split_with_note', 'note'), $oil->note);
         self::assertTrue($parser->parse($this->value('unsafe_quantity'))->unsafeSplit);
-        self::assertTrue($parser->parse($this->value('unsafe_alternative'))->unsafeSplit);
+        self::assertTrue($parser->parse($this->value('unsafe_alternative'))->alternative);
+        self::assertFalse($parser->parse($this->value('unsafe_alternative'))->unsafeSplit);
+        self::assertTrue($parser->isDescriptor('grön'));
+        self::assertContains(
+            ['text' => $this->value('descriptor_strip', 'ingredient'), 'notes' => ['färsk']],
+            $parser->stripCandidates($parser->parse($this->value('descriptor_strip'))->ingredientText),
+        );
         $citrus = $parser->parse($this->value('citrus_note'));
         self::assertSame([$this->value('citrus_note', 'ingredient')], $citrus->parts);
         self::assertSame($this->value('citrus_note', 'note'), $citrus->note);

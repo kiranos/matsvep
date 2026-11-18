@@ -6,6 +6,7 @@ namespace Matsvep\Tests;
 
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Ingest\Ingredient\IngredientLineParser;
+use Matsvep\Ingest\Ingredient\IngredientMatcher;
 use Matsvep\Ingest\Ingredient\IngredientNormaliser;
 use Matsvep\Ingest\Ingredient\IngredientReport;
 use Matsvep\Ingest\Ingredient\IngredientSeeder;
@@ -64,6 +65,14 @@ final class IngredientNormaliserIntegrationTest extends TestCase
             $countQuery = $db->query('SELECT COUNT(*) FROM ingredient');
             self::assertInstanceOf(\PDOStatement::class, $countQuery);
             self::assertSame($seedCount, (int) $countQuery->fetchColumn());
+            $matcher = new IngredientMatcher($db);
+            foreach ([
+                'seed_alias_onion', 'seed_alias_spinach', 'seed_alias_potato',
+                'seed_alias_spice', 'seed_alias_chocolate', 'seed_alias_cheese',
+                'seed_alias_yogurt',
+            ] as $aliasKey) {
+                self::assertNotNull($matcher->match($this->value($aliasKey)));
+            }
 
             $sourceQuery = $db->query("SELECT id FROM source WHERE adapter = 'koket'");
             self::assertInstanceOf(\PDOStatement::class, $sourceQuery);
@@ -78,12 +87,16 @@ final class IngredientNormaliserIntegrationTest extends TestCase
                 'range_notes', 'split_pair', 'split_with_note', 'unsafe_quantity',
                 'unknown_unit', 'compound_suggestion', 'unknown_spice_one',
                 'unknown_spice_two', 'spelling_variant',
+                'descriptor_exact', 'descriptor_strip', 'descriptor_unit',
+                'alternative_first', 'alternative_second', 'alternative_none',
+                'weak_suggestion', 'near_suggestion', 'prefix_suggestion',
+                'protein_unknown', 'protein_known',
             ]);
             foreach ($lines as $index => $line) {
                 $insertLine->execute([$recipeId, $index + 1, $line]);
             }
             $normaliser = new IngredientNormaliser($db, new IngredientLineParser(__DIR__ . '/../seeds'));
-            self::assertSame(['lines' => 9, 'matched' => 5, 'unsafe_split' => 1], $normaliser->run($recipeId));
+            self::assertSame(['lines' => 20, 'matched' => 11, 'unsafe_split' => 2], $normaliser->run($recipeId));
             $partsAtPosition = $db->prepare(
                 'SELECT COUNT(*) FROM recipe_ingredient_part WHERE recipe_id = ? AND position = 2'
             );
@@ -98,6 +111,12 @@ final class IngredientNormaliserIntegrationTest extends TestCase
             );
             $suggestionQuery->execute([$this->value('compound_suggestion', 'token')]);
             self::assertSame($this->value('compound_suggestion', 'suggestion'), $suggestionQuery->fetchColumn());
+            $suggestionQuery->execute([$this->value('near_suggestion', 'token')]);
+            self::assertSame($this->value('near_suggestion', 'suggestion'), $suggestionQuery->fetchColumn());
+            $suggestionQuery->execute([$this->value('prefix_suggestion', 'token')]);
+            self::assertSame($this->value('prefix_suggestion', 'suggestion'), $suggestionQuery->fetchColumn());
+            $suggestionQuery->execute([$this->value('weak_suggestion', 'token')]);
+            self::assertFalse($suggestionQuery->fetchColumn());
             $lineAtPosition = $db->prepare(
                 'SELECT ingredient_id, unparsed_unit FROM recipe_ingredient WHERE recipe_id = ? AND position = ?'
             );
@@ -109,14 +128,42 @@ final class IngredientNormaliserIntegrationTest extends TestCase
             $unitLine = $lineAtPosition->fetch(PDO::FETCH_ASSOC);
             self::assertIsArray($unitLine);
             self::assertSame($this->value('unknown_unit', 'unit_word'), $unitLine['unparsed_unit']);
+            $lineAtPosition->execute([$recipeId, 11]);
+            $descriptorLine = $lineAtPosition->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($descriptorLine);
+            self::assertNull($descriptorLine['unparsed_unit']);
+            self::assertNotNull($descriptorLine['ingredient_id']);
+            $lineAtPosition->execute([$recipeId, 12]);
+            $greenLine = $lineAtPosition->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($greenLine);
+            self::assertNull($greenLine['unparsed_unit']);
+            self::assertNotNull($greenLine['ingredient_id']);
+            $lineAtPosition->execute([$recipeId, 13]);
+            $alternativeLine = $lineAtPosition->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($alternativeLine);
+            self::assertNotNull($alternativeLine['ingredient_id']);
+            $lineAtPosition->execute([$recipeId, 14]);
+            $secondAlternative = $lineAtPosition->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($secondAlternative);
+            self::assertNotNull($secondAlternative['ingredient_id']);
             $normaliser->run($recipeId);
             $unknownCount->execute([$this->value('unknown_spice_one', 'token')]);
             self::assertSame(2, (int) $unknownCount->fetchColumn());
+            $configUpdate = $db->prepare('UPDATE engine_config SET value = ? WHERE `key` = ?');
+            $configUpdate->execute(['1.0', 'normalise.suggestion_min_similarity']);
+            (new IngredientNormaliser($db, new IngredientLineParser(__DIR__ . '/../seeds')))->run($recipeId);
+            $suggestionQuery->execute([$this->value('near_suggestion', 'token')]);
+            self::assertFalse($suggestionQuery->fetchColumn());
             $report = (new IngredientReport($db))->build();
-            self::assertSame(9, $report['lines']);
-            self::assertSame(1, $report['unsafe_split_lines']);
+            self::assertSame(20, $report['lines']);
+            self::assertSame(2, $report['unsafe_split_lines']);
+            self::assertGreaterThanOrEqual(4, $report['protein_candidate_lines']);
+            self::assertGreaterThanOrEqual(1, $report['protein_matched_lines']);
             self::assertNotEmpty($report['top_unparsed_unit_words']);
             self::assertNotEmpty($report['top_unknown_tokens']);
+            $json = json_encode($report, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            self::assertTrue(mb_check_encoding($json, 'UTF-8'));
+            self::assertIsArray(json_decode($json, true, flags: JSON_THROW_ON_ERROR));
         } finally {
             $admin->exec("DROP DATABASE IF EXISTS `$name`");
         }

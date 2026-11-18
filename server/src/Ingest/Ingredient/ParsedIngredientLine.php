@@ -16,6 +16,7 @@ final class ParsedIngredientLine
         public readonly ?string $note,
         public readonly array $parts,
         public readonly bool $unsafeSplit,
+        public readonly bool $alternative,
     ) {
     }
 }

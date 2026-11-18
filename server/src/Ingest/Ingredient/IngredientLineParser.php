@@ -17,6 +17,9 @@ final class IngredientLineParser
     /** @var list<array{token: string, mode: string}> */
     private array $conjunctions = [];
 
+    /** @var list<string> */
+    private array $descriptors = [];
+
     public function __construct(string $seedDirectory)
     {
         foreach ($this->readCsv($seedDirectory . '/ingredient_units.csv', ['alias', 'unit']) as $row) {
@@ -31,11 +34,15 @@ final class IngredientLineParser
         }
         usort($this->notes, static fn (array $a, array $b): int => mb_strlen($b['phrase']) <=> mb_strlen($a['phrase']));
         foreach ($this->readCsv($seedDirectory . '/ingredient_conjunctions.csv', ['token', 'mode']) as $row) {
-            if (!in_array($row[1], ['split', 'flag'], true)) {
+            if (!in_array($row[1], ['split', 'alternative'], true)) {
                 throw new RuntimeException('Invalid ingredient conjunction mode.');
             }
             $this->conjunctions[] = ['token' => $row[0], 'mode' => $row[1]];
         }
+        foreach ($this->readCsv($seedDirectory . '/ingredient_descriptors.csv', ['phrase']) as $row) {
+            $this->descriptors[] = $row[0];
+        }
+        usort($this->descriptors, static fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
     }
 
     public function parse(string $raw): ParsedIngredientLine
@@ -90,12 +97,13 @@ final class IngredientLineParser
 
         $parts = [$text];
         $unsafeSplit = false;
+        $alternative = false;
         foreach ($this->conjunctions as $conjunction) {
             $pattern = '/\s+' . preg_quote($conjunction['token'], '/') . '\s+/iu';
             if (preg_match($pattern, $text) !== 1) {
                 continue;
             }
-            if ($conjunction['mode'] === 'flag' || $quantity !== null) {
+            if ($conjunction['mode'] === 'split' && $quantity !== null) {
                 $unsafeSplit = true;
                 break;
             }
@@ -105,6 +113,7 @@ final class IngredientLineParser
                 break;
             }
             $parts = array_map($this->space(...), $split);
+            $alternative = $conjunction['mode'] === 'alternative';
             break;
         }
         return new ParsedIngredientLine(
@@ -116,7 +125,52 @@ final class IngredientLineParser
             $notes === [] ? null : implode('; ', array_filter($notes)),
             $parts,
             $unsafeSplit,
+            $alternative,
         );
+    }
+
+    /** @return list<array{text: string, notes: list<string>}> */
+    public function stripCandidates(string $text): array
+    {
+        $phrases = array_merge(array_column($this->notes, 'phrase'), $this->descriptors);
+        $queue = [['text' => $text, 'notes' => []]];
+        $seen = [mb_strtolower($text) => true];
+        $results = [];
+        for ($index = 0; $index < count($queue); $index++) {
+            $current = $queue[$index];
+            foreach ($phrases as $phrase) {
+                foreach (['leading', 'trailing'] as $position) {
+                    $pattern = $position === 'leading'
+                        ? '/^' . preg_quote($phrase, '/') . '\s+/iu'
+                        : '/\s+' . preg_quote($phrase, '/') . '$/iu';
+                    if (preg_match($pattern, $current['text'], $match) !== 1) {
+                        continue;
+                    }
+                    $remaining = $this->space($position === 'leading'
+                        ? substr($current['text'], strlen($match[0]))
+                        : substr($current['text'], 0, -strlen($match[0])));
+                    $key = mb_strtolower($remaining);
+                    if ($remaining === '' || isset($seen[$key])) {
+                        continue;
+                    }
+                    $seen[$key] = true;
+                    $candidate = ['text' => $remaining, 'notes' => [...$current['notes'], $phrase]];
+                    $results[] = $candidate;
+                    $queue[] = $candidate;
+                }
+            }
+        }
+        return $results;
+    }
+
+    public function isDescriptor(string $word): bool
+    {
+        foreach ($this->descriptors as $descriptor) {
+            if (mb_strtolower($descriptor) === mb_strtolower($word)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** @return array{string, list<string>} */
