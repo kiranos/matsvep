@@ -103,7 +103,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 | Table | Key columns | Purpose |
 | --- | --- | --- |
 | `source` | id, name, base\_url, adapter, enabled, crawl\_delay\_s, last\_crawl\_at, display\_mode | One row per recipe site |
-| `recipe` | id, source\_id, url, title, image\_url, total\_time\_min, servings, cuisine, meal\_type, main\_protein, carb\_base, is\_vegetarian, leftover\_score (0–1), festive\_score (0–1), effort (1–3), dish\_group\_id, source\_status (ok / source\_gone), parsed\_at, parser\_version, active | Parsed recipe and derived features |
+| `recipe` | id, source\_id, url, title, image\_url, total\_time\_min, servings, cuisine, meal\_type, main\_protein, carb\_base, is\_dinner\_candidate, is\_vegetarian, leftover\_score (0–1), festive\_score (0–1), effort (1–3), dish\_group\_id, source\_status (ok / source\_gone), parsed\_at, parser\_version, active | Parsed recipe and derived features |
 | `recipe_ingredient` | recipe\_id, position, group\_name, raw\_text, ingredient\_text, note, quantity, quantity\_max, unit, unparsed\_unit, ingredient\_id, normalise\_status (matched / partial / unknown / unsafe\_split / ignored), is\_main | Original line and parsed amount, unit, ingredient and review state; `ingredient_id` is set only for a single matched ingredient |
 | `recipe_ingredient_part` | recipe\_id, position, part\_position, ingredient\_text, ingredient\_id, ingredient\_unknown\_id | One mapped or unknown ingredient per part of a line; cascades with its parent line |
 | `recipe_step` | recipe\_id, position, group\_name, text | Cooking steps |
@@ -476,11 +476,13 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Crawl | `crawl.retry_base_s` / `crawl.retry_max_s` / `crawl.max_attempts` | 60 / 3600 / 5 | Exponential retry base, delay cap and maximum attempts; a longer server `Retry-After` takes precedence over the cap |
 | Crawl | `crawl.timeout_s` | 30 | HTTP request timeout in seconds |
 | Feature | `feature.main_categories` / `.main_min_mass_g` | protein, legume, vegetable, grain, dairy, fruit / 100 | Main-line eligibility and unmatched mass threshold |
-| Feature | `feature.leftover_dish_weight` / `.leftover_method_weight` / `.leftover_protein_weight` | 0.5 / 0.3 / 0.2 | Weighted leftover signals |
+| Feature | `feature.leftover_dish_weight` / `.leftover_method_weight` / `.leftover_protein_weight` | 0.6 / 0.3 / 0.1 | Weighted leftover signals |
 | Feature | `feature.leftover_baseline` / `.leftover_scale` / `.leftover_cut_up_signal` | 0.5 / 0.5 / 0.5 | Neutral score, signal scale and cut-up protein override |
+| Feature | `feature.leftover_long_cook_min` / `.leftover_long_cook_signal` | 45 / 1 | Step duration threshold and long-cook method signal |
 | Feature | `feature.festive_time_full_min` / `.festive_time_weight` / `.festive_premium_weight` / `.festive_tag_weight` | 120 / 0.4 / 0.35 / 0.25 | Festive score inputs |
 | Feature | `feature.effort_easy_time_min` / `.effort_easy_ingredient_count` / `.effort_hard_time_min` / `.effort_hard_ingredient_count` | 30 / 8 / 90 / 15 | Effort buckets |
 | Feature report | `feature.report_sample_size` / `.report_sample_seed` / `.report_leftover_buckets` | 20 / matsvep-feature-pilot / 10 | Repeatable spot check and histogram |
+| Feature report | `feature.report_ranked_size` | 10 | Dinner candidates at each end of the leftover ranking |
 | Normalise | `normalise.suggestion_min_similarity` / `.suggestion_min_affix_length` | 0.82 / 4 | Minimum Unicode edit similarity for a review suggestion; minimum characters in a compound head or prefix suggestion |
 
 **Family settings** (in the app): favourite share (default 70%), plan days (all 7 or Sun–Thu), planning mode (whole week or split) and block vegetarian (off). The weekday-to-profile map lives in `day_profile`; a new profile, such as `guests`, needs one new DayFit rule plus config rows.
