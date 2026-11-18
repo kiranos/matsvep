@@ -1,0 +1,7 @@
+# Phase 1 recipe feature derivation
+
+Migration 009 adds an ignored normalisation status for non-food ingredient lines and configurable thresholds and weights for feature derivation. Swedish ignore tokens, ingredient-to-feature mappings, title and tag terms, cut-up terms and leftover keywords live in CSV seed data. The `leftover_keyword` table is populated by an idempotent seed command. PHP contains only English feature codes and rule structure.
+
+The derivation pass sets `is_main` on ingredient lines and updates the eight recipe feature fields without altering raw content. Main lines include substantial unmatched lines so their match-share metric does not become automatically perfect. Vegetarian status is conservative: animal evidence makes it false, while unknown substantial ingredients make it null. Title terms can supply an animal protein code when the ingredient parse missed it. Null cuisine, meal type and protein codes explicitly mean the rules lack enough evidence.
+
+Leftover score starts at a neutral baseline and combines the three signal groups from the design. Festive score combines time, premium ingredients and festive tags. Effort uses time and ingredient-count thresholds. Exact formulas and defaults are recorded in `docs/design.md` and `engine_config` so they can be reviewed against the pilot report before a full crawl. The report is local, gitignored UTF-8 JSON and includes distributions and a repeatable 20-recipe sample.

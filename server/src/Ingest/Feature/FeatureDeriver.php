@@ -1,0 +1,350 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Matsvep\Ingest\Feature;
+
+use PDO;
+use RuntimeException;
+use Throwable;
+
+final class FeatureDeriver
+{
+    private readonly FeatureConfig $config;
+
+    private readonly FeatureVocabulary $vocabulary;
+
+    private readonly ProteinCandidateMatcher $proteinCandidates;
+
+    public function __construct(private readonly PDO $db, string $seedDirectory)
+    {
+        $this->config = new FeatureConfig($db);
+        $this->vocabulary = new FeatureVocabulary($db, $seedDirectory);
+        $this->proteinCandidates = new ProteinCandidateMatcher($db, $seedDirectory);
+        if ($this->vocabulary->leftoverKeywords['dish_type'] === []) {
+            throw new RuntimeException('Seed feature keywords before deriving recipes.');
+        }
+        if ($this->config->integer('feature.festive_time_full_min') < 1
+            || $this->config->decimal('feature.main_min_mass_g') < 0
+            || $this->config->integer('feature.effort_easy_time_min')
+                >= $this->config->integer('feature.effort_hard_time_min')
+            || $this->config->integer('feature.effort_easy_ingredient_count')
+                >= $this->config->integer('feature.effort_hard_ingredient_count')) {
+            throw new RuntimeException('Invalid feature derivation configuration.');
+        }
+    }
+
+    public function run(?int $recipeId = null): int
+    {
+        $sql = 'SELECT id, title, total_time_min FROM recipe';
+        $arguments = [];
+        if ($recipeId !== null) {
+            $sql .= ' WHERE id = ?';
+            $arguments[] = $recipeId;
+        }
+        $sql .= ' ORDER BY id';
+        $query = $this->db->prepare($sql);
+        $query->execute($arguments);
+        $recipes = $query->fetchAll(PDO::FETCH_ASSOC);
+        $lineQuery = $this->db->prepare(
+            'SELECT position, ingredient_text, raw_text, quantity, unit, normalise_status ' .
+            'FROM recipe_ingredient WHERE recipe_id = ? ORDER BY position'
+        );
+        $partQuery = $this->db->prepare(
+            'SELECT p.position, i.canonical_name, i.category, i.is_staple ' .
+            'FROM recipe_ingredient_part p LEFT JOIN ingredient i ON i.id = p.ingredient_id ' .
+            'WHERE p.recipe_id = ? ORDER BY p.position, p.part_position'
+        );
+        $tagQuery = $this->db->prepare('SELECT tag FROM recipe_tag WHERE recipe_id = ?');
+        $stepQuery = $this->db->prepare('SELECT text FROM recipe_step WHERE recipe_id = ? ORDER BY position');
+        $setMain = $this->db->prepare(
+            'UPDATE recipe_ingredient SET is_main = ? WHERE recipe_id = ? AND position = ?'
+        );
+        $update = $this->db->prepare(
+            'UPDATE recipe SET main_protein = ?, carb_base = ?, cuisine = ?, meal_type = ?, ' .
+            'is_dinner_candidate = ?, is_vegetarian = ?, leftover_score = ?, festive_score = ?, effort = ? WHERE id = ?'
+        );
+        $count = 0;
+        $this->db->beginTransaction();
+        try {
+            foreach ($recipes as $recipe) {
+                if (!is_array($recipe) || !is_numeric($recipe['id'] ?? null)
+                    || !is_string($recipe['title'] ?? null)) {
+                    throw new RuntimeException('Invalid stored recipe for feature derivation.');
+                }
+                $id = (int) $recipe['id'];
+                $lineQuery->execute([$id]);
+                $lineRows = [];
+                foreach ($lineQuery->fetchAll(PDO::FETCH_ASSOC) as $line) {
+                    if (!is_array($line)) {
+                        throw new RuntimeException('Invalid stored ingredient line.');
+                    }
+                    $lineRows[] = [
+                        'position' => $line['position'] ?? null,
+                        'raw_text' => $line['raw_text'] ?? null,
+                        'ingredient_text' => $line['ingredient_text'] ?? null,
+                        'quantity' => $line['quantity'] ?? null,
+                        'unit' => $line['unit'] ?? null,
+                        'normalise_status' => $line['normalise_status'] ?? null,
+                    ];
+                }
+                $partQuery->execute([$id]);
+                $parts = [];
+                while (($part = $partQuery->fetch(PDO::FETCH_ASSOC)) !== false) {
+                    if (!is_numeric($part['position'] ?? null)) {
+                        throw new RuntimeException('Invalid stored ingredient part.');
+                    }
+                    $parts[(int) $part['position']][] = $part;
+                }
+                $tagQuery->execute([$id]);
+                $tags = array_values(array_filter($tagQuery->fetchAll(PDO::FETCH_COLUMN), 'is_string'));
+                $stepQuery->execute([$id]);
+                $steps = array_values(array_filter($stepQuery->fetchAll(PDO::FETCH_COLUMN), 'is_string'));
+                $recipeData = [
+                    'id' => $id,
+                    'title' => $recipe['title'],
+                    'total_time_min' => $recipe['total_time_min'] ?? null,
+                ];
+                $features = $this->deriveOne($recipeData, $lineRows, $parts, $tags, $steps, $setMain);
+                $update->execute([...$features, $id]);
+                $count++;
+            }
+            $this->db->commit();
+        } catch (Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+        return $count;
+    }
+
+    /**
+     * @param array{id: int, title: string, total_time_min: mixed} $recipe
+     * @param list<array<string, mixed>> $lines
+     * @param array<int, list<array<string, mixed>>> $parts
+     * @param list<string> $tags
+     * @param list<string> $steps
+     * @return array{?string, ?string, ?string, ?string, int, ?int, float, float, int}
+     */
+    private function deriveOne(
+        array $recipe,
+        array $lines,
+        array $parts,
+        array $tags,
+        array $steps,
+        \PDOStatement $setMain,
+    ): array {
+        $mainCategories = $this->config->stringList('feature.main_categories');
+        $mainMass = $this->config->decimal('feature.main_min_mass_g');
+        $protein = null;
+        $vegetarianProtein = null;
+        $carb = null;
+        $animal = false;
+        $premium = false;
+        $mapped = false;
+        $unknownProtein = false;
+        $uncertainMain = false;
+        $ingredientTexts = [];
+        foreach ($lines as $line) {
+            if (!is_numeric($line['position'] ?? null) || !is_string($line['raw_text'] ?? null)
+                || !is_string($line['normalise_status'] ?? null)) {
+                throw new RuntimeException('Normalise ingredient lines before deriving recipe features.');
+            }
+            $position = (int) $line['position'];
+            $text = is_string($line['ingredient_text'] ?? null)
+                ? $line['ingredient_text'] : $line['raw_text'];
+            $ingredientTexts[] = $text;
+            $main = false;
+            $lineMapped = false;
+            foreach ($parts[$position] ?? [] as $part) {
+                $name = $part['canonical_name'] ?? null;
+                if (!is_string($name)) {
+                    continue;
+                }
+                $lineMapped = true;
+                $mapped = true;
+                if (is_string($part['category'] ?? null) && is_numeric($part['is_staple'] ?? null)
+                    && (int) $part['is_staple'] === 0 && in_array($part['category'], $mainCategories, true)) {
+                    $main = true;
+                }
+                $rule = $this->vocabulary->ingredients[mb_strtolower($name)] ?? null;
+                if ($rule === null) {
+                    continue;
+                }
+                $animal = $animal || $rule['animal'];
+                $premium = $premium || $rule['premium'];
+                if ($rule['carb'] !== null && $carb === null) {
+                    $carb = $rule['carb'];
+                }
+                if ($rule['protein'] !== null && $rule['protein'] !== 'vegetarian' && $protein === null) {
+                    $protein = $rule['protein'];
+                } elseif ($rule['protein'] === 'vegetarian') {
+                    $vegetarianProtein = 'vegetarian';
+                }
+            }
+            if (!$lineMapped && $line['normalise_status'] !== 'ignored') {
+                $unknownProtein = $unknownProtein || $this->proteinCandidates->matches($text);
+                $main = $this->proteinCandidates->matches($text)
+                    || $this->hasMainMass($line, $mainMass);
+                $uncertainMain = $uncertainMain || $main;
+            }
+            $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
+        }
+        $titleProtein = $this->proteinFromTitle($recipe['title']);
+        $protein ??= $titleProtein ?? $vegetarianProtein;
+        $animal = $animal || $titleProtein !== null;
+        $vegetarian = $animal ? 0 : ($mapped && !$unknownProtein && !$uncertainMain ? 1 : null);
+        [$cuisine, $mealType, $festiveTag] = $this->tagFeatures($recipe['title'], $tags);
+        $stepText = implode(' ', $steps);
+        $dishSignal = $this->signal('dish_type', $recipe['title'] . ' ' . implode(' ', $tags));
+        $methodSignal = $this->signal('method', $stepText);
+        if ($this->hasLongCookingStep($steps)) {
+            $methodSignal = max($methodSignal, $this->config->decimal('feature.leftover_long_cook_signal'));
+        }
+        $proteinSignal = $this->signal('protein_form', implode(' ', $ingredientTexts));
+        if ($dishSignal > 0 && $proteinSignal < 0 && $this->hasCutUpTerm($stepText)) {
+            $proteinSignal = $this->config->decimal('feature.leftover_cut_up_signal');
+        }
+        $leftover = $this->clamp(
+            $this->config->decimal('feature.leftover_baseline')
+            + $this->config->decimal('feature.leftover_scale') * (
+                $this->config->decimal('feature.leftover_dish_weight') * $dishSignal
+                + $this->config->decimal('feature.leftover_method_weight') * $methodSignal
+                + $this->config->decimal('feature.leftover_protein_weight') * $proteinSignal
+            ),
+        );
+        $dinnerCandidate = $mealType === 'main' || ($mealType === null
+            && ($protein !== null || $carb !== null)
+            && !$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags)));
+        $time = is_numeric($recipe['total_time_min'] ?? null)
+            ? (int) $recipe['total_time_min'] : null;
+        $timeShare = $time === null ? 0.0 : min(
+            1.0,
+            $time / $this->config->integer('feature.festive_time_full_min'),
+        );
+        $festive = $this->clamp(
+            $this->config->decimal('feature.festive_time_weight') * $timeShare
+            + $this->config->decimal('feature.festive_premium_weight') * ($premium ? 1 : 0)
+            + $this->config->decimal('feature.festive_tag_weight') * ($festiveTag ? 1 : 0),
+        );
+        $ingredientCount = count($lines);
+        $effort = ($time !== null && $time >= $this->config->integer('feature.effort_hard_time_min'))
+            || $ingredientCount >= $this->config->integer('feature.effort_hard_ingredient_count')
+            ? 3 : (($time !== null && $time <= $this->config->integer('feature.effort_easy_time_min')
+                && $ingredientCount <= $this->config->integer('feature.effort_easy_ingredient_count')) ? 1 : 2);
+        return [$protein, $carb, $cuisine, $mealType, $dinnerCandidate ? 1 : 0, $vegetarian, round($leftover, 4), round($festive, 4), $effort];
+    }
+
+    /** @param array<string, mixed> $line */
+    private function hasMainMass(array $line, float $minimumGrams): bool
+    {
+        if (!is_numeric($line['quantity'] ?? null) || !is_string($line['unit'] ?? null)) {
+            return false;
+        }
+        $grams = match ($line['unit']) {
+            'gram' => (float) $line['quantity'],
+            'kilogram' => (float) $line['quantity'] * 1000,
+            default => 0.0,
+        };
+        return $grams >= $minimumGrams;
+    }
+
+    /** @param list<string> $tags
+     * @return array{?string, ?string, bool}
+     */
+    private function tagFeatures(string $title, array $tags): array
+    {
+        $cuisine = null;
+        $mealType = null;
+        foreach ($this->vocabulary->titleTerms as $term) {
+            if ($this->vocabulary->contains($title, $term['term'])) {
+                if ($term['feature'] === 'cuisine' && $cuisine === null) {
+                    $cuisine = $term['code'];
+                }
+                if ($term['feature'] === 'meal_type' && $mealType === null) {
+                    $mealType = $term['code'];
+                }
+            }
+        }
+        $tagSet = array_fill_keys(array_map('mb_strtolower', $tags), true);
+        $festive = false;
+        foreach ($this->vocabulary->tags as $tag => $rule) {
+            if (!isset($tagSet[$tag])) {
+                continue;
+            }
+            $cuisine ??= $rule['cuisine'];
+            $mealType ??= $rule['meal_type'];
+            $festive = $festive || $rule['festive'];
+        }
+        return [$cuisine, $mealType, $festive];
+    }
+
+    private function signal(string $type, string $text): float
+    {
+        $value = 0.0;
+        foreach ($this->vocabulary->leftoverKeywords[$type] ?? [] as $entry) {
+            if ($this->vocabulary->contains($text, $entry['keyword'])
+                && abs($entry['value']) > abs($value)) {
+                $value = $entry['value'];
+            }
+        }
+        return $value;
+    }
+
+    /** @param list<string> $steps */
+    private function hasLongCookingStep(array $steps): bool
+    {
+        $minimum = $this->config->integer('feature.leftover_long_cook_min');
+        foreach ($steps as $step) {
+            $hasTerm = false;
+            foreach ($this->vocabulary->longCookTerms as $term) {
+                $hasTerm = $hasTerm || $this->vocabulary->contains($step, $term);
+            }
+            if (!$hasTerm) {
+                continue;
+            }
+            preg_match_all('/([0-9]+(?:[.,][0-9]+)?)\s*([\p{L}]+)/u', $step, $matches, PREG_SET_ORDER);
+            foreach ($matches as $match) {
+                $multiplier = $this->vocabulary->durationUnits[mb_strtolower($match[2])] ?? null;
+                if ($multiplier !== null && (float) str_replace(',', '.', $match[1]) * $multiplier >= $minimum) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private function hasDinnerExclusion(string $text): bool
+    {
+        foreach ($this->vocabulary->dinnerExclusions as $term) {
+            if ($this->vocabulary->contains($text, $term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function hasCutUpTerm(string $text): bool
+    {
+        foreach ($this->vocabulary->cutUpTerms as $term) {
+            if ($this->vocabulary->contains($text, $term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function proteinFromTitle(string $title): ?string
+    {
+        foreach ($this->vocabulary->proteinTitleTerms as $term) {
+            if ($this->vocabulary->contains($title, $term['term'])) {
+                return $term['protein_code'];
+            }
+        }
+        return null;
+    }
+
+    private function clamp(float $value): float
+    {
+        return max(0.0, min(1.0, $value));
+    }
+}

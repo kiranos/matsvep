@@ -20,6 +20,9 @@ final class IngredientLineParser
     /** @var list<string> */
     private array $descriptors = [];
 
+    /** @var array<string, true> */
+    private array $ignored = [];
+
     public function __construct(string $seedDirectory)
     {
         foreach ($this->readCsv($seedDirectory . '/ingredient_units.csv', ['alias', 'unit']) as $row) {
@@ -43,6 +46,17 @@ final class IngredientLineParser
             $this->descriptors[] = $row[0];
         }
         usort($this->descriptors, static fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
+        foreach ($this->readCsv($seedDirectory . '/ingredient_ignore.csv', ['token', 'status']) as $row) {
+            if ($row[1] !== 'ignore') {
+                throw new RuntimeException('Invalid ingredient ignore status.');
+            }
+            $this->ignored[mb_strtolower(trim($row[0]))] = true;
+        }
+    }
+
+    public function isIgnored(string $text): bool
+    {
+        return isset($this->ignored[mb_strtolower(trim($text))]);
     }
 
     public function parse(string $raw): ParsedIngredientLine

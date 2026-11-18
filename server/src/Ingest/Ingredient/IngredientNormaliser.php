@@ -73,6 +73,11 @@ final class IngredientNormaliser
                 $position = (int) $row['position'];
                 $raw = $row['raw_text'];
                 $parsed = $this->parser->parse($raw);
+                if ($this->parser->isIgnored($parsed->ingredientText)) {
+                    $update->execute([$raw, null, null, null, null, null, null, 'ignored', $recipe, $position]);
+                    $lines++;
+                    continue;
+                }
                 $parts = $parsed->unsafeSplit ? [$parsed->ingredientText] : $parsed->parts;
                 $forceUnsafe = $parsed->unsafeSplit;
                 $partCount = 0;

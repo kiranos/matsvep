@@ -1,5 +1,5 @@
 canonical_name,category,is_staple,aliases
-"gul lök",vegetable,1,"gula lökar|gul lök|lök"
+"gul lök",vegetable,1,"gula lökar|gul lök|lök|lökar"
 rödlök,vegetable,0,rödlökar
 silverlök,vegetable,0,
 schalottenlök,vegetable,0,schalottenlökar
@@ -20,7 +20,7 @@ paprika,vegetable,0,paprikor
 "röd paprika",vegetable,0,"röda paprikor"
 "grön paprika",vegetable,0,"gröna paprikor"
 "gul paprika",vegetable,0,"gula paprikor"
-chili,vegetable,0,chilifrukt|chilifrukter
+chili,vegetable,0,"chilifrukt|chilifrukter|röd spansk peppar"
 "röd chili",vegetable,0,"röda chilifrukter"
 "grön chili",vegetable,0,"gröna chilifrukter"
 jalapeño,vegetable,0,
@@ -33,7 +33,7 @@ spetskål,vegetable,0,
 blomkål,vegetable,0,blomkålshuvud
 broccoli,vegetable,0,broccolibuketter
 brysselkål,vegetable,0,brysselkålar
-sallad,vegetable,0,
+sallad,vegetable,0,salladsblad|mâchesallad|salladsmix
 isbergssallad,vegetable,0,
 romansallad,vegetable,0,
 ruccola,vegetable,0,rucola|rucolasallad
@@ -46,7 +46,7 @@ majs,vegetable,0,majskorn
 "gröna ärtor",vegetable,0,ärtor
 sockerärtor,vegetable,0,
 "haricots verts",vegetable,0,
-sparris,vegetable,0,
+sparris,vegetable,0,sparrisar
 fänkål,vegetable,0,
 rädisa,vegetable,0,
 rödbeta,vegetable,0,
@@ -110,23 +110,23 @@ fläskkotlett,protein,0,
 sidfläsk,protein,0,
 bacon,protein,0,baconskivor
 pancetta,protein,0,
-chorizo,protein,0,
+chorizo,protein,0,chorizokorvar
 falukorv,protein,0,
-salami,protein,0,
+salami,protein,0,"spansk salami"
 skinka,protein,0,
 lammfärs,protein,0,
 lammstek,protein,0,
-lax,protein,0,laxbitar
+lax,protein,0,"laxbitar|kallrökt lax"
 laxfilé,protein,0,laxfiléer|laxfile
 torsk,protein,0,torskfilé|torskfiléer
 torskrygg,protein,0,
 sej,protein,0,
-rödspätta,protein,0,
+rödspätta,protein,0,rödspättafilé|rödspättafiléer
 makrill,protein,0,
-sill,protein,0,
+sill,protein,0,matjessillfilé|matjessillfiléer
 ansjovis,protein,0,
 tonfisk,protein,0,
-räkor,protein,0,"räka|skalade räkor|färska räkor"
+räkor,protein,0,"räka|skalade räkor|färska räkor|räkor med skal"
 kräftstjärtar,protein,0,
 musslor,protein,0,
 blåmusslor,protein,0,
@@ -291,13 +291,13 @@ misopasta,pantry,0,
 persilja,herb_spice,0,"färsk persilja"
 bladpersilja,herb_spice,0,
 koriander,herb_spice,0,"färsk koriander"
-basilika,herb_spice,0,"färsk basilika"
+basilika,herb_spice,0,"färsk basilika|basilikablad|färska basilikablad"
 oregano,herb_spice,0,"torkad oregano"
 timjan,herb_spice,0,"färsk timjan"
 rosmarin,herb_spice,0,
 salvia,herb_spice,0,
 dill,herb_spice,0,"färsk dill"
-mynta,herb_spice,0,
+mynta,herb_spice,0,"myntablad|färska myntablad"
 dragon,herb_spice,0,
 mejram,herb_spice,0,
 lagerblad,herb_spice,0,
@@ -338,7 +338,7 @@ grytbitar,protein,0,"nötgrytbitar|grytbitar av nöt"
 löjrom,protein,0,
 forellrom,protein,0,
 pilgrimsmusslor,protein,0,pilgrimsmussla
-chèvre,dairy,0,"chevre|chèvreost"
+chèvre,dairy,0,chevre|chèvreost
 hårdost,dairy,0,
 "pak choi",vegetable,0,"pak choy"
 citrongräs,herb_spice,0,
@@ -359,3 +359,16 @@ vaniljextrakt,pantry,0,vaniljpaste
 "mjölkfritt margarin",pantry,0,
 örtsalt,pantry,0,
 "färska örter",herb_spice,0,"färsk ört"
+ryggbiff,protein,0,
+renstek,protein,0,
+kalvfilé,protein,0,
+kalvlägg,protein,0,
+revbensspjäll,protein,0,
+fisk,protein,0,"fiskfilé|fiskfiléer|rökta fiskfiléer"
+risoni,grain,0,orzo|orzo pasta
+linguine,grain,0,
+fusilli,grain,0,
+farfalle,grain,0,
+rigatoni,grain,0,
+fettuccine,grain,0,
+gnocchi,grain,0,
