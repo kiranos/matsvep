@@ -1,0 +1,361 @@
+canonical_name,category,is_staple,aliases
+"gul lök",vegetable,1,"gula lökar|gul lök|lök"
+rödlök,vegetable,0,rödlökar
+silverlök,vegetable,0,
+schalottenlök,vegetable,0,schalottenlökar
+purjolök,vegetable,0,
+vitlök,vegetable,1,vitlöksklyfta|vitlöksklyftor
+salladslök,vegetable,0,salladslökar
+gräslök,vegetable,0,
+morot,vegetable,0,morötter
+palsternacka,vegetable,0,palsternackor
+rotselleri,vegetable,0,
+stjälkselleri,vegetable,0,
+potatis,vegetable,0,potatisar|färskpotatis|mandelpotatis
+sötpotatis,vegetable,0,sötpotatisar
+tomat,vegetable,0,tomater
+körsbärstomat,vegetable,0,körsbärstomater
+gurka,vegetable,0,gurkor
+paprika,vegetable,0,paprikor
+"röd paprika",vegetable,0,"röda paprikor"
+"grön paprika",vegetable,0,"gröna paprikor"
+"gul paprika",vegetable,0,"gula paprikor"
+chili,vegetable,0,chilifrukt|chilifrukter
+"röd chili",vegetable,0,"röda chilifrukter"
+"grön chili",vegetable,0,"gröna chilifrukter"
+jalapeño,vegetable,0,
+spenat,vegetable,0,spenatblad|babyspenat
+bladspenat,vegetable,0,
+grönkål,vegetable,0,
+vitkål,vegetable,0,
+rödkål,vegetable,0,
+spetskål,vegetable,0,
+blomkål,vegetable,0,blomkålshuvud
+broccoli,vegetable,0,broccolibuketter
+brysselkål,vegetable,0,brysselkålar
+sallad,vegetable,0,
+isbergssallad,vegetable,0,
+romansallad,vegetable,0,
+ruccola,vegetable,0,rucola|rucolasallad
+zucchini,vegetable,0,squash
+aubergine,vegetable,0,äggplanta
+pumpa,vegetable,0,
+butternutpumpa,vegetable,0,
+majskolv,vegetable,0,
+majs,vegetable,0,majskorn
+"gröna ärtor",vegetable,0,ärtor
+sockerärtor,vegetable,0,
+"haricots verts",vegetable,0,
+sparris,vegetable,0,
+fänkål,vegetable,0,
+rädisa,vegetable,0,
+rödbeta,vegetable,0,
+pepparrot,vegetable,0,
+ingefära,vegetable,0,
+champinjon,vegetable,0,champinjoner
+kantarell,vegetable,0,kantareller
+shiitake,vegetable,0,
+avokado,vegetable,0,avokador
+oliver,vegetable,0,
+kapris,vegetable,0,
+"soltorkad tomat",vegetable,0,"soltorkade tomater"
+tomatpuré,vegetable,0,tomatpure
+"passerade tomater",vegetable,0,
+"krossade tomater",vegetable,0,"krossad tomat"
+citron,fruit,0,citroner
+lime,fruit,0,limefrukt|limefrukter
+apelsin,fruit,0,apelsiner
+grapefrukt,fruit,0,
+mandarin,fruit,0,
+äpple,fruit,0,äpplen
+päron,fruit,0,päronfrukt
+banan,fruit,0,bananer
+jordgubbar,fruit,0,jordgubbe
+hallon,fruit,0,hallonbär
+blåbär,fruit,0,blåbärsbär
+lingon,fruit,0,
+björnbär,fruit,0,
+vindruvor,fruit,0,
+melon,fruit,0,
+vattenmelon,fruit,0,
+ananas,fruit,0,
+mango,fruit,0,mangofrukt
+passionsfrukt,fruit,0,
+granatäpple,fruit,0,
+kiwi,fruit,0,kiwifrukter
+persika,fruit,0,
+nektarin,fruit,0,
+aprikos,fruit,0,
+plommon,fruit,0,plommonfrukt
+fikon,fruit,0,
+dadlar,fruit,0,
+russin,fruit,0,
+kokosflingor,fruit,0,
+kyckling,protein,0,
+kycklingfilé,protein,0,kycklingfiléer|kycklingfile
+kycklinglår,protein,0,kycklinglårfilé|kycklinglårfiléer
+kycklingklubba,protein,0,kycklingklubbor
+kycklingfärs,protein,0,kycklingköttfärs
+kalkon,protein,0,
+nötfärs,protein,0,köttfärs
+blandfärs,protein,0,"blandad köttfärs"
+fläskfärs,protein,0,fläskköttfärs
+vegefärs,protein,0,
+högrev,protein,0,högrevsbitar
+oxfilé,protein,0,
+entrecôte,protein,0,
+lövbiff,protein,0,
+fläskfilé,protein,0,fläskfile|fläskfiléer|fläskytterfilé
+fläskkotlett,protein,0,
+sidfläsk,protein,0,
+bacon,protein,0,baconskivor
+pancetta,protein,0,
+chorizo,protein,0,
+falukorv,protein,0,
+salami,protein,0,
+skinka,protein,0,
+lammfärs,protein,0,
+lammstek,protein,0,
+lax,protein,0,laxbitar
+laxfilé,protein,0,laxfiléer|laxfile
+torsk,protein,0,torskfilé|torskfiléer
+torskrygg,protein,0,
+sej,protein,0,
+rödspätta,protein,0,
+makrill,protein,0,
+sill,protein,0,
+ansjovis,protein,0,
+tonfisk,protein,0,
+räkor,protein,0,"räka|skalade räkor|färska räkor"
+kräftstjärtar,protein,0,
+musslor,protein,0,
+blåmusslor,protein,0,
+bläckfisk,protein,0,
+ägg,protein,0,ägg
+äggula,protein,0,äggulor
+äggvita,protein,0,äggvitor
+tofu,protein,0,"fast tofu"
+tempeh,protein,0,
+smör,dairy,1,
+vispgrädde,dairy,0,grädde
+matlagningsgrädde,dairy,0,
+gräddfil,dairy,0,
+"crème fraîche",dairy,0,"creme fraiche|crème fraiche|creme fraîche"
+"turkisk yoghurt",dairy,0,"turkisk yogurt"
+"grekisk yoghurt",dairy,0,"grekisk yogurt"
+"naturell yoghurt",dairy,0,yoghurt|yogurt|matyoghurt
+filmjölk,dairy,0,
+mjölk,dairy,0,standardmjölk
+havredryck,dairy,0,
+mandeldryck,dairy,0,
+kokosmjölk,dairy,0,
+"kondenserad mjölk",dairy,0,
+färskost,dairy,0,"cream cheese|philadelphia|cantadou"
+ricotta,dairy,0,
+mascarpone,dairy,0,
+keso,dairy,0,"cottage cheese"
+kvarg,dairy,0,
+mozzarella,dairy,0,mozzarellaost
+parmesanost,dairy,0,parmesan
+cheddar,dairy,0,
+västerbottensost,dairy,0,
+fetaost,dairy,0,feta
+halloumi,dairy,0,halloumiost
+getost,dairy,0,
+blåmögelost,dairy,0,
+"lagrad ost",dairy,0,
+"riven ost",dairy,0,
+vetemjöl,grain,0,mjöl
+rågmjöl,grain,0,
+majsmjöl,grain,0,
+potatismjöl,grain,0,
+mandelmjöl,grain,0,
+havremjöl,grain,0,
+ströbröd,grain,0,ströbröd|pankoströbröd
+panko,grain,0,
+havregryn,grain,0,
+ris,grain,0,"kokt ris"
+basmatiris,grain,0,
+jasminris,grain,0,
+arborioris,grain,0,
+matvete,grain,0,
+bulgur,grain,0,
+couscous,grain,0,
+quinoa,grain,0,
+polenta,grain,0,
+pasta,grain,0,pastasort
+spaghetti,grain,0,spagetti
+makaroner,grain,0,
+penne,grain,0,
+tagliatelle,grain,0,
+lasagneplattor,grain,0,
+risnudlar,grain,0,
+äggnudlar,grain,0,
+glasnudlar,grain,0,
+tortillabröd,grain,0,
+pitabröd,grain,0,
+hamburgerbröd,grain,0,
+surdegsbröd,grain,0,
+knäckebröd,grain,0,
+smördeg,grain,0,
+pizzadeg,grain,0,
+kikärtor,legume,0,"kikärta|kokta kikärtor"
+"svarta bönor",legume,0,"svart böna"
+"vita bönor",legume,0,"vit böna"
+kidneybönor,legume,0,kidneyböna
+"röda linser",legume,0,"röd lins|torkade röda linser"
+"gröna linser",legume,0,"grön lins"
+"gula ärtor",legume,0,
+jordnötter,legume,0,
+mandel,legume,0,mandlar
+sötmandel,legume,0,
+valnötter,legume,0,valnöt
+cashewnötter,legume,0,cashewnöt
+hasselnötter,legume,0,hasselnöt
+pinjenötter,legume,0,pinjenöt
+pistagenötter,legume,0,
+sesamfrön,legume,0,
+solrosfrön,legume,0,
+pumpakärnor,legume,0,
+chiafrön,legume,0,
+linfrön,legume,0,
+salt,pantry,1,"fint salt|bordssalt|havssalt"
+flingsalt,pantry,1,
+svartpeppar,pantry,1,"peppar|nymalen svartpeppar"
+vitpeppar,pantry,1,"malen vitpeppar"
+rapsolja,pantry,1,"neutral olja|matolja|olja"
+olivolja,pantry,1,"extra jungfruolivolja"
+sesamolja,pantry,0,
+kokosolja,pantry,0,
+vatten,pantry,1,
+strösocker,pantry,0,socker
+florsocker,pantry,0,pudersocker
+farinsocker,pantry,0,
+muscovadosocker,pantry,0,
+vaniljsocker,pantry,0,
+honung,pantry,0,
+"ljus sirap",pantry,0,
+"mörk sirap",pantry,0,
+bakpulver,pantry,0,bakpulver
+bikarbonat,pantry,0,
+jäst,pantry,0,
+torrjäst,pantry,0,
+kakao,pantry,0,
+"mörk choklad",pantry,0,
+"vit choklad",pantry,0,"vit bakchoklad"
+mjölkchoklad,pantry,0,
+vaniljstång,pantry,0,
+gelatin,pantry,0,gelatinblad
+majsstärkelse,pantry,0,
+soja,pantry,0,"sojasås|japansk soja"
+"ljus soja",pantry,0,
+"mörk soja",pantry,0,
+fisksås,pantry,0,
+ostronsås,pantry,0,
+teriyakisås,pantry,0,
+"sweet chilisås",pantry,0,
+tabasco,pantry,0,
+sriracha,pantry,0,
+tomatketchup,pantry,0,
+senap,pantry,0,
+dijonsenap,pantry,0,dijon
+majonnäs,pantry,0,
+äppelcidervinäger,pantry,0,
+vitvinsvinäger,pantry,0,
+rödvinsvinäger,pantry,0,
+balsamvinäger,pantry,0,
+risvinäger,pantry,0,
+citronsaft,pantry,0,
+limejuice,pantry,0,
+grönsaksbuljong,pantry,0,grönsaksbuljongtärning
+kycklingbuljong,pantry,0,
+köttbuljong,pantry,0,
+kalvbuljong,pantry,0,
+fiskbuljong,pantry,0,
+buljong,pantry,0,
+puré,pantry,0,
+grönsaksfond,pantry,0,
+kycklingfond,pantry,0,
+kalvfond,pantry,0,
+"vitt vin",pantry,0,"vitt matlagningsvin|torrt vitt vin"
+"rött vin",pantry,0,
+kaffe,pantry,0,
+espresso,pantry,0,
+kokosgrädde,pantry,0,
+jordnötssmör,pantry,0,
+tahini,pantry,0,tahinipasta
+pesto,pantry,0,
+harissa,pantry,0,
+currypasta,pantry,0,
+misopasta,pantry,0,
+persilja,herb_spice,0,"färsk persilja"
+bladpersilja,herb_spice,0,
+koriander,herb_spice,0,"färsk koriander"
+basilika,herb_spice,0,"färsk basilika"
+oregano,herb_spice,0,"torkad oregano"
+timjan,herb_spice,0,"färsk timjan"
+rosmarin,herb_spice,0,
+salvia,herb_spice,0,
+dill,herb_spice,0,"färsk dill"
+mynta,herb_spice,0,
+dragon,herb_spice,0,
+mejram,herb_spice,0,
+lagerblad,herb_spice,0,
+grönpeppar,herb_spice,0,
+kryddpeppar,herb_spice,0,kryddpepparkorn
+cayennepeppar,herb_spice,0,
+paprikapulver,herb_spice,0,
+"rökt paprikapulver",herb_spice,0,
+chiliflakes,herb_spice,0,
+chilipulver,herb_spice,0,
+spiskummin,herb_spice,0,
+kummin,herb_spice,0,
+kardemumma,herb_spice,0,
+kanel,herb_spice,0,"malen kanel|kanelstång"
+nejlika,herb_spice,0,nejlikor
+muskon,herb_spice,0,muskot
+gurkmeja,herb_spice,0,
+currypulver,herb_spice,0,
+ingefärspulver,herb_spice,0,
+vitlökspulver,herb_spice,0,
+lökpulver,herb_spice,0,
+fänkålsfrön,herb_spice,0,
+senapsfrön,herb_spice,0,
+korianderfrön,herb_spice,0,korianderfrö
+anis,herb_spice,0,
+stjärnanis,herb_spice,0,
+saffran,herb_spice,0,
+vaniljpulver,herb_spice,0,
+ost,dairy,0,
+bröd,grain,0,"vitt bröd"
+vinäger,pantry,0,
+sirap,pantry,0,
+is,pantry,0,
+rörsocker,pantry,0,
+kolja,protein,0,koljafilé
+karré,protein,0,fläskkarré
+grytbitar,protein,0,"nötgrytbitar|grytbitar av nöt"
+löjrom,protein,0,
+forellrom,protein,0,
+pilgrimsmusslor,protein,0,pilgrimsmussla
+chèvre,dairy,0,"chevre|chèvreost"
+hårdost,dairy,0,
+"pak choi",vegetable,0,"pak choy"
+citrongräs,herb_spice,0,
+citronmeliss,herb_spice,0,
+"garam masala",herb_spice,0,
+"sambal oelek",pantry,0,
+chilisås,pantry,0,
+rabarber,fruit,0,
+fiskfond,pantry,0,
+ättiksprit,pantry,0,"ättiksprit 12 %"
+frityrolja,pantry,0,
+majsolja,pantry,0,
+solrosolja,pantry,0,
+solroskärnor,legume,0,
+vallmofrö,legume,0,vallmofrön
+kokos,fruit,0,"riven kokos"
+vaniljextrakt,pantry,0,vaniljpaste
+"mjölkfritt margarin",pantry,0,
+örtsalt,pantry,0,
+"färska örter",herb_spice,0,"färsk ört"
