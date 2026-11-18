@@ -1,0 +1,62 @@
+{
+  "chicken_stew": {
+    "url": "https://www.koket.se/test-chicken-stew",
+    "title": "Kycklinggryta med ris",
+    "time": 45,
+    "ingredients": ["500 g kycklinglårfilé", "2 dl ris", "1 lök", "200 g okändrot"],
+    "steps": ["Strimla kycklingen och låt puttra"],
+    "tags": ["Huvudrätt", "Sverige/Norden"],
+    "protein": "chicken", "carb": "rice", "cuisine": "swedish", "meal_type": "main", "vegetarian": false,
+    "leftover_score": 0.95, "effort": 2
+  },
+  "fish_fillet": {
+    "url": "https://www.koket.se/test-fish-fillet",
+    "title": "Torskfilé med potatis",
+    "time": 20,
+    "ingredients": ["400 g torskfilé", "600 g potatis", "1 pensel"],
+    "steps": ["Stek i panna"],
+    "tags": ["Huvudrätt"],
+    "protein": "fish", "carb": "potato", "meal_type": "main", "vegetarian": false,
+    "leftover_score": 0.315, "effort": 1
+  },
+  "vegetarian_lasagne": {
+    "url": "https://www.koket.se/test-vegetarian-lasagne",
+    "title": "Lasagne med tofu",
+    "time": 120,
+    "ingredients": ["300 g tofu", "200 g lasagneplattor", "1 msk olja"],
+    "steps": ["Låt puttra"],
+    "tags": ["Huvudrätt", "Italien", "Fest"],
+    "protein": "vegetarian", "carb": "pasta", "cuisine": "italian", "meal_type": "main", "vegetarian": true,
+    "leftover_score": 0.9, "festive_score": 0.65, "effort": 3
+  },
+  "uncertain_vegetarian": {
+    "url": "https://www.koket.se/test-uncertain-vegetarian",
+    "title": "Rotfruktsrätt",
+    "time": 40,
+    "ingredients": ["200 g morot", "150 g okändrot"],
+    "steps": ["Tillaga i ugn"],
+    "tags": ["Huvudrätt"],
+    "meal_type": "main", "vegetarian": null,
+    "leftover_score": 0.5, "effort": 2
+  },
+  "title_protein": {
+    "url": "https://www.koket.se/test-title-protein",
+    "title": "Tonfisksallad",
+    "time": 20,
+    "ingredients": ["1 förp märkesprodukt", "1 sallad"],
+    "steps": ["Blanda"],
+    "tags": ["Huvudrätt"],
+    "protein": "fish", "meal_type": "main", "vegetarian": false,
+    "leftover_score": 0.5, "effort": 1
+  },
+  "alias_checks": {
+    "lökar": "gul lök", "sparrisar": "sparris", "basilikablad": "basilika",
+    "myntablad": "mynta", "salladsblad": "sallad", "mâchesallad": "sallad",
+    "salladsmix": "sallad", "röd spansk peppar": "chili",
+    "kallrökt lax": "lax", "räkor med skal": "räkor",
+    "chorizokorvar": "chorizo", "ryggbiff": "ryggbiff", "renstek": "renstek",
+    "kalvfilé": "kalvfilé", "kalvlägg": "kalvlägg",
+    "revbensspjäll": "revbensspjäll", "rödspättafiléer": "rödspätta",
+    "matjessillfiléer": "sill"
+  }
+}

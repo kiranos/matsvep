@@ -1,0 +1,17 @@
+term,feature,code
+pizza,cuisine,italian
+carbonara,cuisine,italian
+bolognese,cuisine,italian
+lasagne,cuisine,italian
+taco,cuisine,mexican
+enchilada,cuisine,mexican
+quesadilla,cuisine,mexican
+pad thai,cuisine,thai
+ratatouille,cuisine,french
+risotto,cuisine,italian
+köttbullar,cuisine,swedish
+husmanskost,cuisine,swedish
+smoothie,meal_type,breakfast
+dessert,meal_type,dessert
+glass,meal_type,dessert
+macka,meal_type,snack

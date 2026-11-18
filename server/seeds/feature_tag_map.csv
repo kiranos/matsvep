@@ -1,0 +1,24 @@
+tag,cuisine_code,meal_type_code,festive
+Huvudrätt,,main,0
+Förrätt,,starter,0
+Efterrätt,,dessert,0
+Tillbehör,,side,0
+Snittar/tilltugg,,snack,0
+Frukost,,breakfast,0
+Brunch,,breakfast,0
+Mellanmål,,snack,0
+Fika,,snack,0
+Buffé,,buffet,0
+Fest,,,1
+Sverige/Norden,swedish,,0
+Svensk husmanskost,swedish,,0
+Italien,italian,,0
+Asien,asian,,0
+Frankrike,french,,0
+Amerika,american,,0
+Indien,indian,,0
+Grekland,greek,,0
+Mexiko,mexican,,0
+Thailand,thai,,0
+Mellanöstern,middle_eastern,,0
+Sydamerika,south_american,,0

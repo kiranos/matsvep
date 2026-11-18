@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Ingest\Ingredient;
 
+use Matsvep\Ingest\Feature\ProteinCandidateMatcher;
 use PDO;
 use RuntimeException;
 
@@ -22,7 +23,10 @@ final class IngredientReport
             'COALESCE(SUM(quantity IS NOT NULL), 0) AS quantity_lines, ' .
             'COALESCE(SUM(unit IS NOT NULL), 0) AS unit_lines, ' .
             'COALESCE(SUM(quantity IS NOT NULL AND unit IS NOT NULL), 0) AS quantity_and_unit_lines, ' .
-            "COALESCE(SUM(normalise_status = 'unsafe_split'), 0) AS unsafe_split " .
+            "COALESCE(SUM(normalise_status = 'unsafe_split'), 0) AS unsafe_split, " .
+            "COALESCE(SUM(normalise_status = 'ignored'), 0) AS ignored, " .
+            'COALESCE(SUM(is_main = 1), 0) AS main_lines, ' .
+            "COALESCE(SUM(is_main = 1 AND normalise_status = 'matched'), 0) AS matched_main " .
             'FROM recipe_ingredient'
         );
         if ($summary === false) {
@@ -62,6 +66,13 @@ final class IngredientReport
             'quantity_and_unit_lines' => $this->count($counts, 'quantity_and_unit_lines'),
             'quantity_and_unit_share_pct' => $this->share($this->count($counts, 'quantity_and_unit_lines'), $total),
             'unsafe_split_lines' => $this->count($counts, 'unsafe_split'),
+            'ignored_lines' => $this->count($counts, 'ignored'),
+            'main_lines' => $this->count($counts, 'main_lines'),
+            'matched_main_lines' => $this->count($counts, 'matched_main'),
+            'matched_main_share_pct' => $this->share(
+                $this->count($counts, 'matched_main'),
+                $this->count($counts, 'main_lines'),
+            ),
             'protein_candidate_lines' => $proteinLines,
             'protein_matched_lines' => $matchedProteinLines,
             'protein_matched_share_pct' => $this->share($matchedProteinLines, $proteinLines),
@@ -74,38 +85,7 @@ final class IngredientReport
     /** @return array{int, int} */
     private function proteinCoverage(): array
     {
-        $aliases = $this->db->prepare(
-            "SELECT a.alias FROM ingredient_alias a JOIN ingredient i ON i.id = a.ingredient_id " .
-            "WHERE i.category IN ('protein', 'legume')"
-        );
-        $aliases->execute();
-        $terms = [];
-        foreach ($aliases->fetchAll(PDO::FETCH_COLUMN) as $alias) {
-            if (is_string($alias)) {
-                $terms[] = mb_strtolower($alias);
-            }
-        }
-        $file = fopen(dirname(__DIR__, 3) . '/seeds/ingredient_protein_terms.csv', 'rb');
-        if ($file === false) {
-            throw new RuntimeException('Cannot read protein report vocabulary.');
-        }
-        try {
-            if (fgetcsv($file, escape: '') !== ['token']) {
-                throw new RuntimeException('Invalid protein report vocabulary.');
-            }
-            while (($row = fgetcsv($file, escape: '')) !== false) {
-                if (count($row) !== 1 || !is_string($row[0]) || $row[0] === '') {
-                    throw new RuntimeException('Invalid protein report vocabulary.');
-                }
-                $terms[] = mb_strtolower($row[0]);
-            }
-        } finally {
-            fclose($file);
-        }
-        $pattern = '/(?<!\p{L})(?:' . implode('|', array_map(
-            static fn (string $term): string => preg_quote($term, '/'),
-            array_unique($terms),
-        )) . ')/u';
+        $matcher = new ProteinCandidateMatcher($this->db, dirname(__DIR__, 3) . '/seeds');
         $lines = $this->db->prepare(
             'SELECT ingredient_text, normalise_status FROM recipe_ingredient WHERE ingredient_text IS NOT NULL'
         );
@@ -116,7 +96,7 @@ final class IngredientReport
             if (!is_string($row['ingredient_text'] ?? null)) {
                 throw new RuntimeException('Invalid stored ingredient text.');
             }
-            if (preg_match($pattern, mb_strtolower($row['ingredient_text'])) === 1) {
+            if ($matcher->matches($row['ingredient_text'])) {
                 $candidateCount++;
                 $matchedCount += $row['normalise_status'] === 'matched' ? 1 : 0;
             }

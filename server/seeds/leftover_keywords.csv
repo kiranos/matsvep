@@ -1,0 +1,24 @@
+keyword,signal_type,value
+gryta,dish_type,1
+ragu,dish_type,1
+soppa,dish_type,1
+lasagne,dish_type,1
+gratäng,dish_type,0.9
+gratin,dish_type,0.9
+curry,dish_type,0.8
+chili,dish_type,0.8
+köttfärssås,dish_type,1
+bolognese,dish_type,1
+puttra,method,1
+sjuda,method,0.8
+långkok,method,1
+ugnsbak,method,0.5
+stek i panna,method,-0.7
+färs,protein_form,0.9
+grytbitar,protein_form,1
+högrev,protein_form,0.8
+bönor,protein_form,0.8
+linser,protein_form,0.8
+filé,protein_form,-0.8
+kotlett,protein_form,-1
+biff,protein_form,-0.8
