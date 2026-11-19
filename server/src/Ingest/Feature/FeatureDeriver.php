@@ -138,6 +138,7 @@ final class FeatureDeriver
         $protein = null;
         $proteinChoices = [];
         $vegetarianProteinPresent = false;
+        $substantialVegetarianMain = false;
         $carb = null;
         $animal = false;
         $premium = false;
@@ -178,6 +179,8 @@ final class FeatureDeriver
                 }
                 if ($rule['protein'] === 'vegetarian') {
                     $vegetarianProteinPresent = true;
+                    $substantialVegetarianMain = $substantialVegetarianMain
+                        || in_array(mb_strtolower($name), $this->vocabulary->dinnerMainIngredients, true);
                 }
                 if ($rule['protein'] !== null && $rule['protein'] !== 'vegetarian') {
                     $proteinChoices[] = [
@@ -227,7 +230,22 @@ final class FeatureDeriver
         $proteinEvidence = $titleProtein !== null || $proteinChoices !== [] || $vegetarianProteinPresent;
         $dinnerCandidate = $mealType === 'main' || ($mealType === null
             && ($proteinEvidence || $carb !== null)
-            && !$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags)));
+            && !$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags), 'unknown_only'));
+        $substantialMain = ($titleProtein !== null && $titleProtein !== 'vegetarian')
+            || $proteinChoices !== [] || $carb !== null || $substantialVegetarianMain;
+        if ($this->hasDinnerExclusion($recipe['title'], 'always')) {
+            $dinnerCandidate = false;
+        } elseif ($dinnerCandidate) {
+            $dishTitle = $recipe['title'];
+            foreach ($this->vocabulary->dinnerTitleSeparators as $separator) {
+                $offset = mb_stripos($dishTitle, ' ' . $separator . ' ');
+                if ($offset !== false) {
+                    $dishTitle = mb_substr($dishTitle, 0, $offset);
+                }
+            }
+            $dinnerCandidate = !$this->hasDinnerExclusion($dishTitle, 'dish_title')
+                && ($substantialMain || !$this->hasDinnerExclusion($recipe['title'], 'side'));
+        }
         $time = is_numeric($recipe['total_time_min'] ?? null)
             ? (int) $recipe['total_time_min'] : null;
         $timeShare = $time === null ? 0.0 : min(
@@ -331,9 +349,9 @@ final class FeatureDeriver
         return false;
     }
 
-    private function hasDinnerExclusion(string $text): bool
+    private function hasDinnerExclusion(string $text, string $scope): bool
     {
-        foreach ($this->vocabulary->dinnerExclusions as $term) {
+        foreach ($this->vocabulary->dinnerExclusions[$scope] as $term) {
             if ($this->vocabulary->contains($text, $term)) {
                 return true;
             }

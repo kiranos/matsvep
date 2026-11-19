@@ -86,7 +86,10 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'uncertain_vegetarian', 'title_protein', 'one_pot_risoni', 'friday_pasta',
                 'sill_buffet', 'dessert_exclusion', 'long_cook', 'short_cook', 'short_simmer',
                 'title_chicken_chorizo', 'largest_amount', 'tie_first_main',
-                'cheese_with_meat', 'halloumi_dinner', 'egg_dinner'] as $key) {
+                'cheese_with_meat', 'halloumi_dinner', 'egg_dinner',
+                'breakfast_cereal_side', 'salsa_side', 'bruschetta_side',
+                'vegetable_salad_side', 'asparagus_side', 'chicken_salad_main', 'tofu_salad_main', 'salsa_accompaniment', 'dip_accompaniment',
+                'porridge_exclusion', 'smoothie_exclusion'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -165,10 +168,10 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertSame($report['matched_main_ingredient_lines'], $ingredientReport['matched_main_lines']);
             self::assertSame($report['matched_main_ingredient_share_pct'], $ingredientReport['matched_main_share_pct']);
             self::assertIsArray($report['spot_check']);
-            self::assertCount(count($ids), $report['spot_check']);
+            self::assertCount(min(20, count($ids)), $report['spot_check']);
             $dinners = $report['dinner_candidates'];
             self::assertIsArray($dinners);
-            self::assertSame(16, $dinners['count']);
+            self::assertSame(20, $dinners['count']);
             self::assertIsArray($dinners['highest_leftover_score']);
             self::assertIsArray($dinners['lowest_leftover_score']);
             self::assertCount(10, $dinners['highest_leftover_score']);
