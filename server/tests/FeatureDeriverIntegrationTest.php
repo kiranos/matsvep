@@ -88,7 +88,8 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'title_chicken_chorizo', 'largest_amount', 'tie_first_main',
                 'cheese_with_meat', 'halloumi_dinner', 'egg_dinner',
                 'breakfast_cereal_side', 'salsa_side', 'bruschetta_side',
-                'vegetable_salad_side', 'asparagus_side', 'chicken_salad_main', 'tofu_salad_main', 'salsa_accompaniment', 'dip_accompaniment'] as $key) {
+                'vegetable_salad_side', 'asparagus_side', 'chicken_salad_main', 'tofu_salad_main', 'salsa_accompaniment', 'dip_accompaniment',
+                'porridge_exclusion', 'smoothie_exclusion'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);

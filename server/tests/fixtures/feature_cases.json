@@ -559,5 +559,41 @@
     "dinner_candidate": true,
     "vegetarian": false,
     "effort": 1
+  },
+  "porridge_exclusion": {
+    "url": "https://www.koket.se/test-porridge-exclusion",
+    "title": "Havregröt med bär",
+    "time": 10,
+    "ingredients": [
+      "200 g havregryn",
+      "100 g mjölk"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": false,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "smoothie_exclusion": {
+    "url": "https://www.koket.se/test-smoothie-exclusion",
+    "title": "Smoothie med yoghurt",
+    "time": 10,
+    "ingredients": [
+      "200 g naturell yoghurt",
+      "100 g banan"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": false,
+    "vegetarian": true,
+    "effort": 1
   }
 }
