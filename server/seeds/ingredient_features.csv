@@ -50,9 +50,9 @@ bläckfisk,seafood,,1,1
 pilgrimsmusslor,seafood,,1,1
 löjrom,seafood,,1,1
 forellrom,seafood,,1,1
-ägg,,,0,0
-äggula,,,0,0
-äggvita,,,0,0
+ägg,vegetarian,,0,0
+äggula,vegetarian,,0,0
+äggvita,vegetarian,,0,0
 tofu,vegetarian,,0,0
 tempeh,vegetarian,,0,0
 halloumi,vegetarian,,0,0
@@ -106,3 +106,34 @@ farfalle,,pasta,0,0
 rigatoni,,pasta,0,0
 fettuccine,,pasta,0,0
 gnocchi,,pasta,0,0
+kassler,pork,,1,0
+rostbiff,beef,,1,0
+lammytterfilé,lamb,,1,1
+lammrostbiff,lamb,,1,1
+lammbringa,lamb,,1,1
+lammfilé,lamb,,1,1
+lammkött,lamb,,1,1
+vildsvinskött,game,,1,1
+gös,fish,,1,0
+röding,fish,,1,0
+havsabborre,fish,,1,0
+hälleflundra,fish,,1,0
+blodpudding,pork,,1,0
+knivmusslor,seafood,,1,1
+salsiccia,sausage,,1,0
+ankbröst,poultry,,1,1
+reninnanlår,game,,1,1
+silkestofu,vegetarian,,0,0
+blandade kokta bönor,vegetarian,,0,0
+gröna sojabönor,vegetarian,,0,0
+färdigkokta stora vita bönor,vegetarian,,0,0
+fårost,vegetarian,,0,0
+buffelmozzarella,vegetarian,,0,0
+prästost,vegetarian,,0,0
+ostfyllda ravioli,vegetarian,pasta,0,0
+strozzapreti,,pasta,0,0
+pommes frites,,potato,0,0
+fetaost,vegetarian,,0,0
+getost,vegetarian,,0,0
+mozzarella,vegetarian,,0,0
+parmesanost,vegetarian,,0,0

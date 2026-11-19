@@ -276,5 +276,126 @@
     "dinner_candidate": true,
     "leftover_score": 0.96,
     "effort": 2
+  },
+  "title_chicken_chorizo": {
+    "url": "https://www.koket.se/test-title-chicken-chorizo",
+    "title": "Kycklinggryta med chorizo",
+    "time": 45,
+    "ingredients": [
+      "400 g chorizo",
+      "200 g kyckling"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "chicken",
+    "meal_type": "main",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "effort": 2
+  },
+  "largest_amount": {
+    "url": "https://www.koket.se/test-largest-amount",
+    "title": "Gryta med två köttslag",
+    "time": 45,
+    "ingredients": [
+      "200 g högrev",
+      "500 g kyckling"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "chicken",
+    "meal_type": "main",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "effort": 2
+  },
+  "tie_first_main": {
+    "url": "https://www.koket.se/test-tie-first-main",
+    "title": "Gryta med två köttslag",
+    "time": 45,
+    "ingredients": [
+      "300 g högrev",
+      "300 g kyckling"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "beef",
+    "meal_type": "main",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "effort": 2
+  },
+  "cheese_with_meat": {
+    "url": "https://www.koket.se/test-cheese-with-meat",
+    "title": "Pasta med fetaost och kyckling",
+    "time": 45,
+    "ingredients": [
+      "400 g fetaost",
+      "200 g kyckling",
+      "200 g pasta"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "chicken",
+    "meal_type": "main",
+    "vegetarian": false,
+    "dinner_candidate": true,
+    "effort": 2
+  },
+  "halloumi_dinner": {
+    "url": "https://www.koket.se/test-halloumi-dinner",
+    "title": "Halloumi med grönsaker",
+    "time": 45,
+    "ingredients": [
+      "300 g halloumi",
+      "200 g tomat"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "vegetarian",
+    "meal_type": "main",
+    "vegetarian": true,
+    "dinner_candidate": true,
+    "effort": 2
+  },
+  "egg_dinner": {
+    "url": "https://www.koket.se/test-egg-dinner",
+    "title": "Äggrätt med grönsaker",
+    "time": 45,
+    "ingredients": [
+      "4 ägg",
+      "200 g tomat"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "protein": "vegetarian",
+    "meal_type": "main",
+    "vegetarian": true,
+    "dinner_candidate": true,
+    "effort": 2
   }
 }

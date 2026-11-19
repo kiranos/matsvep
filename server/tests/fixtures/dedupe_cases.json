@@ -1,0 +1,9 @@
+{
+  "copy_kept": {"title": "Klassiska köttbullar med potatis", "url": "https://www.koket.se/copy-kept", "protein": "beef", "ingredients": ["nötfärs", "potatis", "vispgrädde"], "steps": 2},
+  "copy_removed": {"title": "Klassiska köttbullar med potatis", "url": "https://www.koket.se/copy-removed", "protein": "beef", "ingredients": ["nötfärs", "potatis", "vispgrädde"], "steps": 1},
+  "variant": {"title": "Mormors köttbullar med gräddsås", "url": "https://www.koket.se/variant", "protein": "beef", "ingredients": ["nötfärs", "vispgrädde", "ost"], "steps": 1},
+  "review_a": {"title": "Pasta med tomat", "url": "https://www.koket.se/review-a", "protein": "vegetarian", "ingredients": ["pasta", "tomat", "ost", "vispgrädde"], "steps": 1},
+  "review_b": {"title": "Pasta med tomat", "url": "https://www.koket.se/review-b", "protein": "vegetarian", "ingredients": ["pasta", "tomat", "ost", "vispgrädde", "fetaost"], "steps": 1},
+  "canonical_kept": {"title": "Canonical dish", "url": "https://www.koket.se/canonical", "protein": "fish", "ingredients": ["torsk"], "steps": 2},
+  "canonical_removed": {"title": "Moved dish", "url": "https://www.koket.se/canonical", "source_link": "https://www.koket.se/old-canonical", "protein": "fish", "ingredients": ["torsk"], "steps": 1}
+}

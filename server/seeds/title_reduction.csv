@@ -1,0 +1,11 @@
+term,mode
+klassiska,remove_prefix
+klassisk,remove_prefix
+mormors,remove_prefix
+enkla,remove_prefix
+enkel,remove_prefix
+snabba,remove_prefix
+snabb,remove_prefix
+krämig,remove_prefix
+krämiga,remove_prefix
+med,truncate_after
