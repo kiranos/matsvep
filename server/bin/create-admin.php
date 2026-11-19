@@ -6,7 +6,9 @@ use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-if (PHP_SAPI !== 'cli' || count($argv) !== 2 || filter_var($argv[1], FILTER_VALIDATE_EMAIL) === false) {
+$arguments = $_SERVER['argv'] ?? null;
+if (PHP_SAPI !== 'cli' || !is_array($arguments) || count($arguments) !== 2
+    || !is_string($arguments[1] ?? null) || filter_var($arguments[1], FILTER_VALIDATE_EMAIL) === false) {
     fwrite(STDERR, "Usage: php bin/create-admin.php email@example.com\n");
     exit(1);
 }
@@ -34,10 +36,10 @@ if ($minimum < 1 || mb_strlen($password) < $minimum) {
 }
 $query = $db->prepare('INSERT INTO `user` (email, password_hash) VALUES (?, ?) ' .
     'ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), failed_attempts = 0, locked_until = NULL');
-$query->execute([$argv[1], password_hash($password, PASSWORD_DEFAULT)]);
+$query->execute([$arguments[1], password_hash($password, PASSWORD_DEFAULT)]);
 unset($password);
 $find = $db->prepare('SELECT id FROM `user` WHERE email = ?');
-$find->execute([$argv[1]]);
+$find->execute([$arguments[1]]);
 $id = $find->fetchColumn();
 if (!is_numeric($id)) {
     throw new RuntimeException('Cannot find saved admin account.');
