@@ -30,8 +30,14 @@ final class FeatureVocabulary
     /** @var array<string, float> */
     public readonly array $durationUnits;
 
-    /** @var list<string> */
+    /** @var array<string, list<string>> */
     public readonly array $dinnerExclusions;
+
+    /** @var list<string> */
+    public readonly array $dinnerMainIngredients;
+
+    /** @var list<string> */
+    public readonly array $dinnerTitleSeparators;
 
     /** @var array<string, list<array{keyword: string, value: float}>> */
     public readonly array $leftoverKeywords;
@@ -102,7 +108,16 @@ final class FeatureVocabulary
         }
         $this->cutUpTerms = $cutUpTerms;
         $this->longCookTerms = $this->readTerms($seedDirectory . '/feature_long_cook_terms.csv');
-        $this->dinnerExclusions = $this->readTerms($seedDirectory . '/feature_dinner_exclusions.csv');
+        $exclusions = ['unknown_only' => [], 'always' => [], 'side' => [], 'dish_title' => []];
+        foreach (CsvTable::read($seedDirectory . '/feature_dinner_exclusions.csv', ['term', 'scope']) as $row) {
+            if ($row['term'] === '' || !isset($exclusions[$row['scope']])) {
+                throw new RuntimeException('Invalid dinner exclusion seed row.');
+            }
+            $exclusions[$row['scope']][] = $row['term'];
+        }
+        $this->dinnerExclusions = $exclusions;
+        $this->dinnerMainIngredients = $this->readTerms($seedDirectory . '/feature_dinner_main_ingredients.csv');
+        $this->dinnerTitleSeparators = $this->readTerms($seedDirectory . '/feature_dinner_title_separators.csv');
         $durationUnits = [];
         foreach (CsvTable::read($seedDirectory . '/feature_duration_units.csv', ['unit', 'minutes']) as $row) {
             if ($row['unit'] === '' || !is_numeric($row['minutes']) || (float) $row['minutes'] <= 0) {

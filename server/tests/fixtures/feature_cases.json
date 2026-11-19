@@ -397,5 +397,167 @@
     "vegetarian": true,
     "dinner_candidate": true,
     "effort": 2
+  },
+  "breakfast_cereal_side": {
+    "url": "https://www.koket.se/test-breakfast-cereal-side",
+    "title": "Jacobs morgonmüsli",
+    "time": 30,
+    "ingredients": [
+      "200 g havregryn",
+      "50 g pumpakärnor"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": false,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "salsa_side": {
+    "url": "https://www.koket.se/test-salsa-side",
+    "title": "Svart bönsalsa",
+    "time": 30,
+    "ingredients": [
+      "200 g svarta bönor",
+      "1 msk olja"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": false,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "bruschetta_side": {
+    "url": "https://www.koket.se/test-bruschetta-side",
+    "title": "Bruscetta al pomodoro",
+    "time": 30,
+    "ingredients": [
+      "200 g tomat",
+      "1 msk olja"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": false,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "vegetable_salad_side": {
+    "url": "https://www.koket.se/test-vegetable-salad-side",
+    "title": "Avocadosallad",
+    "time": 30,
+    "ingredients": [
+      "200 g avokado",
+      "20 g parmesanost"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": false,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "asparagus_side": {
+    "url": "https://www.koket.se/test-asparagus-side",
+    "title": "Sparris serveras med citronhollandaise",
+    "time": 30,
+    "ingredients": [
+      "300 g sparris",
+      "1 äggula"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": false,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "chicken_salad_main": {
+    "url": "https://www.koket.se/test-chicken-salad-main",
+    "title": "Kycklingsallad",
+    "time": 30,
+    "ingredients": [
+      "300 g kyckling",
+      "200 g sallad"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": true,
+    "vegetarian": false,
+    "effort": 1
+  },
+  "tofu_salad_main": {
+    "url": "https://www.koket.se/test-tofu-salad-main",
+    "title": "Tofusallad",
+    "time": 30,
+    "ingredients": [
+      "300 g tofu",
+      "200 g sallad"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": true,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "salsa_accompaniment": {
+    "url": "https://www.koket.se/test-salsa-accompaniment",
+    "title": "Grillad halloumi med citronsalsa",
+    "time": 30,
+    "ingredients": [
+      "300 g halloumi",
+      "100 g tomat"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": true,
+    "vegetarian": true,
+    "effort": 1
+  },
+  "dip_accompaniment": {
+    "url": "https://www.koket.se/test-dip-accompaniment",
+    "title": "Vårrullar med sojadipp",
+    "time": 30,
+    "ingredients": [
+      "300 g kyckling",
+      "100 g tomat"
+    ],
+    "steps": [
+      "Blanda"
+    ],
+    "tags": [
+      "Huvudrätt"
+    ],
+    "dinner_candidate": true,
+    "vegetarian": false,
+    "effort": 1
   }
 }
