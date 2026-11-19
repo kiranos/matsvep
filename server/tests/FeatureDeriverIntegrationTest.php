@@ -84,7 +84,9 @@ final class FeatureDeriverIntegrationTest extends TestCase
             $ids = [];
             foreach (['chicken_stew', 'fish_fillet', 'vegetarian_lasagne',
                 'uncertain_vegetarian', 'title_protein', 'one_pot_risoni', 'friday_pasta',
-                'sill_buffet', 'dessert_exclusion', 'long_cook', 'short_cook', 'short_simmer'] as $key) {
+                'sill_buffet', 'dessert_exclusion', 'long_cook', 'short_cook', 'short_simmer',
+                'title_chicken_chorizo', 'largest_amount', 'tie_first_main',
+                'cheese_with_meat', 'halloumi_dinner', 'egg_dinner'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -126,9 +128,11 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 self::assertSame($case['dinner_candidate'], (bool) $actual['is_dinner_candidate']);
                 self::assertSame($case['vegetarian'], $actual['is_vegetarian'] === null
                     ? null : (bool) $actual['is_vegetarian']);
-                self::assertIsNumeric($case['leftover_score']);
                 self::assertIsNumeric($actual['leftover_score']);
-                self::assertSame((float) $case['leftover_score'], (float) $actual['leftover_score']);
+                if (isset($case['leftover_score'])) {
+                    self::assertIsNumeric($case['leftover_score']);
+                    self::assertSame((float) $case['leftover_score'], (float) $actual['leftover_score']);
+                }
                 self::assertIsNumeric($case['effort']);
                 self::assertIsNumeric($actual['effort']);
                 self::assertSame((int) $case['effort'], (int) $actual['effort']);
@@ -141,6 +145,9 @@ final class FeatureDeriverIntegrationTest extends TestCase
             $ignoredQuery = $db->prepare(
                 'SELECT normalise_status, is_main FROM recipe_ingredient WHERE recipe_id = ? AND position = ?'
             );
+            if (!isset($ids['fish_fillet'])) {
+                self::fail('Missing fish fillet fixture.');
+            }
             $ignoredQuery->execute([$ids['fish_fillet'], 3]);
             self::assertSame(
                 ['normalise_status' => 'ignored', 'is_main' => 0],
@@ -161,7 +168,7 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertCount(count($ids), $report['spot_check']);
             $dinners = $report['dinner_candidates'];
             self::assertIsArray($dinners);
-            self::assertSame(10, $dinners['count']);
+            self::assertSame(16, $dinners['count']);
             self::assertIsArray($dinners['highest_leftover_score']);
             self::assertIsArray($dinners['lowest_leftover_score']);
             self::assertCount(10, $dinners['highest_leftover_score']);

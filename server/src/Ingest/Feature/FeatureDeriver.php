@@ -36,10 +36,10 @@ final class FeatureDeriver
 
     public function run(?int $recipeId = null): int
     {
-        $sql = 'SELECT id, title, total_time_min FROM recipe';
+        $sql = 'SELECT id, title, total_time_min FROM recipe WHERE active = TRUE';
         $arguments = [];
         if ($recipeId !== null) {
-            $sql .= ' WHERE id = ?';
+            $sql .= ' AND id = ?';
             $arguments[] = $recipeId;
         }
         $sql .= ' ORDER BY id';
@@ -136,7 +136,8 @@ final class FeatureDeriver
         $mainCategories = $this->config->stringList('feature.main_categories');
         $mainMass = $this->config->decimal('feature.main_min_mass_g');
         $protein = null;
-        $vegetarianProtein = null;
+        $proteinChoices = [];
+        $vegetarianProteinPresent = false;
         $carb = null;
         $animal = false;
         $premium = false;
@@ -175,10 +176,16 @@ final class FeatureDeriver
                 if ($rule['carb'] !== null && $carb === null) {
                     $carb = $rule['carb'];
                 }
-                if ($rule['protein'] !== null && $rule['protein'] !== 'vegetarian' && $protein === null) {
-                    $protein = $rule['protein'];
-                } elseif ($rule['protein'] === 'vegetarian') {
-                    $vegetarianProtein = 'vegetarian';
+                if ($rule['protein'] === 'vegetarian') {
+                    $vegetarianProteinPresent = true;
+                }
+                if ($rule['protein'] !== null && $rule['protein'] !== 'vegetarian') {
+                    $proteinChoices[] = [
+                        'code' => $rule['protein'],
+                        'grams' => $this->gramAmount($line),
+                        'position' => $position,
+                        'main' => $main,
+                    ];
                 }
             }
             if (!$lineMapped && $line['normalise_status'] !== 'ignored') {
@@ -190,9 +197,14 @@ final class FeatureDeriver
             $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
         }
         $titleProtein = $this->proteinFromTitle($recipe['title']);
-        $protein ??= $titleProtein ?? $vegetarianProtein;
-        $animal = $animal || $titleProtein !== null;
+        $animal = $animal || ($titleProtein !== null && $titleProtein !== 'vegetarian');
         $vegetarian = $animal ? 0 : ($mapped && !$unknownProtein && !$uncertainMain ? 1 : null);
+        usort($proteinChoices, static fn (array $a, array $b): int =>
+            ($b['grams'] ?? -1) <=> ($a['grams'] ?? -1)
+                ?: (int) $b['main'] <=> (int) $a['main']
+                ?: $a['position'] <=> $b['position']);
+        $protein = ($titleProtein !== null && $titleProtein !== 'vegetarian')
+            ? $titleProtein : ($proteinChoices[0]['code'] ?? ($vegetarian === 1 ? 'vegetarian' : null));
         [$cuisine, $mealType, $festiveTag] = $this->tagFeatures($recipe['title'], $tags);
         $stepText = implode(' ', $steps);
         $dishSignal = $this->signal('dish_type', $recipe['title'] . ' ' . implode(' ', $tags));
@@ -212,8 +224,9 @@ final class FeatureDeriver
                 + $this->config->decimal('feature.leftover_protein_weight') * $proteinSignal
             ),
         );
+        $proteinEvidence = $titleProtein !== null || $proteinChoices !== [] || $vegetarianProteinPresent;
         $dinnerCandidate = $mealType === 'main' || ($mealType === null
-            && ($protein !== null || $carb !== null)
+            && ($proteinEvidence || $carb !== null)
             && !$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags)));
         $time = is_numeric($recipe['total_time_min'] ?? null)
             ? (int) $recipe['total_time_min'] : null;
@@ -237,15 +250,20 @@ final class FeatureDeriver
     /** @param array<string, mixed> $line */
     private function hasMainMass(array $line, float $minimumGrams): bool
     {
+        return ($this->gramAmount($line) ?? 0.0) >= $minimumGrams;
+    }
+
+    /** @param array<string, mixed> $line */
+    private function gramAmount(array $line): ?float
+    {
         if (!is_numeric($line['quantity'] ?? null) || !is_string($line['unit'] ?? null)) {
-            return false;
+            return null;
         }
-        $grams = match ($line['unit']) {
+        return match ($line['unit']) {
             'gram' => (float) $line['quantity'],
             'kilogram' => (float) $line['quantity'] * 1000,
-            default => 0.0,
+            default => null,
         };
-        return $grams >= $minimumGrams;
     }
 
     /** @param list<string> $tags
@@ -335,12 +353,16 @@ final class FeatureDeriver
 
     private function proteinFromTitle(string $title): ?string
     {
+        $first = null;
+        $protein = null;
         foreach ($this->vocabulary->proteinTitleTerms as $term) {
-            if ($this->vocabulary->contains($title, $term['term'])) {
-                return $term['protein_code'];
+            $position = mb_stripos($title, $term['term']);
+            if ($position !== false && ($first === null || $position < $first)) {
+                $first = $position;
+                $protein = $term['protein_code'];
             }
         }
-        return null;
+        return $protein;
     }
 
     private function clamp(float $value): float
