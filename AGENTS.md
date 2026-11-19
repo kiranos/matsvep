@@ -48,6 +48,8 @@ With PHP 8.5 CLI, PDO MySQL, Composer 2 and MySQL 8.4:
 
 The Flutter app and simulator do not exist yet; add their commands when created.
 
+- Admin cleanup: after migration, run `php bin/create-admin.php you@example.com` from `server/` on the VPS. Reach the loopback-only admin site through `ssh -L 8080:localhost:8081 user@vps` and open `http://localhost:8080/admin/`. See `docs/deployment.md`.
+
 ## Hard rules
 
 1. No AI, ML or LLM libraries or API calls in the app or server.

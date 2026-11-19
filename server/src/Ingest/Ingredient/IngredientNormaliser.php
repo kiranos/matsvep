@@ -81,6 +81,7 @@ final class IngredientNormaliser
                 $parts = $parsed->unsafeSplit ? [$parsed->ingredientText] : $parsed->parts;
                 $forceUnsafe = $parsed->unsafeSplit;
                 $partCount = 0;
+                $ignoredCount = 0;
                 $matchedCount = 0;
                 $singleId = null;
                 $notes = $parsed->note === null ? [] : [$parsed->note];
@@ -121,7 +122,11 @@ final class IngredientNormaliser
                         $token = mb_substr(IngredientMatcher::token($text), 0, 255);
                         $findUnknown->execute([$token]);
                         $unknown = $findUnknown->fetch(PDO::FETCH_ASSOC);
-                        if (is_array($unknown) && $unknown['status'] === 'mapped'
+                        if (is_array($unknown) && $unknown['status'] === 'ignored') {
+                            $ignoredCount++;
+                            continue;
+                        }
+                        if (is_array($unknown) && in_array($unknown['status'], ['mapped', 'staple'], true)
                             && is_numeric($unknown['mapped_ingredient_id'])) {
                             $id = (int) $unknown['mapped_ingredient_id'];
                         } else {
@@ -147,9 +152,10 @@ final class IngredientNormaliser
                     }
                     $insertPart->execute([$recipe, $position, $partCount, mb_substr($text, 0, 255), $id, $unknownId]);
                 }
-                $status = $forceUnsafe ? 'unsafe_split'
+                $status = $ignoredCount > 0 && $partCount === 0 ? 'ignored'
+                    : ($forceUnsafe ? 'unsafe_split'
                     : ($matchedCount === $partCount && $partCount > 0 ? 'matched'
-                        : ($matchedCount > 0 ? 'partial' : 'unknown'));
+                        : ($matchedCount > 0 ? 'partial' : 'unknown')));
                 $update->execute([
                     mb_substr($cleanParts === [] ? $parsed->ingredientText : implode(' + ', $cleanParts), 0, 255),
                     $notes === [] ? null : implode('; ', array_unique($notes)),

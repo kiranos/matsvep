@@ -26,6 +26,8 @@ jobs:
           extensions: pdo_mysql, mbstring
           coverage: none
           tools: composer:v2
+      - name: Check deployment shell syntax
+        run: bash -n deploy/setup-ubuntu.sh
       - name: Install dependencies
         working-directory: server
         run: composer install --no-interaction --prefer-dist --no-progress

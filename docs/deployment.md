@@ -103,3 +103,17 @@ Inspect the report and table counts before resuming scheduled crawling. Database
 Run `sudo bash deploy/setup-ubuntu.sh --rotate-db-password` from `/srv/matsvep`. It prompts for a new password, updates the local MySQL account and rewrites the restricted `server/.env`; it does not print the secret. Stop an active crawl before rotation and start it again afterward. Rotate the private repository deploy key in GitHub and on the VPS separately. Certbot manages certificate renewal; check `sudo systemctl list-timers '*certbot*'` and `sudo certbot renew --dry-run`.
 
 The setup uses Ubuntu 26.04 PHP 8.5 packages and its MySQL 8.4 server and Certbot Apache integration. The timers use systemd calendar scheduling, and the backup uses MySQL's consistent InnoDB dump mode. See [Ubuntu 26.04 release notes](https://documentation.ubuntu.com/release-notes/26.04/), [systemd service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html), [systemd timer](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html), and [MySQL mysqldump](https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html).
+
+## Private admin cleanup pages
+
+The admin site listens only on `127.0.0.1:8081` on the VPS. The public HTTPS virtual host does not serve the admin PHP directory. Apache also requires a local client, and the application requires an admin login and CSRF token. The dedicated PHP-FPM pool runs as the `matsvep` service user so it can read the private `.env` without giving Apache access to that file.
+
+After deploying this version and running migrations, rerun `sudo bash deploy/setup-ubuntu.sh` to install the loopback Apache site and PHP-FPM pool. Create or reset an admin account on the VPS with `cd /srv/matsvep/server && php bin/create-admin.php you@example.com`; the command prompts for a password without echoing it. The initial setup does not create an admin account.
+
+From your own computer, open an SSH tunnel:
+
+```sh
+ssh -L 8080:localhost:8081 user@vps
+```
+
+Keep that SSH session open and visit `http://localhost:8080/admin/` in your local browser. The loopback HTTP endpoint is carried inside the SSH tunnel. Close the SSH session to end access. Do not open port 8081 in the firewall or proxy this endpoint from the public virtual host.

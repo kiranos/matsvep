@@ -57,6 +57,10 @@ final class FeatureDeriver
         );
         $tagQuery = $this->db->prepare('SELECT tag FROM recipe_tag WHERE recipe_id = ?');
         $stepQuery = $this->db->prepare('SELECT text FROM recipe_step WHERE recipe_id = ? ORDER BY position');
+        $overrideQuery = $this->db->prepare(
+            'SELECT main_protein, carb_base, cuisine, meal_type, is_dinner_candidate, leftover_score ' .
+            'FROM recipe_feature_override WHERE recipe_id = ?'
+        );
         $setMain = $this->db->prepare(
             'UPDATE recipe_ingredient SET is_main = ? WHERE recipe_id = ? AND position = ?'
         );
@@ -106,6 +110,16 @@ final class FeatureDeriver
                     'total_time_min' => $recipe['total_time_min'] ?? null,
                 ];
                 $features = $this->deriveOne($recipeData, $lineRows, $parts, $tags, $steps, $setMain);
+                $overrideQuery->execute([$id]);
+                $override = $overrideQuery->fetch(PDO::FETCH_ASSOC);
+                if (is_array($override)) {
+                    foreach (['main_protein' => 0, 'carb_base' => 1, 'cuisine' => 2,
+                        'meal_type' => 3, 'is_dinner_candidate' => 4, 'leftover_score' => 6] as $column => $index) {
+                        if ($override[$column] !== null) {
+                            $features[$index] = $override[$column];
+                        }
+                    }
+                }
                 $update->execute([...$features, $id]);
                 $count++;
             }

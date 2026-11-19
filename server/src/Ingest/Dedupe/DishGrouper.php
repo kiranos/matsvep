@@ -30,7 +30,7 @@ final class DishGrouper
     public function run(): int
     {
         $query = $this->db->prepare(
-            'SELECT r.id, r.title, r.main_protein, r.dish_group_id, g.manual_override ' .
+            'SELECT r.id, r.title, r.main_protein, r.dish_group_id, r.dish_group_manual, g.manual_override ' .
             'FROM recipe r LEFT JOIN dish_group g ON g.id = r.dish_group_id WHERE r.active = TRUE ORDER BY r.id'
         );
         $query->execute();
@@ -43,7 +43,8 @@ final class DishGrouper
             $id = (int) $row['id'];
             $protein = is_string($row['main_protein'] ?? null) ? $row['main_protein'] : null;
             $groupId = is_numeric($row['dish_group_id'] ?? null) ? (int) $row['dish_group_id'] : null;
-            $manual = is_numeric($row['manual_override'] ?? null) && (int) $row['manual_override'] === 1;
+            $manual = (is_numeric($row['manual_override'] ?? null) && (int) $row['manual_override'] === 1)
+                || (is_numeric($row['dish_group_manual'] ?? null) && (int) $row['dish_group_manual'] === 1);
             $recipes[$id] = [
                 'id' => $id,
                 'title' => $row['title'],

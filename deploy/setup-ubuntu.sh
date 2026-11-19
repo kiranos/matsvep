@@ -141,10 +141,48 @@ cat > /etc/apache2/sites-available/matsvep.conf <<APACHE
     CustomLog /var/log/apache2/matsvep-access.log combined
 </VirtualHost>
 APACHE
+install -d -o matsvep -g matsvep -m 0700 /var/lib/matsvep/admin-sessions
+cat > /etc/php/8.5/fpm/pool.d/matsvep-admin.conf <<'POOL'
+[matsvep-admin]
+user = matsvep
+group = matsvep
+listen = /run/php/php8.5-fpm-matsvep-admin.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+pm = ondemand
+pm.max_children = 5
+pm.process_idle_timeout = 10s
+php_admin_value[session.save_path] = /var/lib/matsvep/admin-sessions
+POOL
+cat > /etc/apache2/conf-available/matsvep-admin-listen.conf <<'APACHE'
+Listen 127.0.0.1:8081
+APACHE
+cat > /etc/apache2/sites-available/matsvep-admin.conf <<APACHE
+<VirtualHost 127.0.0.1:8081>
+    ServerName localhost
+    DocumentRoot $project_root/server/public
+    <Directory $project_root/server/public>
+        Options -Indexes
+        AllowOverride None
+        Require local
+        DirectoryIndex index.php
+        <FilesMatch "\.php$">
+            SetHandler "proxy:unix:/run/php/php8.5-fpm-matsvep-admin.sock|fcgi://localhost/"
+        </FilesMatch>
+    </Directory>
+    ErrorLog /var/log/apache2/matsvep-admin-error.log
+    CustomLog /var/log/apache2/matsvep-admin-access.log combined
+</VirtualHost>
+APACHE
 a2enmod proxy_fcgi setenvif rewrite headers >/dev/null
+a2enconf matsvep-admin-listen >/dev/null
+a2ensite matsvep-admin.conf >/dev/null
 a2enconf php8.5-fpm >/dev/null
 a2ensite matsvep.conf >/dev/null
 a2dissite 000-default.conf >/dev/null 2>&1 || true
+php-fpm8.5 -t
+systemctl restart php8.5-fpm
 apache2ctl configtest
 systemctl reload apache2
 
