@@ -7,3 +7,4 @@ server/.php-cs-fixer.cache
 server/tests/fixtures/koket/local/
 server/pilot-report.txt
 server/var/
+server/config/admin-allowlist.conf

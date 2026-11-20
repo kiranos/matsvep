@@ -126,27 +126,38 @@ chgrp -R matsvep "$project_root/server/vendor"
 chmod -R g+rX "$project_root/server/vendor"
 DB_HOST=localhost DB_PORT=3306 DB_NAME=matsvep DB_USER=root DB_PASSWORD='' \
     php "$project_root/server/bin/migrate.php"
-install -d -o root -g root -m 0755 /var/www/matsvep
-printf 'Matsvep\n' > /var/www/matsvep/index.html
-cat > /etc/apache2/sites-available/matsvep.conf <<APACHE
-<VirtualHost *:80>
-    ServerName $domain
-    DocumentRoot /var/www/matsvep
-    <Directory /var/www/matsvep>
-        Options -Indexes
-        AllowOverride None
-        Require all granted
-    </Directory>
-    ErrorLog /var/log/apache2/matsvep-error.log
-    CustomLog /var/log/apache2/matsvep-access.log combined
-</VirtualHost>
-APACHE
-a2enmod proxy_fcgi setenvif rewrite headers >/dev/null
+allowlist="$project_root/server/config/admin-allowlist.conf"
+[[ ! -L $allowlist ]] || fail 'Admin allowlist must be a regular file, not a symlink.'
+if [[ ! -e $allowlist ]]; then
+    install -o root -g matsvep -m 0640 \
+        "$project_root/server/config/admin-allowlist.conf.example" "$allowlist"
+fi
+[[ -f $allowlist ]] || fail 'Admin allowlist must be a regular file.'
+chown root:matsvep "$allowlist"
+chmod 0640 "$allowlist"
+install -d -o matsvep -g matsvep -m 0700 "$project_root/server/var/sessions"
+chmod -R go-rwx "$project_root/server/var/sessions"
+
+render_install() {
+    local template=$1 destination=$2 rendered
+    rendered=$(mktemp)
+    sed -e "s|@DOMAIN@|$domain|g" -e "s|@PROJECT_ROOT@|$project_root|g" \
+        "$template" > "$rendered"
+    install -o root -g root -m 0644 "$rendered" "$destination"
+    rm -f "$rendered"
+}
+
+render_install "$project_root/deploy/php-fpm/matsvep-admin.conf.template" \
+    /etc/php/8.5/fpm/pool.d/matsvep-admin.conf
+php-fpm8.5 -t
+systemctl restart php8.5-fpm
+a2enmod ssl proxy_fcgi setenvif rewrite headers >/dev/null
 a2enconf php8.5-fpm >/dev/null
-a2ensite matsvep.conf >/dev/null
 a2dissite 000-default.conf >/dev/null 2>&1 || true
-apache2ctl configtest
-systemctl reload apache2
+a2dissite matsvep-admin.conf >/dev/null 2>&1 || true
+a2disconf matsvep-admin-listen >/dev/null 2>&1 || true
+rm -f /etc/apache2/sites-available/matsvep-admin.conf \
+    /etc/apache2/conf-available/matsvep-admin-listen.conf
 
 ufw default deny incoming
 ufw default allow outgoing
@@ -154,13 +165,38 @@ ufw allow "$ssh_port"/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable
-certbot --apache --non-interactive --agree-tos --email "$email" \
-    --keep-until-expiring --redirect -d "$domain"
 
-install -m 0644 "$project_root/deploy/systemd/matsvep-crawl.service" /etc/systemd/system/
-install -m 0644 "$project_root/deploy/systemd/matsvep-crawl.timer" /etc/systemd/system/
-install -m 0644 "$project_root/deploy/systemd/matsvep-backup.service" /etc/systemd/system/
-install -m 0644 "$project_root/deploy/systemd/matsvep-backup.timer" /etc/systemd/system/
+if [[ ! -f /etc/letsencrypt/live/$domain/fullchain.pem ||
+    ! -f /etc/letsencrypt/live/$domain/privkey.pem ]]; then
+    render_install "$project_root/deploy/apache/matsvep-bootstrap.conf.template" \
+        /etc/apache2/sites-available/matsvep-bootstrap.conf
+    a2dissite matsvep.conf >/dev/null 2>&1 || true
+    a2ensite matsvep-bootstrap.conf >/dev/null
+    apache2ctl configtest
+    systemctl reload apache2
+    certbot --apache --non-interactive --agree-tos --email "$email" \
+        --keep-until-expiring --redirect -d "$domain"
+fi
+[[ -f /etc/letsencrypt/live/$domain/fullchain.pem &&
+    -f /etc/letsencrypt/live/$domain/privkey.pem &&
+    -f /etc/letsencrypt/options-ssl-apache.conf ]] ||
+    fail 'HTTPS certificate or Apache TLS options are missing.'
+render_install "$project_root/deploy/apache/matsvep.conf.template" \
+    /etc/apache2/sites-available/matsvep.conf
+a2dissite matsvep-bootstrap.conf >/dev/null 2>&1 || true
+a2dissite matsvep-bootstrap-le-ssl.conf >/dev/null 2>&1 || true
+a2dissite matsvep-le-ssl.conf >/dev/null 2>&1 || true
+rm -f /etc/apache2/sites-available/matsvep-bootstrap.conf \
+    /etc/apache2/sites-available/matsvep-bootstrap-le-ssl.conf \
+    /etc/apache2/sites-available/matsvep-le-ssl.conf
+a2ensite matsvep.conf >/dev/null
+apache2ctl configtest
+systemctl reload apache2
+
+install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-crawl.service" /etc/systemd/system/
+install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-crawl.timer" /etc/systemd/system/
+install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-backup.service" /etc/systemd/system/
+install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-backup.timer" /etc/systemd/system/
 install -o root -g root -m 0750 "$project_root/deploy/backup-db.sh" /usr/local/sbin/matsvep-backup
 systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/matsvep-crawl.service \

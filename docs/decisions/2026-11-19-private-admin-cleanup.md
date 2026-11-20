@@ -1,0 +1,7 @@
+# Admin cleanup access and deployment layout
+
+Phase 1 needs a minimal `user` table for admin cleanup before household authentication arrives in phase 2. An admin account has a password hash and account-level login lockout. Every mutation writes an audit record. Recipe feature corrections use a separate override table and are applied after automatic derivation; manual dish-group membership is locked against regrouping.
+
+Serve `/admin/` on the main HTTPS domain through a dedicated PHP-FPM pool. Its PHP front controller reads `server/config/admin-allowlist.conf` on every request and checks `REMOTE_ADDR` before starting a session. The live file is root-owned, readable by the `matsvep` group, and created from an example only once. Missing, empty and unreadable files deny access. Invalid lines are logged and ignored. Keep loopback in the example to allow an HTTPS SSH tunnel if the operator's public IP changes. Login, lockout, Secure cookies, CSRF checks and audit logging remain required. The English admin interface is an operator tool; app API responses continue to use codes and parameters rather than display text.
+
+Keep application files, configuration, sessions and reports inside `server/`. Keep system registrations in their standard locations: Apache site under `/etc/apache2/sites-available/`, PHP 8.5-FPM pool under `/etc/php/8.5/fpm/pool.d/`, and systemd units under `/etc/systemd/system/`. Setup installs root:root 0644 copies from `deploy/`, enables the Apache site, and refreshes those copies on rerun. There are no repository symlinks into `/etc`.

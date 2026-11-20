@@ -103,7 +103,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 | Table | Key columns | Purpose |
 | --- | --- | --- |
 | `source` | id, name, base\_url, adapter, enabled, crawl\_delay\_s, last\_crawl\_at, display\_mode | One row per recipe site |
-| `recipe` | id, source\_id, url, title, image\_url, total\_time\_min, servings, cuisine, meal\_type, main\_protein, carb\_base, is\_dinner\_candidate, is\_vegetarian, leftover\_score (0–1), festive\_score (0–1), effort (1–3), dish\_group\_id, merged\_into\_id, source\_status (ok / source\_gone), parsed\_at, parser\_version, active | Parsed recipe and derived features |
+| `recipe` | id, source\_id, url, title, image\_url, total\_time\_min, servings, cuisine, meal\_type, main\_protein, carb\_base, is\_dinner\_candidate, is\_vegetarian, leftover\_score (0–1), festive\_score (0–1), effort (1–3), dish\_group\_id, dish\_group\_manual, merged\_into\_id, source\_status (ok / source\_gone), parsed\_at, parser\_version, active | Parsed recipe and derived features |
 | `recipe_ingredient` | recipe\_id, position, group\_name, raw\_text, ingredient\_text, note, quantity, quantity\_max, unit, unparsed\_unit, ingredient\_id, normalise\_status (matched / partial / unknown / unsafe\_split / ignored), is\_main | Original line and parsed amount, unit, ingredient and review state; `ingredient_id` is set only for a single matched ingredient |
 | `recipe_ingredient_part` | recipe\_id, position, part\_position, ingredient\_text, ingredient\_id, ingredient\_unknown\_id | One mapped or unknown ingredient per part of a line; cascades with its parent line |
 | `recipe_step` | recipe\_id, position, group\_name, text | Cooking steps |
@@ -118,13 +118,15 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `leftover_keyword` | keyword, signal\_type (dish\_type / method / protein\_form), value (−1 to 1) | Keyword lists behind leftover\_score |
 | `dish_group` | id, core\_name, main\_protein, manual\_override | Variants of the same dish |
 | `duplicate_candidate` | recipe\_a, recipe\_b, similarity, status (pending / merged / not\_duplicate) | Admin review queue for possible copies |
+| `user` | id, email, password\_hash, role (admin), failed\_attempts, locked\_until, created\_at | Minimal phase 1 admin login; household linkage is added in phase 2 |
+| `admin_audit` | id, user\_id, action, target\_type, target\_id, before\_json, after\_json, created\_at | Records admin mutations and account activity |
+| `recipe_feature_override` | recipe\_id, main\_protein, carb\_base, cuisine, meal\_type, is\_dinner\_candidate, leftover\_score, updated\_by, updated\_at | Manual corrections reapplied after derivation |
 
 **Household state**
 
 | Table | Key columns | Purpose |
 | --- | --- | --- |
 | `household` | id, name, size, created\_at | The family; size is informational |
-| `user` | id, household\_id, email, password\_hash, role | Logins; all members share one household state |
 | `device_token` | user\_id, platform (android / windows), refresh\_token\_hash, push\_token, last\_seen\_at | App logins and push notifications |
 | `household_setting` | household\_id, key, value | Favourite share, plan days, planning mode, block vegetarian |
 | `day_profile` | household\_id, weekday, profile | Weekday to profile, e.g. Friday → `friday_treat` |
@@ -659,7 +661,7 @@ The data model already supports many households; the blocker for a public launch
 
 The engine is proven on real recipes and simulated families before the apps are built.
 
-1. **Foundation and seed data (2–3 weeks):** VPS setup, recipe and ingestion schema (including `ingest_url`, `ingredient_unknown`, dish groups, duplicate review and `engine_config`), the Köket adapter, the full first crawl (which also establishes the size of Köket's catalogue), normaliser, deduplication and dish groups, the clean-up pass and the database snapshot. Household, planning, swipe and auth tables are created in phase 2. The phase 1 API contract covers shared recipe/source/ingredient/dish-group schemas and `GET /recipes/{id}`, `GET /recipes/search` and `GET /health`; the remaining `/api/v1` contract starts phase 2.
+1. **Foundation and seed data (2–3 weeks):** VPS setup, recipe and ingestion schema (including `ingest_url`, `ingredient_unknown`, dish groups, duplicate review and `engine_config`), the Köket adapter, the full first crawl (which also establishes the size of Köket's catalogue), normaliser, deduplication and dish groups, the clean-up pass and the database snapshot. Household, planning, swipe and app auth tables are created in phase 2; the minimal admin user table is created in phase 1 and extended later. The phase 1 API contract covers shared recipe/source/ingredient/dish-group schemas and `GET /recipes/{id}`, `GET /recipes/search` and `GET /health`; the remaining `/api/v1` contract starts phase 2.
 2. **Engine, headless (2–3 weeks):** filters, scoring, plan builder, swipe decks, planning modes, replace, after-dinner answers, carry-overs, reasons and onboarding, exposed through `/api/v1` with token auth.
 3. **Simulation and tuning (2 weeks):** simulator, six personas, choosing the 30–40 onboarding dishes from the seeded database (an admin list of the most common dish groups across sites), automatic checks, nightly rebuild, metrics page, config admin and the "why not X" view.
 4. **Client apps (3–4 weeks):** the Flutter app for Android and Windows: onboarding, swipe decks, week view, offline recipe view, after-dinner prompt, ratings, search, wishlist and settings.
@@ -680,3 +682,9 @@ Durations assume one part-time developer working with an AI coding agent. All we
 - [Livsmedelsverket food composition data](https://www.livsmedelsverket.se/en/about-us/open-data/food-composition-data/)
 - [Arla.se footer and policies](https://www.arla.se/)
 - [Coop customer-account terms](https://www.coop.se/Globala-sidor/villkor/anvandarvillkor/)
+
+## Phase 1 admin cleanup
+
+The cleanup interface is a server-rendered PHP site at `/admin/` on the main HTTPS domain. The front controller checks the connecting IP against an app-local allowlist before any session starts; a missing or empty file denies access. Access also uses an admin account, account lockout, a Secure session cookie, session timeout and CSRF token. The `user` table is introduced early for this admin account; household and app authentication remain phase 2 work. Every admin mutation writes an `admin_audit` row with actor, time and before/after values.
+
+Ingredient resolutions persist in `ingredient_unknown` and aliases and trigger normalisation of affected recipes. Duplicate decisions persist in `duplicate_candidate`; merged copies remain inactive and retain their raw snapshots. Feature corrections live in `recipe_feature_override` and are reapplied after each derivation. Manual group memberships use `recipe.dish_group_manual` so automatic regrouping cannot undo a split or merge. The overview shows ingredient match share, the dinner-candidate protein gap, candidate count and queue sizes. Admin login, lock, session, password and page-limit settings are stored in `engine_config` under `admin.*`.
