@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Matsvep\Admin\AdminAuth;
+use Matsvep\Admin\AdminIpAllowlist;
 use Matsvep\Admin\AdminService;
 use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
@@ -60,15 +61,22 @@ function idFrom(mixed $value): int
     return (int) $value;
 }
 
-$remote = $_SERVER['REMOTE_ADDR'] ?? '';
-if (!in_array($remote, ['127.0.0.1', '::1'], true)) {
-    http_response_code(403);
-    exit('Local access only.');
-}
 $server = dirname(__DIR__, 2);
+$remote = $_SERVER['REMOTE_ADDR'] ?? null;
+if (!is_string($remote) || !(new AdminIpAllowlist())->allowsFile(
+    $server . '/config/admin-allowlist.conf',
+    $remote
+)) {
+    http_response_code(403);
+    exit('Admin access denied.');
+}
+if (($_SERVER['HTTPS'] ?? '') !== 'on') {
+    http_response_code(403);
+    exit('HTTPS required.');
+}
 $db = DatabaseConnection::fromEnvironment($server);
 $auth = new AdminAuth($db);
-$auth->startSession(!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+$auth->startSession();
 $service = new AdminService($db, $server . '/seeds');
 $error = null;
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {

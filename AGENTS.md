@@ -48,7 +48,7 @@ With PHP 8.5 CLI, PDO MySQL, Composer 2 and MySQL 8.4:
 
 The Flutter app and simulator do not exist yet; add their commands when created.
 
-- Admin cleanup: after migration, run `php bin/create-admin.php you@example.com` from `server/` on the VPS. Reach the loopback-only admin site through `ssh -L 8080:localhost:8081 user@vps` and open `http://localhost:8080/admin/`. See `docs/deployment.md`.
+- Admin cleanup: after migration, run `php bin/create-admin.php you@example.com` from `server/` on the VPS. Setup creates `server/config/admin-allowlist.conf` once; edit it with `sudo nano /srv/matsvep/server/config/admin-allowlist.conf` to allow your public IP, then open `https://YOUR_DOMAIN/admin/`. Missing or empty allowlists deny access. For a changed IP, see the HTTPS SSH tunnel fallback in `docs/deployment.md`. Rerunning setup refreshes root-owned Apache, FPM and systemd copies in `/etc` from `deploy/`, without replacing the allowlist.
 
 ## Hard rules
 

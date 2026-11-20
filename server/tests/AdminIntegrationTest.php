@@ -78,7 +78,7 @@ final class AdminIntegrationTest extends TestCase
             $actor = (int) $db->lastInsertId();
             $userInsert->execute(['locked@example.com', password_hash('correct-test-password', PASSWORD_DEFAULT)]);
             $auth = new AdminAuth($db);
-            $auth->startSession(false);
+            $auth->startSession();
             self::assertFalse($auth->login('admin@example.com', 'wrong-password'));
             self::assertTrue($auth->login('admin@example.com', 'correct-test-password'));
             self::assertSame($actor, $auth->userId());

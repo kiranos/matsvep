@@ -13,7 +13,7 @@ final class AdminAuth
     {
     }
 
-    public function startSession(bool $secure): void
+    public function startSession(): void
     {
         if (session_status() === PHP_SESSION_ACTIVE) {
             return;
@@ -24,7 +24,7 @@ final class AdminAuth
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/admin',
-            'secure' => $secure,
+            'secure' => true,
             'httponly' => true,
             'samesite' => 'Strict',
         ]);

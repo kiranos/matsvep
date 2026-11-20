@@ -1,0 +1,5 @@
+# Admin access is denied unless the connecting address matches an entry below.
+# Keep loopback entries for the HTTPS SSH tunnel fallback.
+127.0.0.1/32
+::1/128
+# Add your current public address or range, one entry per line.
