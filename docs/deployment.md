@@ -1,6 +1,6 @@
 # Ubuntu 26.04 deployment
 
-Run these commands in a terminal on the Ubuntu 26.04 VPS itself; a local server console works and no SSH login to another machine is needed. The repository scripts do not deploy automatically. The current Apache site serves a small placeholder while the phase 1 crawler runs from PHP CLI; a web entry point will be deployed when the API exists.
+Run these commands in a terminal on the Ubuntu 26.04 VPS itself; a local server console works and no SSH login to another machine is needed. The repository scripts do not deploy automatically. The current Apache site serves a small placeholder from `server/public/` while the phase 1 crawler runs from PHP CLI; an API entry point will be deployed when it exists.
 
 ## First setup
 
@@ -41,7 +41,7 @@ git pull --ff-only origin main
 sudo bash deploy/setup-ubuntu.sh
 ```
 
-The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes service files, reloads Apache and reschedules the backup timer. An already running crawler keeps its original deadline; restart its service after setup if you want the 20-hour window immediately. The operator still supplies the domain, email and SSH port interactively. A previously enabled crawl timer stays enabled; setup does not enable it on a fresh VPS. Check `sudo systemctl status matsvep-crawl.timer` if crawling has been enabled.
+The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes the root-owned Apache, PHP-FPM and systemd configuration copies from `deploy/`, reloads Apache and reschedules the backup timer. An already running crawler keeps its original deadline; restart its service after setup if you want the 20-hour window immediately. It preserves `server/config/admin-allowlist.conf`. The operator still supplies the domain, email and SSH port interactively. A previously enabled crawl timer stays enabled; setup does not enable it on a fresh VPS. Check `sudo systemctl status matsvep-crawl.timer` if crawling has been enabled.
 
 ## Check crawl progress
 
@@ -103,3 +103,29 @@ Inspect the report and table counts before resuming scheduled crawling. Database
 Run `sudo bash deploy/setup-ubuntu.sh --rotate-db-password` from `/srv/matsvep`. It prompts for a new password, updates the local MySQL account and rewrites the restricted `server/.env`; it does not print the secret. Stop an active crawl before rotation and start it again afterward. Rotate the private repository deploy key in GitHub and on the VPS separately. Certbot manages certificate renewal; check `sudo systemctl list-timers '*certbot*'` and `sudo certbot renew --dry-run`.
 
 The setup uses Ubuntu 26.04 PHP 8.5 packages and its MySQL 8.4 server and Certbot Apache integration. The timers use systemd calendar scheduling, and the backup uses MySQL's consistent InnoDB dump mode. See [Ubuntu 26.04 release notes](https://documentation.ubuntu.com/release-notes/26.04/), [systemd service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html), [systemd timer](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html), and [MySQL mysqldump](https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html).
+
+## Application and system configuration
+
+The repository at `/srv/matsvep` contains deployment templates under `deploy/`. Application code, the web root (`server/public/`), `server/.env`, the admin IP allowlist (`server/config/admin-allowlist.conf`), and runtime data (`server/var/`, including sessions and reports) all stay under `server/`.
+
+The setup script installs **root-owned copies**, mode 0644, of the Apache site in `/etc/apache2/sites-available/matsvep.conf`, the dedicated PHP 8.5-FPM pool in `/etc/php/8.5/fpm/pool.d/matsvep-admin.conf`, and the crawler and backup units in `/etc/systemd/system/`. It enables the Apache site with `a2ensite`. These are normal system registrations, not symlinks into the repository. Rerunning setup refreshes them from the templates in `deploy/` and validates/reloads the services. The private database backup archives stay in `/var/backups/matsvep/`.
+
+## Admin cleanup pages
+
+The admin site is available at `https://YOUR_DOMAIN/admin/`. Apache redirects HTTP to HTTPS. Before starting a session, the PHP front controller checks `REMOTE_ADDR` against `server/config/admin-allowlist.conf` on **every request** and denies access with 403 if the file is missing, empty, unreadable, or has no matching address. Invalid lines are logged and ignored. Login lockout, a Secure session cookie, CSRF protection and an audit log provide further protection. A dedicated PHP-FPM pool runs as `matsvep` so it can read the private `.env` and use `server/var/sessions/`, which is owned by `matsvep` with mode 0700.
+
+Setup copies `server/config/admin-allowlist.conf.example` to the live allowlist **only if the live file does not exist**. It leaves later edits intact and sets the live file to `root:matsvep`, mode 0640. The example grants only loopback access; add your current public IP or CIDR to reach `/admin/` directly. Each line accepts one IPv4/IPv6 address or CIDR range; blank lines and `#` comments are allowed. Edit the file on the VPS:
+
+```bash
+sudo nano /srv/matsvep/server/config/admin-allowlist.conf
+```
+
+The next request sees the change without restarting Apache or PHP-FPM. Use your browser's public IP as seen by the VPS; proxies or VPNs can change `REMOTE_ADDR`. After deploying and running migrations, create or reset an admin account with `cd /srv/matsvep/server && php bin/create-admin.php you@example.com`. The command prompts for a password without echoing it. Setup does not create an admin account.
+
+If your public IP changes before you can edit the file, use a temporary **HTTPS** SSH tunnel from your computer. Keep the loopback entries in the allowlist. Map `YOUR_DOMAIN` to `127.0.0.1` temporarily in your computer's hosts file, then run:
+
+```sh
+ssh -L 8443:127.0.0.1:443 user@vps
+```
+
+While the tunnel is open, visit `https://YOUR_DOMAIN:8443/admin/`. The domain still matches the HTTPS certificate; the VPS sees the tunnel connection from loopback. Remove the temporary hosts-file entry when finished. This tunnel does not replace the admin login.

@@ -1,0 +1,20 @@
+{
+  "title": "Testgryta",
+  "unknown_lines": [
+    "200 g testrot",
+    "200 g testny",
+    "200 g testbas",
+    "200 g testignorera"
+  ],
+  "created_name": "testny ingrediens",
+  "other_title": "Testgryta med tomat",
+  "third_title": "Annan testgryta",
+  "known_line": "200 g tomat",
+  "known_name": "tomat",
+  "unknown_tokens": {
+    "map": "testrot",
+    "create": "testny",
+    "staple": "testbas",
+    "ignore": "testignorera"
+  }
+}

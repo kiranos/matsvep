@@ -26,6 +26,6 @@
     "scripts": {
         "test": "phpunit --configuration phpunit.xml",
         "lint": "php-cs-fixer check --config=.php-cs-fixer.dist.php --using-cache=no",
-        "stan": "phpstan analyse --configuration=phpstan.neon --no-progress"
+        "stan": "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=512M"
     }
 }

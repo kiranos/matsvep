@@ -1,0 +1,11 @@
+<VirtualHost *:80>
+    ServerName @DOMAIN@
+    DocumentRoot @PROJECT_ROOT@/server/public
+    <Directory @PROJECT_ROOT@/server/public>
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
+    ErrorLog /var/log/apache2/matsvep-error.log
+    CustomLog /var/log/apache2/matsvep-access.log combined
+</VirtualHost>
