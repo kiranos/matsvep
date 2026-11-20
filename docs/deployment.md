@@ -25,7 +25,7 @@ Run these commands in a terminal on the Ubuntu 26.04 VPS itself; a local server 
 
 6. When ready to start collecting recipes, run `sudo bash deploy/setup-ubuntu.sh --enable-crawl` from `/srv/matsvep`. This separate step enables the Köket source and starts the crawl timer. **The full crawl starts at 01:00 on the first night after you enable it.** Setup alone does not enable the source or crawl timer.
 
-The crawl timer starts at 01:00 local time. `Persistent=false` skips a missed run. The service executes `php bin/crawl-koket.php crawl --hours 6` as `matsvep` and has `RuntimeMaxSec=7h` as a hard stop. It uses `Type=exec` because systemd does not apply `RuntimeMaxSec` to `Type=oneshot`. The crawler's database lock prevents overlapping runs. The backup timer runs at 08:30 and retains fourteen days of archives.
+The crawl timer starts at 01:00 local time. `Persistent=false` skips a missed run. The service executes `php bin/crawl-koket.php crawl --hours 20` as `matsvep` and has `RuntimeMaxSec=21h` as a hard stop, leaving time for clean shutdown. It uses `Type=exec` because systemd does not apply `RuntimeMaxSec` to `Type=oneshot`. The crawler's database lock prevents overlapping runs. The backup timer runs at 22:30, after the crawl window and hard stop, and retains fourteen days of archives.
 
 ## SSH key-only login
 
@@ -41,7 +41,7 @@ git pull --ff-only origin main
 sudo bash deploy/setup-ubuntu.sh
 ```
 
-The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes the root-owned Apache, PHP-FPM and systemd configuration copies from `deploy/` and reloads Apache. It preserves `server/config/admin-allowlist.conf`. The operator still supplies the domain, email and SSH port interactively. A previously enabled crawl timer stays enabled; setup does not enable it on a fresh VPS. Check `sudo systemctl status matsvep-crawl.timer` if crawling has been enabled.
+The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes the root-owned Apache, PHP-FPM and systemd configuration copies from `deploy/`, reloads Apache and reschedules the backup timer. An already running crawler keeps its original deadline; restart its service after setup if you want the 20-hour window immediately. It preserves `server/config/admin-allowlist.conf`. The operator still supplies the domain, email and SSH port interactively. A previously enabled crawl timer stays enabled; setup does not enable it on a fresh VPS. Check `sudo systemctl status matsvep-crawl.timer` if crawling has been enabled.
 
 ## Check crawl progress
 
@@ -57,7 +57,7 @@ The report contains counts and URLs, never recipe content. A manual bounded run 
 
 ## Backups and off-server copies
 
-At 08:30, `matsvep-backup.service` uses the local MySQL root socket to run `mysqldump --single-transaction --quick` with routines, triggers and events, compresses the result, verifies gzip integrity, then atomically saves it under `/var/backups/matsvep/`. The directory is root-only. Successful runs remove archives older than fourteen days. The dump contains collected recipe data and must stay private.
+At 22:30, `matsvep-backup.service` uses the local MySQL root socket to run `mysqldump --single-transaction --quick` with routines, triggers and events, compresses the result, verifies gzip integrity, then atomically saves it under `/var/backups/matsvep/`. The directory is root-only. Successful runs remove archives older than fourteen days. The dump contains collected recipe data and must stay private.
 
 ```bash
 sudo systemctl start matsvep-backup.service

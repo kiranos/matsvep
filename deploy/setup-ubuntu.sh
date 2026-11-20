@@ -204,4 +204,5 @@ systemd-analyze verify /etc/systemd/system/matsvep-crawl.service \
     /etc/systemd/system/matsvep-backup.service \
     /etc/systemd/system/matsvep-backup.timer
 systemctl enable --now matsvep-backup.timer
+systemctl restart matsvep-backup.timer
 printf 'Setup complete. Run sudo bash deploy/setup-ubuntu.sh --enable-crawl when ready.\n'
