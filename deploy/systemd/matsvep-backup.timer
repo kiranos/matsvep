@@ -1,8 +1,8 @@
 [Unit]
-Description=Back up Matsvep at 08:30 nightly
+Description=Back up Matsvep at 22:30 nightly
 
 [Timer]
-OnCalendar=*-*-* 08:30:00
+OnCalendar=*-*-* 22:30:00
 Persistent=true
 Unit=matsvep-backup.service
 
