@@ -108,12 +108,21 @@ final class MigrationIntegrationTest extends TestCase
             $db->exec($engineSql);
             self::assertSame(0.51, EngineConfig::fromDatabase($db)->decimal('weight.pref'));
 
-            $defaults = $db->query('SELECT COUNT(*) FROM day_profile_default');
+            $defaults = $db->query('SELECT weekday, profile_code FROM day_profile_default ORDER BY weekday');
             self::assertInstanceOf(\PDOStatement::class, $defaults);
-            self::assertSame(7, (int) $defaults->fetchColumn());
-            $friday = $db->query('SELECT profile_code FROM day_profile_default WHERE weekday = 5');
-            self::assertInstanceOf(\PDOStatement::class, $friday);
-            self::assertSame('friday_treat', $friday->fetchColumn());
+            self::assertSame([
+                0 => 'weekday_leftovers',
+                1 => 'weekday_leftovers',
+                2 => 'weekday_leftovers',
+                3 => 'weekday_leftovers',
+                4 => 'weekday_leftovers',
+                5 => 'friday_treat',
+                6 => 'saturday_dinner',
+            ], $defaults->fetchAll(PDO::FETCH_KEY_PAIR));
+            foreach (range(0, 6) as $offset) {
+                $day = new \DateTimeImmutable('2026-11-22 +' . $offset . ' days');
+                self::assertSame($offset, (int) $day->format('w'));
+            }
             $db->exec("INSERT INTO household (name) VALUES ('First'), ('Second')");
             $householdQuery = $db->query('SELECT id, timezone FROM household ORDER BY id');
             self::assertInstanceOf(\PDOStatement::class, $householdQuery);
@@ -126,6 +135,10 @@ final class MigrationIntegrationTest extends TestCase
             self::assertIsNumeric($households[1]['id'] ?? null);
             $firstHousehold = (int) $households[0]['id'];
             $secondHousehold = (int) $households[1]['id'];
+            $roleColumn = $db->query("SELECT IS_NULLABLE, COLUMN_DEFAULT FROM information_schema.COLUMNS "
+                . "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user' AND COLUMN_NAME = 'role'");
+            self::assertInstanceOf(\PDOStatement::class, $roleColumn);
+            self::assertSame(['IS_NULLABLE' => 'NO', 'COLUMN_DEFAULT' => null], $roleColumn->fetch(PDO::FETCH_ASSOC));
             $db->exec("INSERT INTO `user` (email, password_hash, role) VALUES ('admin@example.com', 'test', 'admin')");
             self::assertInsertRejected(
                 $db,

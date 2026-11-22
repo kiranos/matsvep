@@ -33,7 +33,8 @@ final class AdminAuth
 
     public function login(string $email, string $password): bool
     {
-        $query = $this->db->prepare('SELECT id, password_hash, failed_attempts, locked_until FROM `user` WHERE email = ?');
+        $query = $this->db->prepare("SELECT id, password_hash, failed_attempts, locked_until FROM `user` "
+            . "WHERE email = ? AND role = 'admin'");
         $query->execute([$email]);
         $user = $query->fetch(PDO::FETCH_ASSOC);
         if (!is_array($user)) {
@@ -72,6 +73,12 @@ final class AdminAuth
         $id = $_SESSION['admin_id'] ?? null;
         $last = $_SESSION['last_active'] ?? null;
         if (!is_int($id) || !is_int($last) || time() - $last > $this->config('admin.session_idle_s')) {
+            $this->logout();
+            return null;
+        }
+        $query = $this->db->prepare("SELECT 1 FROM `user` WHERE id = ? AND role = 'admin'");
+        $query->execute([$id]);
+        if ($query->fetchColumn() === false) {
             $this->logout();
             return null;
         }

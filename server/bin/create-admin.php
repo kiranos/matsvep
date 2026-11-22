@@ -34,13 +34,28 @@ if ($minimum < 1 || mb_strlen($password) < $minimum) {
     fwrite(STDERR, "Password is too short.\n");
     exit(1);
 }
-$query = $db->prepare('INSERT INTO `user` (email, password_hash) VALUES (?, ?) ' .
-    'ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), failed_attempts = 0, locked_until = NULL');
-$query->execute([$arguments[1], password_hash($password, PASSWORD_DEFAULT)]);
-unset($password);
-$find = $db->prepare('SELECT id FROM `user` WHERE email = ?');
+$find = $db->prepare('SELECT id, role FROM `user` WHERE email = ?');
 $find->execute([$arguments[1]]);
-$id = $find->fetchColumn();
+$existing = $find->fetch(PDO::FETCH_ASSOC);
+if (is_array($existing) && $existing['role'] !== 'admin') {
+    throw new RuntimeException('A member account cannot be used as an admin account.');
+}
+$hash = password_hash($password, PASSWORD_DEFAULT);
+unset($password);
+if (is_array($existing)) {
+    $id = $existing['id'];
+    $query = $db->prepare('UPDATE `user` SET password_hash = ?, failed_attempts = 0, locked_until = NULL '
+        . "WHERE id = ? AND role = 'admin'");
+    $query->execute([$hash, $id]);
+    if ($query->rowCount() !== 1) {
+        throw new RuntimeException('Cannot update admin account.');
+    }
+} else {
+    $query = $db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')");
+    $query->execute([$arguments[1], $hash]);
+    $id = $db->lastInsertId();
+}
+unset($hash);
 if (!is_numeric($id)) {
     throw new RuntimeException('Cannot find saved admin account.');
 }

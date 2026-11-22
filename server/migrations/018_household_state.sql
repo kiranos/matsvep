@@ -10,12 +10,14 @@ CREATE TABLE household (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_sv_0900_ai_ci;
 
 ALTER TABLE `user`
-    MODIFY COLUMN role ENUM('admin', 'member') NOT NULL DEFAULT 'admin',
+    MODIFY COLUMN role ENUM('admin', 'member') NOT NULL,
     ADD COLUMN household_id BIGINT UNSIGNED NULL AFTER role,
     ADD KEY ix_user_household (household_id),
     ADD UNIQUE KEY uq_user_id_household (id, household_id),
     ADD CONSTRAINT fk_user_household FOREIGN KEY (household_id) REFERENCES household (id),
     ADD CONSTRAINT ck_user_member_household CHECK (role <> 'member' OR household_id IS NOT NULL);
+
+ALTER TABLE `user` ALTER COLUMN role DROP DEFAULT;
 
 CREATE TABLE device_token (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
