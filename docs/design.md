@@ -310,6 +310,8 @@ The family answers one joint quiz in about 5 minutes:
 
 Seeds are written with weight *W₀* = 2, so 2–3 real ratings on a feature outweigh the quiz.
 
+The saved answer keys are `dish_rating`, `cuisine_rating`, `protein_rating` and `disliked_ingredients`. Dish answers contain `ratings: [{recipe_id, choice}]`, with `choice` equal to `favourite`, `ok` or `not_for_us`. Cuisine and protein answers contain `ratings: [{code, rating}]`; disliked ingredients contain `ingredient_ids: [id]`. Reapplying onboarding synchronises only ratings whose source is still `onboarding`. It clears an omitted onboarding dish rating, recording the removal in `rating_history`, and never replaces a user rating.
+
 ### Affinity update
 
 With *x* = (rating − 3) / 2 in \[−1, 1\], every feature *f* of a rated recipe is updated as a weighted running mean, after decaying its weight by age:
@@ -320,11 +322,13 @@ W_f \leftarrow W_f\cdot 2^{-\Delta t/H},\qquad a_f \leftarrow \frac{W_f\, a_f + 
 
 - η = 1.0 for protein, cuisine, meal type and carb base. For main ingredients, η = 1/√k, where *k* is the number of main ingredients.
 - *H* = 365 days, measured from the date each rating was set. *k₀* = 3, so a feature reaches 50% confidence after about 3 ratings.
+- The calculation reads current ratings in `rated_at`, then `recipe_id` order. Each rating's contribution is weighted by `η · 2^(-age/H)` at a single UTC calculation time. Onboarding seeds retain weight `W₀`; the stored `weight_sum` gives confidence as `W/(W + k₀)`. Main ingredient IDs are distinct and staples are excluded. Tags are not learned until their feature weight is specified.
 
 ### Consistency
 
 - **Immediate:** setting or changing a rating recomputes that family's affinities at once (milliseconds for a few hundred rated recipes).
 - **Nightly rebuild:** a cron job rebuilds all affinities from `household_recipe` ratings and `onboarding_answer`. It is idempotent and is the source of truth, so config changes and corrected recipe features apply retroactively.
+- **Recipe processing:** `process-recipes.php` runs the same all-household rebuild after normalisation, feature derivation and deduplication. A standalone rebuild command is available for operators; no separate affinity timer is installed yet.
 - **Damping:** confidence weighting means a single rating can't swing a whole cuisine or protein.
 
 ## Weekly plan builder
@@ -466,6 +470,8 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Learning | `affinity.seed_weight` | 2 | Weight of onboarding seeds |
 | Learning | `affinity.conf_k0` | 3 | Ratings for 50% confidence |
 | Learning | `affinity.half_life_days` | 365 | Age decay of rating evidence |
+| Learning | `onboarding.rating.favourite` / `.ok` / `.not_for_us` | 5 / 4 / 2 | Starting dish ratings |
+| Learning | `affinity.disliked_ingredient_score` | -0.8 | Disliked ingredient seed score |
 | Filters | `filter.hide_at_or_below` | 2 | Ratings at or below this are hidden |
 | Recency | `cooldown.days.5` / `.4` / `.3` | 14 / 21 / 42 | Cooldown by rating; unrated cooked recipes use the 4★ value |
 | Day fit | `dayfit.weekday_max_minutes` / `dayfit.sunday_max_minutes` | 60 / 90 | Soft time caps on lunch-box days |
