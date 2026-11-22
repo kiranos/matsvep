@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Matsvep\Tests;
 
 use Matsvep\Database\MigrationRunner;
+use Matsvep\Engine\EngineConfig;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -90,6 +91,21 @@ final class MigrationIntegrationTest extends TestCase
                 'crawl.retry_max_s' => '3600',
                 'crawl.timeout_s' => '30',
             ], $values);
+
+            $engine = EngineConfig::fromDatabase($db);
+            self::assertSame(0.45, $engine->decimal('weight.pref'));
+            self::assertSame(60, $engine->integer('dayfit.weekday_max_minutes'));
+            self::assertSame(0.7, $engine->decimal('dayfit.leftovers.leftover_weight'));
+            self::assertSame(0.4, $engine->decimal('dayfit.friday.festive_weight'));
+            self::assertSame(0.6, $engine->decimal('dayfit.saturday.festive_weight'));
+            self::assertCount(4, $engine->stringList('dayfit.friday_tags'));
+            self::assertSame(2, $engine->integer('variety.target_days_left'));
+
+            $db->exec("UPDATE engine_config SET value = '0.51' WHERE `key` = 'weight.pref'");
+            $engineSql = file_get_contents($directory . '/017_engine_defaults.sql');
+            self::assertIsString($engineSql);
+            $db->exec($engineSql);
+            self::assertSame(0.51, EngineConfig::fromDatabase($db)->decimal('weight.pref'));
 
             $skipped = $runner->run();
             self::assertCount(count($migrationFiles), $skipped);

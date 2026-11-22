@@ -240,7 +240,7 @@ Explore applies only to unrated recipes and rewards those whose features the eng
 
 ### VarietyPen: no repeats
 
-The penalty adds up rule breaks against this week's chosen dinners and the last 7 days of `meal_log`, clamped to 0–1:
+The penalty adds up rule breaks against this week's chosen dinners and the last 7 days of `meal_log`, clamped to −1…1 after target bonuses. Weekly repeat limits and fish/vegetarian targets use the current Sunday–Saturday plan week; the previous seven days inform adjacency, while ingredient overlap compares dinners chosen for the plan:
 
 | Rule | Limit | Penalty |
 | --- | --- | --- |
@@ -448,6 +448,7 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Pref | `pref.content_weight` / `pref.rating_weight` | 1 / 3 | Content vs rating in Pref |
 | Pref | `pref.sibling_weight` | 2 | Weight of rated dish-group siblings for an unrated variant |
 | Content | `content.beta.ingredients` / `.protein` / `.cuisine` / `.meal_type` / `.carb` | 0.30 / 0.25 / 0.20 / 0.15 / 0.10 | Feature-type weights |
+| Content | `content.confidence_epsilon` | 0.000001 | Positive denominator for empty feature evidence |
 | Learning | `affinity.seed_weight` | 2 | Weight of onboarding seeds |
 | Learning | `affinity.conf_k0` | 3 | Ratings for 50% confidence |
 | Learning | `affinity.half_life_days` | 365 | Age decay of rating evidence |
@@ -455,11 +456,15 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Recency | `cooldown.days.5` / `.4` / `.3` | 14 / 21 / 42 | Cooldown by rating; unrated cooked recipes use the 4★ value |
 | Day fit | `dayfit.weekday_max_minutes` / `dayfit.sunday_max_minutes` | 60 / 90 | Soft time caps on lunch-box days |
 | Day fit | `dayfit.friday_tags` | fredagsmys, taco, pizza, burgare | Recipe tags that give `friday_treat` full DayFit |
+| Day fit | `dayfit.leftovers.leftover_weight` / `.effort_weight` | 0.7 / 0.3 | Leftover and low-effort weekday DayFit contributions |
+| Day fit | `dayfit.friday.festive_weight` | 0.4 | Festive contribution without a Friday tag |
+| Day fit | `dayfit.saturday.festive_weight` / `.low_leftover_weight` | 0.6 / 0.4 | Saturday DayFit contributions |
 | Day fit | `dayfit.softcap_factor` | 0.3 | DayFit multiplier when a cap is exceeded |
 | Variety | `variety.max_protein_week` / `.max_cuisine_week` / `.max_carb_week` | 2 / 2 / 3 | Weekly repeat limits |
 | Variety | `variety.pen.adjacent_protein` / `.protein` / `.cuisine` / `.carb` / `.overlap` | 0.5 / 0.4 / 0.3 / 0.2 / 0.3 | Penalty sizes |
 | Variety | `variety.overlap_jaccard` | 0.5 | Ingredient-overlap threshold |
-| Variety | `variety.target_fish` / `.target_veg` | 1 / 1 | Weekly targets, with bonuses 0.3 / 0.2 |
+| Variety | `variety.target_fish` / `.target_veg` | 1 / 1 | Weekly targets |
+| Variety | `variety.bonus.fish` / `.bonus.vegetarian` / `variety.target_days_left` / `variety.history_days` | 0.3 / 0.2 / 2 / 7 | Target bonuses, final days and recent meal window |
 | Skips | `skip.replace_days` | 14 | SkipPen after replacement |
 | Skips | `swipe.reject_sessions` / `swipe.reject_days` | 5 / 30 | Repeated left swipes before a SkipPen, and its length |
 | After dinner | `confirm.auto_days` | 2 | Days without an answer before a dinner counts as eaten |
