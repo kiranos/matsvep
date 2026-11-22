@@ -118,7 +118,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `leftover_keyword` | keyword, signal\_type (dish\_type / method / protein\_form), value (−1 to 1) | Keyword lists behind leftover\_score |
 | `dish_group` | id, core\_name, main\_protein, manual\_override | Variants of the same dish |
 | `duplicate_candidate` | recipe\_a, recipe\_b, similarity, status (pending / merged / not\_duplicate) | Admin review queue for possible copies |
-| `user` | id, email, password\_hash, role (admin), failed\_attempts, locked\_until, created\_at | Minimal phase 1 admin login; household linkage is added in phase 2 |
+| `user` | id, email, password\_hash, role (admin / member), household\_id (nullable for admin), failed\_attempts, locked\_until, created\_at | Admin cookie sessions and household member identities remain separate |
 | `admin_audit` | id, user\_id, action, target\_type, target\_id, before\_json, after\_json, created\_at | Records admin mutations and account activity |
 | `recipe_feature_override` | recipe\_id, main\_protein, carb\_base, cuisine, meal\_type, is\_dinner\_candidate, leftover\_score, updated\_by, updated\_at | Manual corrections reapplied after derivation |
 
@@ -126,16 +126,19 @@ The model has three layers: the **recipe database**, shared by all households; *
 
 | Table | Key columns | Purpose |
 | --- | --- | --- |
-| `household` | id, name, size, created\_at | The family; size is informational |
-| `device_token` | user\_id, platform (android / windows), refresh\_token\_hash, push\_token, last\_seen\_at | App logins and push notifications |
+| `household` | id, name, size, timezone, created\_at | The family; default time zone is `Europe/Stockholm` |
+| `device_token` | id, user\_id, platform (android / windows), refresh\_token\_hash, push\_token, expires\_at, revoked\_at, last\_seen\_at | Member app logins and push notifications; refresh tokens are rotated and stored only as hashes |
+| `household_invite` | id, household\_id, created\_by, code\_hash, expires\_at, used\_by, used\_at | One-time member invitation; plaintext code is returned only when created |
+| `api_idempotency` | user\_id, idempotency\_key, request\_hash, response\_status, response\_json, expires\_at | Stores the original result of a retryable member write per user |
 | `household_setting` | household\_id, key, value | Favourite share, plan days, planning mode, block vegetarian |
-| `day_profile` | household\_id, weekday, profile | Weekday to profile, e.g. Friday → `friday_treat` |
+| `day_profile_default` | weekday (0=Sunday through 6=Saturday), profile\_code | Seven seeded global profiles |
+| `day_profile` | household\_id, weekday, profile\_code | Optional household override of a global weekday profile |
 | `household_recipe` | household\_id, recipe\_id, status (library / removed / blocked), wishlist, rating (1–5, nullable), rating\_source (onboarding / user), rated\_at, last\_cooked\_at, times\_cooked | The family's relation to each recipe |
 | `rating_history` | household\_id, recipe\_id, old\_rating, new\_rating, source, changed\_at | Audit trail of rating changes |
 | `affinity` | household\_id, feature\_type (ingredient / cuisine / protein / carb / meal\_type / tag), feature\_value, score, weight\_sum, updated\_at | Learned taste per feature |
 | `onboarding_answer` | household\_id, question\_id, answer | Raw quiz answers, so starting ratings and seeds can be recomputed |
-| `plan` | id, household\_id, week\_start (Sunday), part (1 / 2), days, seed, status, config\_version | One planned week, or one half in split mode |
-| `plan_slot` | id, plan\_id, date, day\_profile, recipe\_id, chosen\_by (engine / family), status (proposed / chosen / cooked / not\_cooked / unconfirmed), kind (favourite / discovery), score, predicted\_pref, explanation\_json, replaced\_from\_recipe\_id | One dinner and why it was chosen |
+| `plan` | id, household\_id, week\_start (Sunday), part (1 / 2), days, seed, status, version, config\_version | One planned week or split half; version is incremented on each plan mutation |
+| `plan_slot` | id, plan\_id, household\_id, date, day\_profile, recipe\_id, chosen\_by (engine / family), status (proposed / chosen / cooked / not\_cooked / unconfirmed), kind (favourite / discovery), score, predicted\_pref, explanation\_json, replaced\_from\_recipe\_id | One household-scoped dinner and why it was chosen |
 | `carryover` | household\_id, recipe\_id, from\_slot\_id, target\_week, target\_part, status (pending / placed / expired) | Uncooked dinners pinned into the next planning |
 | `slot_skip` | household\_id, recipe\_id, reason (replaced / swipe\_rejects), skipped\_at, expires\_at | Source of SkipPen |
 | `swipe_event` | household\_id, plan\_id, date, recipe\_id, position, action (pick / next / undo), session\_id, created\_at | Every swipe; feeds swipe metrics and repeated-reject logic |
@@ -147,6 +150,14 @@ The model has three layers: the **recipe database**, shared by all households; *
 | Table | Key columns | Purpose |
 | --- | --- | --- |
 | `schema_migrations` | migration, checksum, status (started / applied), started\_at, applied\_at | Records numbered SQL files and detects changes or interrupted application |
+
+**Phase 2 storage rules.** A member must have a `household_id`; existing admins may have none. App bearer tokens are issued only for members and never authorize `/admin/`; admin cookie sessions never authorize `/api/v1`. Invite codes are single-use, expire after `household.invite_ttl_hours`, and are stored as hashes. The first registered member creates a household; another registers only with a valid invite. `day_profile_default` holds one seeded row for each Sunday–Saturday weekday, while `day_profile` stores household overrides. Composite foreign keys keep invite creators and consumers, plan slots, carryovers, swipes and meal logs within their household.
+
+Household `timezone` is an IANA time-zone name, defaulting to `Europe/Stockholm`. `week_start`, plan-slot dates, target weeks and cooked dates are household-local calendar dates. Database timestamps stay UTC. Planning at 07:00 and day-after prompts are scheduled using the household's time zone, including daylight-saving changes.
+
+**Phase 2 API contract.** `/api/v1` uses member bearer tokens with rotating, hashed per-device refresh tokens. Errors have an English `code` and structured `params`, with no display message. Reasons and events likewise contain codes and parameters; the Flutter localisation files render their text. Recipe titles and ingredient names are data, so they retain their source language. Search, wishlist, plans and decks use opaque cursors and return `next_cursor`.
+
+Queued app writes accept a client UUID in `Idempotency-Key`. The server stores the request hash, HTTP status and JSON response per user for `api.idempotency_ttl_hours`; an exact retry returns the original result, while reuse with another request returns `idempotency_key_reused`. The idempotency lookup precedes the version check so a replay of a successful choice remains successful. Choose, replace, autofill and shuffle require `expected_version`; a stale value returns HTTP 409 `plan_version_conflict` with `current_version` in `params`, and a successful result includes the incremented `version`. A right swipe is logged atomically by choose; the separate swipes endpoint records next and undo. Day-after answers, ratings and other retryable member writes also accept idempotency keys.
 
 **Derived recipe features**, set by rules during ingestion and correctable per recipe in admin:
 
@@ -443,6 +454,9 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 
 | Area | Key | Default | Meaning |
 | --- | --- | --- | --- |
+| App auth | `auth.access_ttl_minutes` / `auth.refresh_ttl_days` | 15 / 30 | Member access and rotating refresh lifetime |
+| Household | `household.invite_ttl_hours` | 72 | One-time invite validity |
+| API | `api.idempotency_ttl_hours` | 48 | Per-user retry result retention |
 | Weights | `weight.pref` / `.dayfit` / `.due` / `.explore` | 0.45 / 0.25 / 0.15 / 0.10 | Positive component weights |
 | Weights | `weight.variety` / `.skip` | 0.35 / 0.30 | Penalty weights |
 | Pref | `pref.content_weight` / `pref.rating_weight` | 1 / 3 | Content vs rating in Pref |

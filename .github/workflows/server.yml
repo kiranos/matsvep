@@ -31,6 +31,8 @@ jobs:
       - name: Install dependencies
         working-directory: server
         run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Validate OpenAPI
+        run: npx --yes @redocly/cli@latest lint --extends spec api/openapi.yaml
       - name: Validate Composer metadata
         working-directory: server
         run: composer validate --strict
