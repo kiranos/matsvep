@@ -43,7 +43,9 @@ sudo bash deploy/setup-ubuntu.sh
 
 The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes the root-owned Apache, PHP-FPM and systemd configuration copies from `deploy/`, reloads Apache and reschedules the backup timer. An already running crawler keeps its original deadline; restart its service after setup if you want the 20-hour window immediately. It preserves `server/config/admin-allowlist.conf`. The operator still supplies the domain, email and SSH port interactively. A previously enabled crawl timer stays enabled; setup does not enable it on a fresh VPS. Check `sudo systemctl status matsvep-crawl.timer` if crawling has been enabled.
 
-## Check crawl progress
+## Crawl operations
+
+### Check crawl progress
 
 ```bash
 sudo systemctl status matsvep-crawl.service
@@ -55,7 +57,7 @@ sudo -u matsvep php bin/crawl-koket.php report
 
 The report contains counts and URLs, never recipe content. A manual bounded run is `sudo systemctl start matsvep-crawl.service`; the same lock prevents a second concurrent crawler. Stop it with `sudo systemctl stop matsvep-crawl.service`, which sends SIGTERM and gives the crawler time to write its report.
 
-## Process collected recipes
+### Process collected recipes
 
 After the full crawl has finished, apply pending migrations with `sudo bash deploy/setup-ubuntu.sh` if this version has not yet been deployed. Then, from the VPS checkout, run the processing command as the service account:
 
@@ -64,7 +66,7 @@ cd /srv/matsvep/server
 sudo -u matsvep php bin/process-recipes.php
 ```
 
-It seeds ingredient and feature vocabularies, normalises ingredient lines, derives recipe features and missing time estimates, then deduplicates and groups recipes. It writes `server/var/ingredient-report.json`, `feature-report.json`, `dedupe-report.json`, and `processing-report.json`. The last report includes time coverage before and after estimation. The command is repeatable: mapped or ignored unknown ingredients, recipe feature overrides, duplicate review decisions and manually edited dish groups persist. It takes the same MySQL advisory lock as the Köket crawler for its entire run, so it fails before changing data if crawling is active. Running it can take a while on the full catalogue; use a persistent terminal session and rerun it if interrupted. No processing timer is enabled automatically.
+It seeds ingredient and feature vocabularies, normalises ingredient lines, derives recipe features and missing time estimates, then deduplicates and groups recipes. It writes `server/var/ingredient-report.json`, `feature-report.json`, `dedupe-report.json`, and `processing-report.json`. The last report includes time coverage before and after estimation and the number of previously estimated times changed by this run. The command is repeatable: mapped or ignored unknown ingredients, recipe feature overrides, duplicate review decisions and manually edited dish groups persist. It takes the same MySQL advisory lock as the Köket crawler for its entire run, so it fails before changing data if crawling is active. Running it can take a while on the full catalogue; use a persistent terminal session and rerun it if interrupted. No processing timer is enabled automatically.
 
 After deploying the parser fix, previously exhausted HTTP 200 parse failures can be queued for one more fetch. Run this only after the new parser is installed; the crawler will fetch them on its next run. Inspect the affected count first:
 

@@ -54,7 +54,8 @@ final class RecipeProcessor
         ))->run();
         $this->saveJson('ingredient-report.json', (new IngredientReport($this->db))->build());
 
-        $derived = (new FeatureDeriver($this->db, $this->seedDirectory))->run();
+        $deriver = new FeatureDeriver($this->db, $this->seedDirectory);
+        $derived = $deriver->run();
         $after = $this->timeCoverage();
         $duplicates = (new RecipeDeduplicator($this->db))->run();
         $grouped = (new DishGrouper($this->db, $this->seedDirectory))->run();
@@ -66,6 +67,7 @@ final class RecipeProcessor
             'seeded_feature_keywords' => $keywords,
             'normalisation' => $normalised,
             'derived_recipes' => $derived,
+            'time_estimates_changed' => $deriver->changedTimeEstimates(),
             'deduplication' => $duplicates + ['group_memberships_assigned' => $grouped],
             'time_coverage_before' => $before,
             'time_coverage_after' => $after,

@@ -78,6 +78,7 @@ final class RecipeProcessorIntegrationTest extends TestCase
             self::assertSame(1, $before['given']);
             self::assertSame(1, $after['estimated']);
             self::assertSame(100.0, $after['covered_share_pct']);
+            self::assertSame(0, $firstRun['time_estimates_changed']);
             $time = $db->prepare('SELECT total_time_min, total_time_source FROM recipe WHERE id = ?');
             $time->execute([$second]);
             $estimated = $time->fetch(PDO::FETCH_ASSOC);
@@ -99,6 +100,11 @@ final class RecipeProcessorIntegrationTest extends TestCase
             $db->prepare("INSERT INTO duplicate_candidate (recipe_a, recipe_b, similarity, status) " .
                 "VALUES (?, ?, 0.85, 'not_duplicate')")->execute([$first, $second]);
 
+            $db->prepare('UPDATE recipe_step SET text = ? WHERE recipe_id = ?')->execute([
+                'Låt vila 1 timme. Stek 45 min.', $second,
+            ]);
+            $db->prepare("UPDATE recipe SET total_time_min = 60, total_time_source = 'estimated' WHERE id = ?")
+                ->execute([$second]);
             $secondRun = $processor->run();
             $secondBefore = $secondRun['time_coverage_before'] ?? null;
             $secondAfter = $secondRun['time_coverage_after'] ?? null;
@@ -106,6 +112,9 @@ final class RecipeProcessorIntegrationTest extends TestCase
             self::assertIsArray($secondAfter);
             self::assertSame(100.0, $secondBefore['covered_share_pct']);
             self::assertSame(100.0, $secondAfter['covered_share_pct']);
+            self::assertSame(1, $secondRun['time_estimates_changed']);
+            $time->execute([$second]);
+            self::assertSame(45, (int) $time->fetchColumn());
             $saved = $db->prepare('SELECT main_protein, dish_group_id, dish_group_manual FROM recipe WHERE id = ?');
             $saved->execute([$first]);
             $row = $saved->fetch(PDO::FETCH_ASSOC);

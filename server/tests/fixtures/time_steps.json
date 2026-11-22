@@ -11,12 +11,54 @@
       "Baka 20–25 minuter.",
       "Låt vila 1,5 timme."
     ],
-    "minutes": 115
+    "minutes": 25
   },
   {
     "steps": [
       "Sätt ugnen på 200 grader."
     ],
     "minutes": null
+  },
+  {
+    "steps": [
+      "Marinera i 12 timmar. Stek 10 min."
+    ],
+    "minutes": 10
+  },
+  {
+    "steps": [
+      "Låt jäsa 1 timme, grädda 20 min."
+    ],
+    "minutes": 20
+  },
+  {
+    "steps": [
+      "Kyl i 30 min. Låt puttra 40 min."
+    ],
+    "minutes": 40
+  },
+  {
+    "steps": [
+      "Frys 2 timmar."
+    ],
+    "minutes": null
+  },
+  {
+    "steps": [
+      "Ställ in 2 timmar i kylskåp."
+    ],
+    "minutes": null
+  },
+  {
+    "steps": [
+      "Låt stå över natten. Grädda 30 min."
+    ],
+    "minutes": 30
+  },
+  {
+    "steps": [
+      "Låt vila 30 min och stek 5 min."
+    ],
+    "minutes": 5
   }
 ]

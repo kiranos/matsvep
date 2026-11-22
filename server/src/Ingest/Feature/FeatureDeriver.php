@@ -18,6 +18,8 @@ final class FeatureDeriver
 
     private readonly RecipeTimeEstimator $timeEstimator;
 
+    private int $changedTimeEstimates = 0;
+
     public function __construct(private readonly PDO $db, string $seedDirectory)
     {
         $this->config = new FeatureConfig($db);
@@ -37,8 +39,14 @@ final class FeatureDeriver
         }
     }
 
+    public function changedTimeEstimates(): int
+    {
+        return $this->changedTimeEstimates;
+    }
+
     public function run(?int $recipeId = null): int
     {
+        $this->changedTimeEstimates = 0;
         $sql = 'SELECT id, title, total_time_min, total_time_source FROM recipe WHERE active = TRUE';
         $arguments = [];
         if ($recipeId !== null) {
@@ -114,6 +122,9 @@ final class FeatureDeriver
                 $given = $storedSource === 'given' || ($storedSource === 'unknown' && $storedTime !== null);
                 $time = $given ? $storedTime : $this->timeEstimator->estimate($steps);
                 $timeSource = $given ? 'given' : ($time === null ? 'unknown' : 'estimated');
+                if ($storedSource === 'estimated' && $storedTime !== $time) {
+                    $this->changedTimeEstimates++;
+                }
                 $recipeData = [
                     'id' => $id,
                     'title' => $recipe['title'],
