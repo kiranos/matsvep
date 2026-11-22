@@ -73,12 +73,18 @@ final class AdminIntegrationTest extends TestCase
             (new IngredientSeeder($db))->seed($seedDirectory . '/ingredients.csv');
             (new FeatureSeeder($db))->seed($seedDirectory);
             $service = new AdminService($db, $seedDirectory);
-            $userInsert = $db->prepare('INSERT INTO `user` (email, password_hash) VALUES (?, ?)');
+            $userInsert = $db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')");
             $userInsert->execute(['admin@example.com', password_hash('correct-test-password', PASSWORD_DEFAULT)]);
             $actor = (int) $db->lastInsertId();
             $userInsert->execute(['locked@example.com', password_hash('correct-test-password', PASSWORD_DEFAULT)]);
+            $db->exec("INSERT INTO household (name) VALUES ('Test')");
+            $householdId = (int) $db->lastInsertId();
+            $memberInsert = $db->prepare("INSERT INTO `user` (email, password_hash, role, household_id) "
+                . "VALUES (?, ?, 'member', ?)");
+            $memberInsert->execute(['member@example.com', password_hash('member-password', PASSWORD_DEFAULT), $householdId]);
             $auth = new AdminAuth($db);
             $auth->startSession();
+            self::assertFalse($auth->login('member@example.com', 'member-password'));
             self::assertFalse($auth->login('admin@example.com', 'wrong-password'));
             self::assertTrue($auth->login('admin@example.com', 'correct-test-password'));
             self::assertSame($actor, $auth->userId());
@@ -215,6 +221,9 @@ final class AdminIntegrationTest extends TestCase
             $audit = $db->prepare('SELECT COUNT(*) FROM admin_audit WHERE user_id = ?');
             $audit->execute([$actor]);
             self::assertSame(11, (int) $audit->fetchColumn());
+            $db->prepare("UPDATE `user` SET role = 'member', household_id = ? WHERE id = ?")
+                ->execute([$householdId, $actor]);
+            self::assertNull($auth->userId());
             $auth->logout();
             self::assertNull($auth->userId());
         } finally {

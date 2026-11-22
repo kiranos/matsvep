@@ -1,0 +1,9 @@
+# Phase 2 household and API contract
+
+Migrations 018 and 019 add household, app identity, learning and planning state without changing any applied migration. Existing admin users retain `role = admin` and may have no household; app members must have one. New user inserts must name the role because the column has no default. `/api/v1` bearer access is member-only. `/admin/` keeps its separate allowlisted, cookie-based admin session and never accepts app tokens. Token issuance, refresh and access enforcement are specified here; controllers and engine actions are later work.
+
+The first member registers with a new household. Another member joins using a one-time invite code. Only its hash is persisted; use is atomic, single-use and bounded by `household.invite_ttl_hours`. Device refresh tokens are also stored only as hashes and rotated. Retryable app writes accept a per-user UUID idempotency key; the stored request hash, status and JSON response allow exact retries for `api.idempotency_ttl_hours`. Reusing a key for another request is a conflict.
+
+Plan mutations use optimistic concurrency. Choose, replace, autofill and shuffle send the expected plan version, return the new version and reject stale writes with `plan_version_conflict`. An exact idempotent retry returns its original result before version comparison. A pick swipe is saved with the choice atomically; next and undo use the swipe endpoint. Reasons, events and errors are English codes with parameters, leaving display text to Flutter localisation.
+
+The seven default weekday profiles live in `day_profile_default`, and `day_profile` holds household overrides. A separate table avoids nullable-global-row uniqueness and generated-column foreign-key restrictions in MySQL. The household stores an IANA time zone; plan and meal dates are local to it, while timestamps are UTC. Composite foreign keys prevent cross-household references in invites, slots, carryovers, swipes and meal logs.

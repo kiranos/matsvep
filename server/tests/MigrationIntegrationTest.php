@@ -7,6 +7,7 @@ namespace Matsvep\Tests;
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Engine\EngineConfig;
 use PDO;
+use PDOException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -107,6 +108,73 @@ final class MigrationIntegrationTest extends TestCase
             $db->exec($engineSql);
             self::assertSame(0.51, EngineConfig::fromDatabase($db)->decimal('weight.pref'));
 
+            $defaults = $db->query('SELECT weekday, profile_code FROM day_profile_default ORDER BY weekday');
+            self::assertInstanceOf(\PDOStatement::class, $defaults);
+            self::assertSame([
+                0 => 'weekday_leftovers',
+                1 => 'weekday_leftovers',
+                2 => 'weekday_leftovers',
+                3 => 'weekday_leftovers',
+                4 => 'weekday_leftovers',
+                5 => 'friday_treat',
+                6 => 'saturday_dinner',
+            ], $defaults->fetchAll(PDO::FETCH_KEY_PAIR));
+            foreach (range(0, 6) as $offset) {
+                $day = new \DateTimeImmutable('2026-11-22 +' . $offset . ' days');
+                self::assertSame($offset, (int) $day->format('w'));
+            }
+            $db->exec("INSERT INTO household (name) VALUES ('First'), ('Second')");
+            $householdQuery = $db->query('SELECT id, timezone FROM household ORDER BY id');
+            self::assertInstanceOf(\PDOStatement::class, $householdQuery);
+            $households = $householdQuery->fetchAll(PDO::FETCH_ASSOC);
+            self::assertCount(2, $households);
+            self::assertIsArray($households[0]);
+            self::assertIsArray($households[1]);
+            self::assertSame('Europe/Stockholm', $households[0]['timezone'] ?? null);
+            self::assertIsNumeric($households[0]['id'] ?? null);
+            self::assertIsNumeric($households[1]['id'] ?? null);
+            $firstHousehold = (int) $households[0]['id'];
+            $secondHousehold = (int) $households[1]['id'];
+            $roleColumn = $db->query("SELECT IS_NULLABLE, COLUMN_DEFAULT FROM information_schema.COLUMNS "
+                . "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user' AND COLUMN_NAME = 'role'");
+            self::assertInstanceOf(\PDOStatement::class, $roleColumn);
+            self::assertSame(['IS_NULLABLE' => 'NO', 'COLUMN_DEFAULT' => null], $roleColumn->fetch(PDO::FETCH_ASSOC));
+            $db->exec("INSERT INTO `user` (email, password_hash, role) VALUES ('admin@example.com', 'test', 'admin')");
+            self::assertInsertRejected(
+                $db,
+                'INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, ?)',
+                ['missing@example.com', 'test', 'member']
+            );
+            $member = $db->prepare('INSERT INTO `user` (email, password_hash, role, household_id) VALUES (?, ?, ?, ?)');
+            $member->execute(['first@example.com', 'test', 'member', $firstHousehold]);
+            $firstMember = (int) $db->lastInsertId();
+            $member->execute(['second@example.com', 'test', 'member', $secondHousehold]);
+            $secondMember = (int) $db->lastInsertId();
+            $inviteSql = 'INSERT INTO household_invite (household_id, created_by, code_hash, expires_at) '
+                . 'VALUES (?, ?, ?, UTC_TIMESTAMP(6) + INTERVAL 72 HOUR)';
+            self::assertInsertRejected($db, $inviteSql, [$firstHousehold, $secondMember, str_repeat('a', 64)]);
+            $db->prepare($inviteSql)->execute([$firstHousehold, $firstMember, str_repeat('a', 64)]);
+            $planSql = 'INSERT INTO plan (household_id, week_start, part, days, seed, config_version) '
+                . 'VALUES (?, ?, 1, ?, ?, 1)';
+            self::assertInsertRejected($db, $planSql, [$firstHousehold, '2026-11-23', '["2026-11-23"]', str_repeat('b', 64)]);
+            $db->prepare($planSql)->execute([$firstHousehold, '2026-11-22', '["2026-11-22"]', str_repeat('b', 64)]);
+            $planId = (int) $db->lastInsertId();
+            $slotSql = 'INSERT INTO plan_slot (plan_id, household_id, date, day_profile) VALUES (?, ?, ?, ?)';
+            self::assertInsertRejected($db, $slotSql, [$planId, $secondHousehold, '2026-11-22', 'weekday_leftovers']);
+            $db->prepare($slotSql)->execute([$planId, $firstHousehold, '2026-11-22', 'weekday_leftovers']);
+            $idempotencySql = 'INSERT INTO api_idempotency '
+                . '(user_id, idempotency_key, request_hash, response_status, response_json, expires_at) '
+                . 'VALUES (?, ?, ?, 200, ?, UTC_TIMESTAMP(6) + INTERVAL 48 HOUR)';
+            $key = '11111111-1111-4111-8111-111111111111';
+            $db->prepare($idempotencySql)->execute([$firstMember, $key, str_repeat('c', 64), '{}']);
+            self::assertInsertRejected($db, $idempotencySql, [$firstMember, $key, str_repeat('c', 64), '{}']);
+            $db->prepare($idempotencySql)->execute([$secondMember, $key, str_repeat('c', 64), '{}']);
+            $newSettings = $db->prepare('SELECT value FROM engine_config WHERE `key` = ?');
+            $newSettings->execute(['household.invite_ttl_hours']);
+            self::assertSame('72', $newSettings->fetchColumn());
+            $newSettings->execute(['api.idempotency_ttl_hours']);
+            self::assertSame('48', $newSettings->fetchColumn());
+
             $skipped = $runner->run();
             self::assertCount(count($migrationFiles), $skipped);
             foreach ($skipped as $line) {
@@ -125,4 +193,15 @@ final class MigrationIntegrationTest extends TestCase
             rmdir($directory);
         }
     }
+    /** @param list<int|string> $values */
+    private static function assertInsertRejected(PDO $db, string $sql, array $values): void
+    {
+        try {
+            $db->prepare($sql)->execute($values);
+            self::fail('Expected the database constraint to reject the insert.');
+        } catch (PDOException $error) {
+            self::assertNotSame('', $error->getMessage());
+        }
+    }
+
 }

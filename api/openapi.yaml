@@ -1,16 +1,25 @@
 openapi: 3.0.3
 info:
   title: Matsvep API
-  version: 0.1.0
-  description: Phase 1 recipe catalogue contract. Remaining API operations are specified in phase 2.
+  version: 0.2.0
+  description: Household, planning and recipe contract. Operations return English codes with parameters, never display text; recipe content is data.
 servers:
   - url: /api/v1
+tags:
+  - name: Health
+  - name: Auth
+  - name: Household
+  - name: Settings
+  - name: Onboarding
+  - name: Plans
+  - name: Recipes
 security:
   - bearerAuth: []
 paths:
   /health:
     get:
       operationId: getHealth
+      tags: [Health]
       summary: Check API health
       security: []
       responses:
@@ -23,6 +32,7 @@ paths:
   /recipes/{id}:
     get:
       operationId: getRecipe
+      tags: [Recipes]
       summary: Get a recipe and its source attribution
       description: Steps are omitted when the primary source uses index_only display mode.
       parameters:
@@ -47,6 +57,7 @@ paths:
   /recipes/search:
     get:
       operationId: searchRecipes
+      tags: [Recipes]
       summary: Search the local recipe catalogue
       description: Returns active recipes matching title or ingredient text. Search uses cursor pagination.
       parameters:
@@ -78,13 +89,850 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  "/auth/register":
+    post:
+      operationId: registerMember
+      summary: "Create a household or join with a one-time invite"
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AuthTokens"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+      security: []
+  "/auth/token":
+    post:
+      operationId: createAppToken
+      summary: "Issue member app tokens"
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AuthTokens"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+      security: []
+  "/auth/refresh":
+    post:
+      operationId: refreshAppToken
+      summary: "Rotate a device refresh token"
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AuthTokens"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+      security: []
+  "/auth/revoke":
+    post:
+      operationId: revokeAppToken
+      summary: "Revoke the current device refresh token"
+      tags:
+        - Auth
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/EventResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+  "/household":
+    get:
+      operationId: getHousehold
+      summary: "Get the member household"
+      tags:
+        - Household
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Household"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+    patch:
+      operationId: updateHousehold
+      summary: "Update household name, size or time zone"
+      tags:
+        - Household
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/HouseholdPatch"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Household"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/household/invites":
+    post:
+      operationId: createHouseholdInvite
+      summary: "Create a single-use expiring invite"
+      tags:
+        - Household
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/InviteCreateRequest"
+      responses:
+        "201":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/InviteResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+  "/household/settings":
+    get:
+      operationId: getHouseholdSettings
+      summary: "Get effective household settings"
+      tags:
+        - Settings
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/HouseholdSettings"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+    patch:
+      operationId: updateHouseholdSettings
+      summary: "Update household settings"
+      tags:
+        - Settings
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/HouseholdSettingsPatch"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/HouseholdSettings"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/household/day-profiles":
+    get:
+      operationId: getDayProfiles
+      summary: "Get effective Sunday-to-Saturday day profiles"
+      tags:
+        - Settings
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/DayProfileList"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+    put:
+      operationId: setDayProfiles
+      summary: "Replace the household day-profile overrides"
+      tags:
+        - Settings
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/DayProfileList"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/DayProfileList"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/devices/current":
+    patch:
+      operationId: updateCurrentDevice
+      summary: "Update the current app device push token"
+      tags:
+        - Auth
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/DevicePatch"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Device"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+  "/onboarding/questions":
+    get:
+      operationId: listOnboardingQuestions
+      summary: "List onboarding question codes and data options"
+      tags:
+        - Onboarding
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/OnboardingQuestions"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+  "/onboarding/answers":
+    get:
+      operationId: getOnboardingAnswers
+      summary: "Get saved household onboarding answers"
+      tags:
+        - Onboarding
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/OnboardingAnswers"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+  "/onboarding/answers/{question_id}":
+    put:
+      operationId: saveOnboardingAnswer
+      summary: "Save or replace an onboarding answer"
+      tags:
+        - Onboarding
+      parameters:
+        -
+          "$ref": "#/components/parameters/QuestionId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/OnboardingAnswerRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/OnboardingAnswer"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/onboarding/complete":
+    post:
+      operationId: completeOnboarding
+      summary: "Apply starting ratings and affinity seeds"
+      tags:
+        - Onboarding
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/EventResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+  "/plans":
+    get:
+      operationId: listPlans
+      summary: "List household plans by local week"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/PlanPage"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+    post:
+      operationId: preparePlan
+      summary: "Prepare a week or split-week plan"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/PlanCreateRequest"
+      responses:
+        "201":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Plan"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/plans/{plan_id}":
+    get:
+      operationId: getPlan
+      summary: "Get a plan with its current version and slots"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Plan"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+  "/plans/{plan_id}/deck":
+    get:
+      operationId: getDeck
+      summary: "Get ranked cards for one local plan date"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+        -
+          "$ref": "#/components/parameters/LocalDate"
+        -
+          "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/DeckPage"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+  "/plans/{plan_id}/slots/{slot_id}/choose":
+    post:
+      operationId: choosePlanSlot
+      summary: "Choose a recipe and optionally record a pick swipe atomically"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+        -
+          "$ref": "#/components/parameters/SlotId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ChooseRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/PlanChangeResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/plans/{plan_id}/slots/{slot_id}/replace":
+    post:
+      operationId: replacePlanSlot
+      summary: "Replace a chosen dinner"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+        -
+          "$ref": "#/components/parameters/SlotId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ChooseRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/PlanChangeResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/plans/{plan_id}/autofill":
+    post:
+      operationId: autofillPlan
+      summary: "Choose top cards for all remaining open days"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ExpectedPlanVersion"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/PlanChangeResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+  "/plans/{plan_id}/shuffle":
+    post:
+      operationId: shufflePlan
+      summary: "Reseed open days while retaining chosen dinners"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ExpectedPlanVersion"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/PlanChangeResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+  "/plans/{plan_id}/swipes":
+    post:
+      operationId: recordSwipe
+      summary: "Record next or undo for the current deck session"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/SwipeRequest"
+      responses:
+        "201":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SwipeResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+  "/plans/{plan_id}/slots/{slot_id}/answer":
+    post:
+      operationId: answerAfterDinner
+      summary: "Confirm cooking or choose a not-cooked action"
+      tags:
+        - Plans
+      parameters:
+        -
+          "$ref": "#/components/parameters/PlanId"
+        -
+          "$ref": "#/components/parameters/SlotId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/AfterDinnerRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AfterDinnerResult"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/recipes/{id}/rating":
+    put:
+      operationId: setRecipeRating
+      summary: "Set or change the shared household star rating"
+      tags:
+        - Recipes
+      parameters:
+        -
+          "$ref": "#/components/parameters/RecipeId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/RatingRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/HouseholdRecipeState"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          "$ref": "#/components/responses/Conflict"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+  "/recipes/{id}/wishlist":
+    put:
+      operationId: setRecipeWishlist
+      summary: "Set the household wishlist flag"
+      tags:
+        - Recipes
+      parameters:
+        -
+          "$ref": "#/components/parameters/RecipeId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/WishlistRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/HouseholdRecipeState"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+  "/recipes/{id}/library-status":
+    put:
+      operationId: setRecipeLibraryStatus
+      summary: "Set library, removed or blocked status"
+      tags:
+        - Recipes
+      parameters:
+        -
+          "$ref": "#/components/parameters/RecipeId"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/LibraryStatusRequest"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/HouseholdRecipeState"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+  "/wishlist":
+    get:
+      operationId: getWishlist
+      summary: "List wishlisted recipes"
+      tags:
+        - Recipes
+      parameters:
+        -
+          "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Request succeeded"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/RecipePage"
+        "400":
+          "$ref": "#/components/responses/BadRequest"
+        "401":
+          "$ref": "#/components/responses/Unauthorized"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Token issuance is part of the phase 2 auth contract and implementation.
+      description: Short-lived member app access token only. Admin uses an isolated HTTPS cookie session; neither auth mechanism grants the other role.
   responses:
     BadRequest:
       description: Invalid request
@@ -104,14 +952,46 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: Member access is forbidden or belongs to another household
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Conflict:
+      description: State conflict; plan_version_conflict includes current_version in params
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: plan_version_conflict
+            params:
+              current_version: 4
+    Unprocessable:
+      description: Valid JSON with invalid domain values
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    RateLimited:
+      description: Request rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
   schemas:
     ApiError:
       type: object
-      required: [code, message]
+      required: [code, params]
       properties:
         code:
           type: string
-        message:
+          enum: [invalid_request, validation_failed, invalid_credentials, access_token_expired, refresh_token_invalid, forbidden, not_found, invite_invalid, invite_expired, invite_used, idempotency_key_reused, plan_version_conflict, plan_not_ready, slot_not_open, recipe_blocked, recipe_in_cooldown, already_answered, invalid_cursor, no_candidates, rate_limited]
+        params:
+          type: object
+          additionalProperties: true
+        request_id:
           type: string
     Health:
       type: object
@@ -306,3 +1186,898 @@ components:
         next_cursor:
           type: string
           nullable: true
+
+    Reason:
+      type: object
+      required:
+        - code
+        - params
+      properties:
+        code:
+          type: string
+          enum:
+            - rated_stars
+            - similar_rated_recipe
+            - liked_dish_group_variant
+            - not_cooked_recently
+            - good_for_leftovers
+            - friday_treat
+            - saturday_dinner
+            - new_cuisine
+            - carried_over
+            - wishlisted
+            - inactive_recipe
+            - not_dinner_candidate
+            - blocked
+            - removed
+            - vegetarian_blocked
+            - low_rating
+            - cooldown
+            - already_chosen
+        params:
+          type: object
+          additionalProperties: true
+    Event:
+      type: object
+      required:
+        - code
+        - params
+      properties:
+        code:
+          type: string
+          enum:
+            - planning_ready
+            - plan_prepared
+            - recipe_chosen
+            - recipe_replaced
+            - plan_autofilled
+            - plan_shuffled
+            - swipe_recorded
+            - dinner_confirmed
+            - dinner_not_cooked
+            - rating_saved
+            - wishlist_updated
+            - library_status_updated
+            - invite_created
+            - onboarding_answer_saved
+            - onboarding_completed
+            - settings_updated
+            - day_profiles_updated
+            - device_updated
+            - token_revoked
+        params:
+          type: object
+          additionalProperties: true
+    EventResult:
+      type: object
+      required:
+        - event
+      properties:
+        event:
+          "$ref": "#/components/schemas/Event"
+    Household:
+      type: object
+      required:
+        - id
+        - name
+        - size
+        - timezone
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+          minimum: 1
+        timezone:
+          type: string
+          example: Europe/Stockholm
+        created_at:
+          type: string
+          format: date-time
+    HouseholdPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          format: int64
+          minimum: 1
+        timezone:
+          type: string
+          description: "IANA time zone; planning and day-after scheduling use this zone."
+      minProperties: 1
+    AppUser:
+      type: object
+      required:
+        - id
+        - email
+        - role
+        - household_id
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - member
+        household_id:
+          type: integer
+          format: int64
+    AuthTokens:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in_s
+        - user
+        - household
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum:
+            - bearer
+        expires_in_s:
+          type: integer
+          format: int64
+          minimum: 1
+        user:
+          "$ref": "#/components/schemas/AppUser"
+        household:
+          "$ref": "#/components/schemas/Household"
+    NewHouseholdRegistration:
+      type: object
+      required:
+        - email
+        - password
+        - platform
+        - household_name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        platform:
+          type: string
+          enum:
+            - android
+            - windows
+        household_name:
+          type: string
+          minLength: 1
+        household_size:
+          type: integer
+          format: int64
+          minimum: 1
+        timezone:
+          type: string
+          description: "IANA time zone; defaults to Europe/Stockholm."
+      additionalProperties: false
+    InviteRegistration:
+      type: object
+      required:
+        - email
+        - password
+        - platform
+        - invite_code
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        platform:
+          type: string
+          enum:
+            - android
+            - windows
+        invite_code:
+          type: string
+          minLength: 1
+      additionalProperties: false
+    RegisterRequest:
+      oneOf:
+        -
+          "$ref": "#/components/schemas/NewHouseholdRegistration"
+        -
+          "$ref": "#/components/schemas/InviteRegistration"
+      description: "The first member creates a household; later members use an unexpired single-use invite."
+    TokenRequest:
+      type: object
+      required:
+        - email
+        - password
+        - platform
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        platform:
+          type: string
+          enum:
+            - android
+            - windows
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    InviteCreateRequest:
+      type: object
+      properties: {}
+    InviteResult:
+      type: object
+      required:
+        - invite_code
+        - expires_at
+        - event
+      properties:
+        invite_code:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        event:
+          "$ref": "#/components/schemas/Event"
+    DevicePatch:
+      type: object
+      properties:
+        push_token:
+          type: string
+          nullable: true
+      minProperties: 1
+    Device:
+      type: object
+      required:
+        - id
+        - platform
+        - push_token_registered
+        - last_seen_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        platform:
+          type: string
+          enum:
+            - android
+            - windows
+        push_token_registered:
+          type: boolean
+        last_seen_at:
+          type: string
+          format: date-time
+    HouseholdSettings:
+      type: object
+      required:
+        - favourite_share
+        - plan_days
+        - planning_mode
+        - block_vegetarian
+      properties:
+        favourite_share:
+          type: number
+          minimum: 0
+          maximum: 1
+        plan_days:
+          type: string
+          enum:
+            - all_seven
+            - sunday_thursday
+        planning_mode:
+          type: string
+          enum:
+            - whole_week
+            - split_week
+        block_vegetarian:
+          type: boolean
+    HouseholdSettingsPatch:
+      type: object
+      properties:
+        favourite_share:
+          type: number
+          minimum: 0
+          maximum: 1
+        plan_days:
+          type: string
+          enum:
+            - all_seven
+            - sunday_thursday
+        planning_mode:
+          type: string
+          enum:
+            - whole_week
+            - split_week
+        block_vegetarian:
+          type: boolean
+      minProperties: 1
+    DayProfile:
+      type: object
+      required:
+        - weekday
+        - profile_code
+      properties:
+        weekday:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: "0 is Sunday; 6 is Saturday."
+        profile_code:
+          type: string
+          enum:
+            - weekday_leftovers
+            - friday_treat
+            - saturday_dinner
+    DayProfileList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/DayProfile"
+          minItems: 7
+          maxItems: 7
+    OnboardingOption:
+      type: object
+      properties:
+        code:
+          type: string
+          nullable: true
+        recipe_id:
+          type: integer
+          format: int64
+          nullable: true
+        ingredient_id:
+          type: integer
+          format: int64
+          nullable: true
+    OnboardingQuestion:
+      type: object
+      required:
+        - question_id
+        - kind
+        - options
+      properties:
+        question_id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - dish_rating
+            - cuisine_rating
+            - protein_rating
+            - disliked_ingredients
+        options:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OnboardingOption"
+    OnboardingQuestions:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OnboardingQuestion"
+    OnboardingAnswerRequest:
+      type: object
+      required:
+        - answer
+      properties:
+        answer:
+          type: object
+          additionalProperties: true
+    OnboardingAnswer:
+      type: object
+      required:
+        - question_id
+        - answer
+        - answered_at
+      properties:
+        question_id:
+          type: string
+        answer:
+          type: object
+          additionalProperties: true
+        answered_at:
+          type: string
+          format: date-time
+    OnboardingAnswers:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OnboardingAnswer"
+    ScoreBreakdown:
+      type: object
+      required:
+        - pref
+        - dayfit
+        - due
+        - explore
+        - variety_pen
+        - skip_pen
+        - wishlist_bonus
+        - total
+      properties:
+        pref:
+          type: number
+        dayfit:
+          type: number
+        due:
+          type: number
+        explore:
+          type: number
+        variety_pen:
+          type: number
+        skip_pen:
+          type: number
+        wishlist_bonus:
+          type: number
+        total:
+          type: number
+    PlanSlot:
+      type: object
+      required:
+        - id
+        - date
+        - day_profile
+        - status
+        - reasons
+      properties:
+        id:
+          type: integer
+          format: int64
+        date:
+          type: string
+          format: date
+        day_profile:
+          type: string
+        recipe_id:
+          type: integer
+          format: int64
+          nullable: true
+        chosen_by:
+          type: string
+          enum:
+            - engine
+            - family
+        status:
+          type: string
+          enum:
+            - proposed
+            - chosen
+            - cooked
+            - not_cooked
+            - unconfirmed
+        kind:
+          type: string
+          enum:
+            - favourite
+            - discovery
+        score:
+          type: number
+          nullable: true
+        predicted_pref:
+          type: number
+          nullable: true
+        reasons:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Reason"
+        breakdown:
+          "$ref": "#/components/schemas/ScoreBreakdown"
+    Plan:
+      type: object
+      required:
+        - id
+        - week_start
+        - part
+        - days
+        - status
+        - version
+        - config_version
+        - slots
+      properties:
+        id:
+          type: integer
+          format: int64
+        week_start:
+          type: string
+          format: date
+        part:
+          type: integer
+          enum:
+            - 1
+            - 2
+        days:
+          type: array
+          items:
+            type: string
+            format: date
+        status:
+          type: string
+          enum:
+            - preparing
+            - ready
+            - completed
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        config_version:
+          type: integer
+          format: int64
+          minimum: 1
+        slots:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PlanSlot"
+    PlanPage:
+      type: object
+      required:
+        - items
+        - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Plan"
+        next_cursor:
+          type: string
+          nullable: true
+    PlanCreateRequest:
+      type: object
+      required:
+        - week_start
+        - part
+      properties:
+        week_start:
+          type: string
+          format: date
+        part:
+          type: integer
+          enum:
+            - 1
+            - 2
+    DeckCard:
+      type: object
+      required:
+        - recipe
+        - kind
+        - reasons
+        - breakdown
+      properties:
+        recipe:
+          "$ref": "#/components/schemas/RecipeSummary"
+        kind:
+          type: string
+          enum:
+            - favourite
+            - discovery
+        reasons:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Reason"
+        breakdown:
+          "$ref": "#/components/schemas/ScoreBreakdown"
+    DeckPage:
+      type: object
+      required:
+        - plan_id
+        - date
+        - version
+        - items
+        - next_cursor
+      properties:
+        plan_id:
+          type: integer
+          format: int64
+        date:
+          type: string
+          format: date
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/DeckCard"
+        next_cursor:
+          type: string
+          nullable: true
+    ExpectedPlanVersion:
+      type: object
+      required:
+        - expected_version
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    PickSwipe:
+      type: object
+      required:
+        - session_id
+        - position
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          minimum: 0
+    ChooseRequest:
+      type: object
+      required:
+        - expected_version
+        - recipe_id
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+        recipe_id:
+          type: integer
+          format: int64
+          minimum: 1
+        swipe:
+          "$ref": "#/components/schemas/PickSwipe"
+    PlanChangeResult:
+      type: object
+      required:
+        - version
+        - plan
+        - event
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        plan:
+          "$ref": "#/components/schemas/Plan"
+        event:
+          "$ref": "#/components/schemas/Event"
+    SwipeRequest:
+      type: object
+      required:
+        - date
+        - recipe_id
+        - position
+        - action
+        - session_id
+      properties:
+        date:
+          type: string
+          format: date
+        recipe_id:
+          type: integer
+          format: int64
+          minimum: 1
+        position:
+          type: integer
+          minimum: 0
+        action:
+          type: string
+          enum:
+            - next
+            - undo
+        session_id:
+          type: string
+          format: uuid
+    SwipeResult:
+      type: object
+      required:
+        - id
+        - event
+      properties:
+        id:
+          type: integer
+          format: int64
+        event:
+          "$ref": "#/components/schemas/Event"
+    CookedAnswerRequest:
+      type: object
+      required:
+        - outcome
+      properties:
+        outcome:
+          type: string
+          enum:
+            - cooked
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+      additionalProperties: false
+      description: "Rating is required when the recipe has never been rated; otherwise it may confirm or change the existing rating."
+    NotCookedAnswerRequest:
+      type: object
+      required:
+        - outcome
+        - not_cooked_action
+      properties:
+        outcome:
+          type: string
+          enum:
+            - not_cooked
+        not_cooked_action:
+          type: string
+          enum:
+            - carryover
+            - wishlist
+            - remove
+      additionalProperties: false
+    AfterDinnerRequest:
+      oneOf:
+        -
+          "$ref": "#/components/schemas/CookedAnswerRequest"
+        -
+          "$ref": "#/components/schemas/NotCookedAnswerRequest"
+    AfterDinnerResult:
+      type: object
+      required:
+        - slot
+        - event
+      properties:
+        slot:
+          "$ref": "#/components/schemas/PlanSlot"
+        event:
+          "$ref": "#/components/schemas/Event"
+    RatingRequest:
+      type: object
+      required:
+        - rating
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+    WishlistRequest:
+      type: object
+      required:
+        - wishlist
+      properties:
+        wishlist:
+          type: boolean
+    LibraryStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - library
+            - removed
+            - blocked
+    HouseholdRecipeState:
+      type: object
+      required:
+        - recipe_id
+        - status
+        - wishlist
+        - rating
+        - event
+      properties:
+        recipe_id:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+            - library
+            - removed
+            - blocked
+        wishlist:
+          type: boolean
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+        rating_source:
+          type: string
+          enum:
+            - onboarding
+            - user
+        event:
+          "$ref": "#/components/schemas/Event"
+    RecipePage:
+      type: object
+      required:
+        - items
+        - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/RecipeSummary"
+        next_cursor:
+          type: string
+          nullable: true
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: "Client UUID. A repeated key for the same user and request returns the original status and body for the configured retention window; a changed request returns idempotency_key_reused."
+      schema:
+        type: string
+        format: uuid
+    PlanId:
+      name: plan_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    SlotId:
+      name: slot_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    RecipeId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    QuestionId:
+      name: question_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    LocalDate:
+      name: date
+      in: query
+      required: true
+      description: "Household-local date in the plan."
+      schema:
+        type: string
+        format: date
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: "Opaque cursor from the previous page."
+      schema:
+        type: string

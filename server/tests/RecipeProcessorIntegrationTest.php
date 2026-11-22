@@ -87,7 +87,7 @@ final class RecipeProcessorIntegrationTest extends TestCase
             self::assertSame(45, (int) $estimated['total_time_min']);
             self::assertSame('estimated', $estimated['total_time_source']);
 
-            $user = $db->prepare('INSERT INTO `user` (email, password_hash) VALUES (?, ?)');
+            $user = $db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')");
             $user->execute(['admin@example.com', password_hash('test-password', PASSWORD_DEFAULT)]);
             $actor = (int) $db->lastInsertId();
             $override = $db->prepare('INSERT INTO recipe_feature_override (recipe_id, main_protein, updated_by) VALUES (?, ?, ?)');
