@@ -16,11 +16,16 @@ final class FeatureDeriver
 
     private readonly ProteinCandidateMatcher $proteinCandidates;
 
+    private readonly RecipeTimeEstimator $timeEstimator;
+
+    private int $changedTimeEstimates = 0;
+
     public function __construct(private readonly PDO $db, string $seedDirectory)
     {
         $this->config = new FeatureConfig($db);
         $this->vocabulary = new FeatureVocabulary($db, $seedDirectory);
         $this->proteinCandidates = new ProteinCandidateMatcher($db, $seedDirectory);
+        $this->timeEstimator = new RecipeTimeEstimator($seedDirectory);
         if ($this->vocabulary->leftoverKeywords['dish_type'] === []) {
             throw new RuntimeException('Seed feature keywords before deriving recipes.');
         }
@@ -34,9 +39,15 @@ final class FeatureDeriver
         }
     }
 
+    public function changedTimeEstimates(): int
+    {
+        return $this->changedTimeEstimates;
+    }
+
     public function run(?int $recipeId = null): int
     {
-        $sql = 'SELECT id, title, total_time_min FROM recipe WHERE active = TRUE';
+        $this->changedTimeEstimates = 0;
+        $sql = 'SELECT id, title, total_time_min, total_time_source FROM recipe WHERE active = TRUE';
         $arguments = [];
         if ($recipeId !== null) {
             $sql .= ' AND id = ?';
@@ -66,7 +77,8 @@ final class FeatureDeriver
         );
         $update = $this->db->prepare(
             'UPDATE recipe SET main_protein = ?, carb_base = ?, cuisine = ?, meal_type = ?, ' .
-            'is_dinner_candidate = ?, is_vegetarian = ?, leftover_score = ?, festive_score = ?, effort = ? WHERE id = ?'
+            'is_dinner_candidate = ?, is_vegetarian = ?, leftover_score = ?, festive_score = ?, effort = ?, ' .
+            'total_time_min = ?, total_time_source = ? WHERE id = ?'
         );
         $count = 0;
         $this->db->beginTransaction();
@@ -104,10 +116,19 @@ final class FeatureDeriver
                 $tags = array_values(array_filter($tagQuery->fetchAll(PDO::FETCH_COLUMN), 'is_string'));
                 $stepQuery->execute([$id]);
                 $steps = array_values(array_filter($stepQuery->fetchAll(PDO::FETCH_COLUMN), 'is_string'));
+                $storedTime = is_numeric($recipe['total_time_min'] ?? null)
+                    ? (int) $recipe['total_time_min'] : null;
+                $storedSource = $recipe['total_time_source'] ?? 'unknown';
+                $given = $storedSource === 'given' || ($storedSource === 'unknown' && $storedTime !== null);
+                $time = $given ? $storedTime : $this->timeEstimator->estimate($steps);
+                $timeSource = $given ? 'given' : ($time === null ? 'unknown' : 'estimated');
+                if ($storedSource === 'estimated' && $storedTime !== $time) {
+                    $this->changedTimeEstimates++;
+                }
                 $recipeData = [
                     'id' => $id,
                     'title' => $recipe['title'],
-                    'total_time_min' => $recipe['total_time_min'] ?? null,
+                    'total_time_min' => $time,
                 ];
                 $features = $this->deriveOne($recipeData, $lineRows, $parts, $tags, $steps, $setMain);
                 $overrideQuery->execute([$id]);
@@ -120,7 +141,7 @@ final class FeatureDeriver
                         }
                     }
                 }
-                $update->execute([...$features, $id]);
+                $update->execute([...$features, $time, $timeSource, $id]);
                 $count++;
             }
             $this->db->commit();

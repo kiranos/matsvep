@@ -128,7 +128,7 @@ final class KoketRecipeParser
         $headings = $this->sectionHeadings($xpath);
         $ingredients = $this->ingredientLines($recipe['recipeIngredient'] ?? null, $headings);
         $steps = $this->instructions($recipe['recipeInstructions'] ?? null, $headings);
-        if ($title === null || $ingredients === [] || $steps === []) {
+        if ($title === null || $ingredients === []) {
             throw new RuntimeException('Recipe JSON-LD lacks required fields.');
         }
         $time = $this->minutes($recipe['totalTime'] ?? null)

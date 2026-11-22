@@ -21,7 +21,8 @@ final class FeatureReport
     {
         $query = $this->db->prepare(
             'SELECT id, url, title, main_protein, carb_base, cuisine, meal_type, is_vegetarian, ' .
-            'is_dinner_candidate, leftover_score, festive_score, effort FROM recipe WHERE active = TRUE ORDER BY id'
+            'is_dinner_candidate, leftover_score, festive_score, effort, total_time_min, total_time_source ' .
+            'FROM recipe WHERE active = TRUE ORDER BY id'
         );
         $query->execute();
         $recipes = $query->fetchAll(PDO::FETCH_ASSOC);
@@ -42,11 +43,17 @@ final class FeatureReport
         $dinnerMealTypes = [];
         $dinnerLeftovers = [];
         $rankedDinners = [];
+        $timeCoverage = ['given' => 0, 'estimated' => 0, 'unknown' => 0];
         foreach ($recipes as $row) {
             if (!is_array($row) || !is_numeric($row['id'] ?? null)
                 || !is_string($row['url'] ?? null) || !is_string($row['title'] ?? null)) {
                 throw new RuntimeException('Invalid stored recipe in feature report.');
             }
+            $source = $row['total_time_source'] ?? 'unknown';
+            if (!is_string($source) || !array_key_exists($source, $timeCoverage)) {
+                throw new RuntimeException('Invalid recipe time source.');
+            }
+            $timeCoverage[$source]++;
             $this->increment($proteins, $row['main_protein'] ?? null);
             $this->increment($cuisines, $row['cuisine'] ?? null);
             $this->increment($mealTypes, $row['meal_type'] ?? null);
@@ -113,6 +120,13 @@ final class FeatureReport
         $mainMatched = (int) $mainCounts['matched'];
         return [
             'recipes' => count($recipes),
+            'time_coverage' => [
+                ...$timeCoverage,
+                'covered_share_pct' => count($recipes) === 0 ? 0.0 : round(
+                    100 * ($timeCoverage['given'] + $timeCoverage['estimated']) / count($recipes),
+                    1,
+                ),
+            ],
             'main_ingredient_lines' => $mainTotal,
             'matched_main_ingredient_lines' => $mainMatched,
             'matched_main_ingredient_share_pct' => $mainTotal === 0
