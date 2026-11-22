@@ -1,0 +1,22 @@
+[
+  {
+    "steps": [
+      "Låt puttra 1 timme.",
+      "Ställ i ugnen 40 min."
+    ],
+    "minutes": 100
+  },
+  {
+    "steps": [
+      "Baka 20–25 minuter.",
+      "Låt vila 1,5 timme."
+    ],
+    "minutes": 115
+  },
+  {
+    "steps": [
+      "Sätt ugnen på 200 grader."
+    ],
+    "minutes": null
+  }
+]

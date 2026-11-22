@@ -53,6 +53,18 @@ final class KoketParserTest extends TestCase
         self::assertNotSame($second->steps[0]['group_name'], $second->steps[13]['group_name']);
     }
 
+    public function testIncompleteJsonLdRecipeRemainsVisibleForQualityReview(): void
+    {
+        $parser = new KoketRecipeParser();
+        $html = $this->fixture('recipe-without-steps.html');
+        self::assertTrue($parser->isRecipe($html));
+        $recipe = $parser->parse($html);
+        self::assertSame('jsonld', $recipe->format);
+        self::assertCount(3, $recipe->ingredients);
+        self::assertSame([], $recipe->steps);
+        self::assertNull($recipe->totalTimeMinutes);
+    }
+
     public function testRealChefAndCategoryPagesAreNotRecipes(): void
     {
         $parser = new KoketRecipeParser();

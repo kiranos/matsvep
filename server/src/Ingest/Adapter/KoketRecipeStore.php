@@ -56,23 +56,24 @@ final class KoketRecipeStore
             }
             if ($recipeId === null) {
                 $insert = $this->db->prepare(
-                    'INSERT INTO recipe (source_id, url, title, image_url, total_time_min, servings, ' .
+                    'INSERT INTO recipe (source_id, url, title, image_url, total_time_min, total_time_source, servings, ' .
                     'source_status, parsed_at, parser_version, active) ' .
-                    "VALUES (?, ?, ?, ?, ?, ?, 'ok', UTC_TIMESTAMP(6), 'koket_v2', TRUE)"
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', UTC_TIMESTAMP(6), 'koket_v3', TRUE)"
                 );
                 $insert->execute([
                     $this->sourceId, $canonicalUrl, $recipe->title, $recipe->imageUrl, $recipe->totalTimeMinutes,
-                    $recipe->servings,
+                    $recipe->totalTimeMinutes === null ? 'unknown' : 'given', $recipe->servings,
                 ]);
                 $recipeId = (int) $this->db->lastInsertId();
             } else {
                 $update = $this->db->prepare(
-                    'UPDATE recipe SET url = ?, title = ?, image_url = ?, total_time_min = ?, servings = ?, ' .
-                    "source_status = 'ok', parsed_at = UTC_TIMESTAMP(6), parser_version = 'koket_v2' " .
+                    'UPDATE recipe SET url = ?, title = ?, image_url = ?, total_time_min = ?, total_time_source = ?, servings = ?, ' .
+                    "source_status = 'ok', parsed_at = UTC_TIMESTAMP(6), parser_version = 'koket_v3' " .
                     'WHERE id = ? AND source_id = ?'
                 );
                 $update->execute([
-                    $canonicalUrl, $recipe->title, $recipe->imageUrl, $recipe->totalTimeMinutes, $recipe->servings,
+                    $canonicalUrl, $recipe->title, $recipe->imageUrl, $recipe->totalTimeMinutes,
+                    $recipe->totalTimeMinutes === null ? 'unknown' : 'given', $recipe->servings,
                     $recipeId, $this->sourceId,
                 ]);
                 $this->db->prepare('DELETE FROM recipe_ingredient WHERE recipe_id = ?')->execute([$recipeId]);

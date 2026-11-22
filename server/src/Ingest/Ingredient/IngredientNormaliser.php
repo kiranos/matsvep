@@ -176,7 +176,7 @@ final class IngredientNormaliser
                 'UPDATE ingredient_unknown u LEFT JOIN ' .
                 '(SELECT ingredient_unknown_id, COUNT(*) AS n FROM recipe_ingredient_part ' .
                 'WHERE ingredient_unknown_id IS NOT NULL GROUP BY ingredient_unknown_id) p ' .
-                'ON p.ingredient_unknown_id = u.id SET u.occurrences = COALESCE(p.n, 0)'
+                'ON p.ingredient_unknown_id = u.id SET u.occurrences = COALESCE(p.n, u.occurrences)'
             );
             $this->db->commit();
         } catch (Throwable $error) {
