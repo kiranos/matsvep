@@ -114,15 +114,26 @@ final class IngredientLineParser
         $alternative = false;
         foreach ($this->conjunctions as $conjunction) {
             $pattern = '/\s+' . preg_quote($conjunction['token'], '/') . '\s+/iu';
-            if (preg_match($pattern, $text) !== 1) {
+            preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
+            $valid = array_values(array_filter(
+                $matches[0],
+                static fn (array $match): bool => !str_ends_with(rtrim(substr($text, 0, $match[1])), '-'),
+            ));
+            if ($valid === []) {
                 continue;
             }
             if ($conjunction['mode'] === 'split' && $quantity !== null) {
                 $unsafeSplit = true;
                 break;
             }
-            $split = preg_split($pattern, $text);
-            if (!is_array($split) || count($split) < 2 || in_array('', $split, true)) {
+            $split = [];
+            $start = 0;
+            foreach ($valid as [$separator, $offset]) {
+                $split[] = substr($text, $start, $offset - $start);
+                $start = $offset + strlen($separator);
+            }
+            $split[] = substr($text, $start);
+            if (in_array('', $split, true)) {
                 $unsafeSplit = true;
                 break;
             }

@@ -81,6 +81,14 @@ final class RecipeProcessorIntegrationTest extends TestCase
             self::assertSame(1, $after['estimated']);
             self::assertSame(100.0, $after['covered_share_pct']);
             self::assertSame(0, $firstRun['time_estimates_changed']);
+            self::assertIsArray($firstRun['features_before_derivation']);
+            self::assertIsArray($firstRun['features_after_derivation']);
+            self::assertSame(2, $firstRun['features_before_derivation']['vegetarian_unknown']);
+            self::assertSame(0, $firstRun['features_before_derivation']['dinner_candidates_without_main_protein']);
+            self::assertSame(2, array_sum(array_intersect_key(
+                $firstRun['features_after_derivation'],
+                array_flip(['vegetarian_true', 'vegetarian_false', 'vegetarian_unknown']),
+            )));
             $time = $db->prepare('SELECT total_time_min, total_time_source FROM recipe WHERE id = ?');
             $time->execute([$second]);
             $estimated = $time->fetch(PDO::FETCH_ASSOC);
@@ -143,6 +151,14 @@ final class RecipeProcessorIntegrationTest extends TestCase
             foreach (['ingredient-report.json', 'feature-report.json', 'dedupe-report.json', 'processing-report.json'] as $name) {
                 self::assertFileExists($reports . '/' . $name);
             }
+            $ingredientReport = json_decode((string) file_get_contents($reports . '/ingredient-report.json'), true);
+            $featureReport = json_decode((string) file_get_contents($reports . '/feature-report.json'), true);
+            $processingReport = json_decode((string) file_get_contents($reports . '/processing-report.json'), true);
+            self::assertIsArray($ingredientReport);
+            self::assertIsArray($featureReport);
+            self::assertIsArray($processingReport);
+            self::assertSame($featureReport['main_ingredient_lines'], $ingredientReport['main_lines']);
+            self::assertSame($secondRun['features_after_derivation'], $processingReport['features_after_derivation']);
         } finally {
             $admin->exec("DROP DATABASE IF EXISTS `$database`");
             if (is_dir($reports)) {

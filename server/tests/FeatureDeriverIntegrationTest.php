@@ -156,6 +156,19 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 ['normalise_status' => 'ignored', 'is_main' => 0],
                 $ignoredQuery->fetch(PDO::FETCH_ASSOC)
             );
+            $diagnostics = new \Matsvep\Ingest\Feature\FeatureDiagnosticSample($db);
+            $gapSample = $diagnostics->build('protein_gap', 50, 42);
+            self::assertSame($gapSample, $diagnostics->build('protein_gap', 50, 42));
+            self::assertGreaterThan(0, $gapSample['eligible']);
+            self::assertIsArray($gapSample['examples']);
+            self::assertIsArray($gapSample['examples'][0]);
+            self::assertContains(
+                $gapSample['examples'][0]['reason'],
+                ['unmatched_ingredient', 'missing_protein_category', 'mixed'],
+            );
+            $vegetarianSample = $diagnostics->build('vegetarian', 50, 42);
+            self::assertSame($vegetarianSample, $diagnostics->build('vegetarian', 50, 42));
+            self::assertGreaterThan(0, $vegetarianSample['eligible']);
             $report = (new FeatureReport($db))->build();
             self::assertSame(count($ids), $report['recipes']);
             self::assertGreaterThan(10, $report['main_ingredient_lines']);

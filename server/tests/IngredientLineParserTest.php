@@ -86,4 +86,22 @@ final class IngredientLineParserTest extends TestCase
         $second = $recipeParser->parse((string) file_get_contents(__DIR__ . '/fixtures/koket/recipe-2.html'));
         self::assertSame('teaspoon', $lineParser->parse($second->ingredients[1]['text'])->unit);
     }
+
+    public function testSharedEndingAndSeedUpdates(): void
+    {
+        $parser = $this->parser();
+        foreach (['shared_ending_split', 'shared_ending_alternative'] as $key) {
+            $line = $parser->parse($this->value($key));
+            self::assertSame([$this->value($key)], $line->parts);
+            self::assertFalse($line->unsafeSplit);
+        }
+        $descriptor = $parser->parse($this->value('new_descriptor'));
+        self::assertContains(
+            ['text' => $this->value('new_descriptor', 'ingredient'),
+                'notes' => [$this->value('new_descriptor', 'descriptor')]],
+            $parser->stripCandidates($descriptor->ingredientText),
+        );
+        self::assertSame($this->value('new_unit', 'unit'), $parser->parse($this->value('new_unit'))->unit);
+        self::assertTrue($parser->isIgnored($this->value('new_ignore')));
+    }
 }
