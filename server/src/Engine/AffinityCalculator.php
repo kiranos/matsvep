@@ -15,7 +15,7 @@ final class AffinityCalculator
     }
 
     /**
-     * @param list<array{type: string, value: string, score: float}> $seeds
+     * @param list<array{type: string, value: string, score: float, answered_at: string}> $seeds
      * @param list<array{recipe_id: int, rating: int, rated_at: string, features: list<array{type: string, value: string, eta: float}>}> $ratings
      * @return list<array{type: string, value: string, score: float, weight_sum: float, confidence: float}>
      */
@@ -30,19 +30,24 @@ final class AffinityCalculator
             throw new InvalidArgumentException('Affinity configuration must be positive.');
         }
 
+        $now = $asOf->setTimezone(new DateTimeZone('UTC'));
         foreach ($seeds as $seed) {
-            $this->add($weights, $weightedScores, $seed['type'], $seed['value'], $seedWeight, $seed['score']);
+            $this->add(
+                $weights,
+                $weightedScores,
+                $seed['type'],
+                $seed['value'],
+                $seedWeight * $this->decay($now, $seed['answered_at'], $halfLife),
+                $seed['score']
+            );
         }
         usort($ratings, static fn (array $a, array $b): int =>
             strcmp($a['rated_at'], $b['rated_at']) ?: $a['recipe_id'] <=> $b['recipe_id']);
-        $now = $asOf->setTimezone(new DateTimeZone('UTC'));
         foreach ($ratings as $rating) {
             if ($rating['rating'] < 1 || $rating['rating'] > 5) {
                 throw new InvalidArgumentException('Rating must be between one and five.');
             }
-            $ratedAt = new DateTimeImmutable($rating['rated_at'], new DateTimeZone('UTC'));
-            $ageSeconds = max(0.0, (float) $now->format('U.u') - (float) $ratedAt->format('U.u'));
-            $decay = 2 ** (-$ageSeconds / (86400 * $halfLife));
+            $decay = $this->decay($now, $rating['rated_at'], $halfLife);
             $score = ($rating['rating'] - 3) / 2;
             foreach ($rating['features'] as $feature) {
                 $this->add(
@@ -78,6 +83,13 @@ final class AffinityCalculator
             throw new InvalidArgumentException('Invalid affinity confidence inputs.');
         }
         return $weightSum / ($weightSum + $k0);
+    }
+
+    private function decay(DateTimeImmutable $now, string $timestamp, int $halfLife): float
+    {
+        $at = new DateTimeImmutable($timestamp, new DateTimeZone('UTC'));
+        $ageSeconds = max(0.0, (float) $now->format('U.u') - (float) $at->format('U.u'));
+        return 2 ** (-$ageSeconds / (86400 * $halfLife));
     }
 
     /**

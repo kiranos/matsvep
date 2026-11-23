@@ -67,6 +67,11 @@ final class LearnerIntegrationTest extends TestCase
             $answers->execute([$household, 'disliked_ingredients', json_encode([
                 'ingredient_ids' => [$secondIngredient],
             ], JSON_THROW_ON_ERROR)]);
+            $db->prepare('UPDATE onboarding_answer SET answered_at = ? WHERE household_id = ?')
+                ->execute(['2026-11-22 12:00:00', $household]);
+            $db->prepare('UPDATE onboarding_answer SET answered_at = ? '
+                . 'WHERE household_id = ? AND question_id = ?')
+                ->execute(['2025-11-22 12:00:00', $household, 'cuisine_rating']);
             $when = new DateTimeImmutable('2026-11-22 12:00:00', new DateTimeZone('UTC'));
             $learner = new Learner($db, EngineConfig::fromDatabase($db));
             self::assertSame(2, $learner->applyOnboarding($household, $when)['ratings_changed']);
@@ -76,13 +81,13 @@ final class LearnerIntegrationTest extends TestCase
                 $db,
                 "SELECT rating_source FROM household_recipe WHERE household_id = $household AND recipe_id = $first"
             ));
-            $this->assertAffinity($db, $household, 'cuisine', 'italian', 0.375, 4.0);
+            $this->assertAffinity($db, $household, 'cuisine', 'italian', 1 / 3, 3.0);
             $this->assertAffinity($db, $household, 'protein', 'fish', 0.625, 4.0);
             $this->assertAffinity($db, $household, 'ingredient', (string) $secondIngredient, -0.7, 3.0);
             $this->assertAffinity($db, $household, 'ingredient', (string) $firstIngredient, 1.0, 0.5);
             foreach ($learner->affinitiesForHousehold($household) as $affinity) {
                 if ($affinity['feature_type'] === 'cuisine' && $affinity['feature_value'] === 'italian') {
-                    self::assertEqualsWithDelta(4 / 7, $affinity['confidence'], 0.0000001);
+                    self::assertEqualsWithDelta(0.5, $affinity['confidence'], 0.0000001);
                 }
             }
             self::assertSame(0, (int) $this->value(
@@ -97,7 +102,7 @@ final class LearnerIntegrationTest extends TestCase
             self::assertSame(['households' => 2, 'affinities' => count($immediate)], $learner->rebuildAll($when));
             self::assertSame($immediate, $this->affinityRows($db, $household));
             self::assertSame(3, (int) $this->value($db, 'SELECT COUNT(*) FROM rating_history'));
-            $this->assertAffinity($db, $household, 'cuisine', 'italian', 0.25, 4.0);
+            $this->assertAffinity($db, $household, 'cuisine', 'italian', 1 / 6, 3.0);
 
             $answers->execute([$household, 'dish_rating', json_encode(['ratings' => [
                 ['recipe_id' => $first, 'choice' => 'not_for_us'],
@@ -112,7 +117,7 @@ final class LearnerIntegrationTest extends TestCase
                 $db,
                 "SELECT rating_source FROM household_recipe WHERE household_id = $household AND recipe_id = $first"
             ));
-            $this->assertAffinity($db, $household, 'cuisine', 'italian', 0.5, 3.0);
+            $this->assertAffinity($db, $household, 'cuisine', 'italian', 0.5, 2.0);
             self::assertSame(
                 $this->affinityRows($db, $household),
                 $this->rebuildAndRead($learner, $db, $household, $when)

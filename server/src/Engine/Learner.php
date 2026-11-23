@@ -214,14 +214,16 @@ final class Learner
         return $features;
     }
 
-    /** @return array<string, array<string, mixed>> */
+    /** @return array<string, array{answer: array<string, mixed>, answered_at: string}> */
     private function answers(int $householdId): array
     {
-        $query = $this->db->prepare('SELECT question_id, answer FROM onboarding_answer WHERE household_id = ?');
+        $query = $this->db->prepare('SELECT question_id, answer, answered_at FROM onboarding_answer '
+            . 'WHERE household_id = ?');
         $query->execute([$householdId]);
         $answers = [];
         while (($row = $query->fetch(PDO::FETCH_ASSOC)) !== false) {
-            if (!is_string($row['question_id'] ?? null) || !is_string($row['answer'] ?? null)) {
+            if (!is_string($row['question_id'] ?? null) || !is_string($row['answer'] ?? null)
+                || !is_string($row['answered_at'] ?? null)) {
                 throw new RuntimeException('Invalid onboarding answer row.');
             }
             $answer = json_decode($row['answer'], true, 512, JSON_THROW_ON_ERROR);
@@ -235,12 +237,12 @@ final class Learner
                 }
                 $validated[$key] = $value;
             }
-            $answers[$row['question_id']] = $validated;
+            $answers[$row['question_id']] = ['answer' => $validated, 'answered_at' => $row['answered_at']];
         }
         return $answers;
     }
 
-    /** @param array<string, array<string, mixed>> $answers
+    /** @param array<string, array{answer: array<string, mixed>, answered_at: string}> $answers
      *  @return array<int, int>
      */
     private function dishRatings(array $answers): array
@@ -264,8 +266,8 @@ final class Learner
         return $ratings;
     }
 
-    /** @param array<string, array<string, mixed>> $answers
-     *  @return list<array{type: string, value: string, score: float}>
+    /** @param array<string, array{answer: array<string, mixed>, answered_at: string}> $answers
+     *  @return list<array{type: string, value: string, score: float, answered_at: string}>
      */
     private function seeds(array $answers): array
     {
@@ -281,7 +283,8 @@ final class Learner
                 }
                 $seen[$item['code']] = true;
                 $seeds[] = ['type' => $type, 'value' => $item['code'],
-                    'score' => ($item['rating'] - 3) / 2];
+                    'score' => ($item['rating'] - 3) / 2,
+                    'answered_at' => $this->answeredAt($answers, $question)];
             }
         }
         $seen = [];
@@ -291,12 +294,13 @@ final class Learner
             }
             $seen[$id] = true;
             $seeds[] = ['type' => 'ingredient', 'value' => (string) $id,
-                'score' => $this->config->decimal('affinity.disliked_ingredient_score')];
+                'score' => $this->config->decimal('affinity.disliked_ingredient_score'),
+                'answered_at' => $this->answeredAt($answers, 'disliked_ingredients')];
         }
         return $seeds;
     }
 
-    /** @param array<string, array<string, mixed>> $answers
+    /** @param array<string, array{answer: array<string, mixed>, answered_at: string}> $answers
      *  @return list<mixed>
      */
     private function items(array $answers, string $question, string $key): array
@@ -304,11 +308,20 @@ final class Learner
         if (!isset($answers[$question])) {
             return [];
         }
-        $items = $answers[$question][$key] ?? null;
+        $items = $answers[$question]['answer'][$key] ?? null;
         if (!is_array($items) || !array_is_list($items)) {
             throw new InvalidArgumentException('Invalid onboarding answer: ' . $question);
         }
         return $items;
+    }
+
+    /** @param array<string, array{answer: array<string, mixed>, answered_at: string}> $answers */
+    private function answeredAt(array $answers, string $question): string
+    {
+        if (!isset($answers[$question])) {
+            throw new InvalidArgumentException('Missing onboarding answer: ' . $question);
+        }
+        return $answers[$question]['answered_at'];
     }
 
     private function writeRating(

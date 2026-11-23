@@ -17,7 +17,8 @@ final class AffinityCalculatorTest extends TestCase
         $calculator = $this->calculator();
         $asOf = new DateTimeImmutable('2026-11-22 00:00:00', new DateTimeZone('UTC'));
         $rows = $calculator->calculate(
-            [['type' => 'cuisine', 'value' => 'italian', 'score' => 0.5]],
+            [['type' => 'cuisine', 'value' => 'italian', 'score' => 0.5,
+                'answered_at' => '2026-11-22 00:00:00']],
             [
                 ['recipe_id' => 1, 'rating' => 1, 'rated_at' => '2025-11-22 00:00:00',
                     'features' => [['type' => 'cuisine', 'value' => 'italian', 'eta' => 1.0]]],
@@ -38,6 +39,36 @@ final class AffinityCalculatorTest extends TestCase
         self::assertSame('42', $rows[1]['value']);
         self::assertEqualsWithDelta(0.5, $rows[1]['weight_sum'], 0.0000001);
         self::assertEqualsWithDelta(1 / 7, $rows[1]['confidence'], 0.0000001);
+    }
+
+    public function testSeedWeightHalvesAfterOneHalfLife(): void
+    {
+        $asOf = new DateTimeImmutable('2026-11-22 00:00:00', new DateTimeZone('UTC'));
+        $rows = $this->calculator()->calculate([
+            ['type' => 'cuisine', 'value' => 'italian', 'score' => 1.0,
+                'answered_at' => '2025-11-22 00:00:00'],
+        ], [], $asOf);
+        self::assertCount(1, $rows);
+        self::assertEqualsWithDelta(1.0, $rows[0]['weight_sum'], 0.0000001);
+        self::assertEqualsWithDelta(1.0, $rows[0]['score'], 0.0000001);
+        self::assertEqualsWithDelta(0.25, $rows[0]['confidence'], 0.0000001);
+    }
+
+    public function testLastYearsRatingsOutweighOlderSeed(): void
+    {
+        $asOf = new DateTimeImmutable('2026-11-22 00:00:00', new DateTimeZone('UTC'));
+        $rows = $this->calculator()->calculate([
+            ['type' => 'protein', 'value' => 'fish', 'score' => 1.0,
+                'answered_at' => '2024-11-22 00:00:00'],
+        ], [
+            ['recipe_id' => 1, 'rating' => 1, 'rated_at' => '2025-11-22 00:00:00',
+                'features' => [['type' => 'protein', 'value' => 'fish', 'eta' => 1.0]]],
+            ['recipe_id' => 2, 'rating' => 1, 'rated_at' => '2025-11-22 00:00:00',
+                'features' => [['type' => 'protein', 'value' => 'fish', 'eta' => 1.0]]],
+        ], $asOf);
+        self::assertCount(1, $rows);
+        self::assertEqualsWithDelta(1.5, $rows[0]['weight_sum'], 0.0000001);
+        self::assertEqualsWithDelta(-1 / 3, $rows[0]['score'], 0.0000001);
     }
 
     public function testEqualTimestampUsesRecipeIdForDeterministicOrder(): void

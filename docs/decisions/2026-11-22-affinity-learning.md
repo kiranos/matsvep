@@ -1,6 +1,6 @@
 # Affinity learning from household ratings
 
-`Engine\Learner` uses the current rating of each household recipe once. It orders evidence by `rated_at`, then `recipe_id`, and evaluates all age decay at one UTC calculation time. The same calculation serves a rating change, a standalone all-household rebuild, and the final step of recipe processing. Rebuilding does not write rating history. It reflects corrected recipe features without retaining stale affinity rows.
+`Engine\Learner` uses the current rating of each household recipe once. It orders evidence by `rated_at`, then `recipe_id`, and evaluates all age decay at one UTC calculation time. Onboarding seeds also decay from `onboarding_answer.answered_at`, so an old quiz answer cannot retain full weight while ratings age. The same calculation serves a rating change, a standalone all-household rebuild, and the final step of recipe processing. Rebuilding does not write rating history. It reflects corrected recipe features without retaining stale affinity rows.
 
 Onboarding answers use four fixed question IDs and structured JSON values. Dish choices become 5, 4 or 2 star onboarding ratings. Cuisine and protein ratings, plus disliked ingredient IDs, become affinity seeds. A repeated onboarding completion updates or removes only onboarding-sourced dish ratings, leaving later user ratings intact. Migration 020 permits a null `rating_history.new_rating` to record a removed starting rating; migration 018 remains unchanged. The new onboarding scores are seeded in `engine_config`.
 

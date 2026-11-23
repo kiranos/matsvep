@@ -308,7 +308,7 @@ The family answers one joint quiz in about 5 minutes:
 | 3 | Rate proteins 1–5 (kyckling, nöt, fläsk, fisk, skaldjur, vegetariskt, korv) | Protein affinity seed |
 | 4 | Pick ingredients nobody likes (koriander, svamp, oliver…) | Ingredient affinity seed of −0.8 |
 
-Seeds are written with weight *W₀* = 2, so 2–3 real ratings on a feature outweigh the quiz.
+Seeds start with weight *W₀* = 2 and decay from `onboarding_answer.answered_at` with the same half-life as ratings. Thus recent ratings increasingly outweigh older quiz answers.
 
 The saved answer keys are `dish_rating`, `cuisine_rating`, `protein_rating` and `disliked_ingredients`. Dish answers contain `ratings: [{recipe_id, choice}]`, with `choice` equal to `favourite`, `ok` or `not_for_us`. Cuisine and protein answers contain `ratings: [{code, rating}]`; disliked ingredients contain `ingredient_ids: [id]`. Reapplying onboarding synchronises only ratings whose source is still `onboarding`. It clears an omitted onboarding dish rating, recording the removal in `rating_history`, and never replaces a user rating.
 
@@ -322,7 +322,7 @@ W_f \leftarrow W_f\cdot 2^{-\Delta t/H},\qquad a_f \leftarrow \frac{W_f\, a_f + 
 
 - η = 1.0 for protein, cuisine, meal type and carb base. For main ingredients, η = 1/√k, where *k* is the number of main ingredients.
 - *H* = 365 days, measured from the date each rating was set. *k₀* = 3, so a feature reaches 50% confidence after about 3 ratings.
-- The calculation reads current ratings in `rated_at`, then `recipe_id` order. Each rating's contribution is weighted by `η · 2^(-age/H)` at a single UTC calculation time. Onboarding seeds retain weight `W₀`; the stored `weight_sum` gives confidence as `W/(W + k₀)`. Main ingredient IDs are distinct and staples are excluded. Tags are not learned until their feature weight is specified.
+- The calculation reads current ratings in `rated_at`, then `recipe_id` order. Each rating's contribution is weighted by `η · 2^(-age/H)` at a single UTC calculation time. A seed contributes `W₀ · 2^(-age/H)`, with age measured from its answer time. The stored `weight_sum` gives confidence as `W/(W + k₀)`. Main ingredient IDs are distinct and staples are excluded. Tags are not learned until their feature weight is specified.
 
 ### Consistency
 
