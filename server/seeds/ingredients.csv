@@ -100,7 +100,7 @@ kalkon,protein,0,
 nötfärs,protein,0,köttfärs
 blandfärs,protein,0,"blandad köttfärs"
 fläskfärs,protein,0,fläskköttfärs
-vegefärs,protein,0,
+vegefärs,protein,0,vegofärs|sojafärs
 högrev,protein,0,högrevsbitar
 oxfilé,protein,0,
 entrecôte,protein,0,
@@ -364,7 +364,7 @@ renstek,protein,0,
 kalvfilé,protein,0,
 kalvlägg,protein,0,
 revbensspjäll,protein,0,
-fisk,protein,0,"fiskfilé|fiskfiléer|rökta fiskfiléer"
+fisk,protein,0,"fiskfilé|fiskfiléer|rökta fiskfiléer|rökt fisk"
 risoni,grain,0,orzo|orzo pasta
 linguine,grain,0,
 fusilli,grain,0,
@@ -407,3 +407,18 @@ buffelmozzarella,dairy,0,
 prästost,dairy,0,
 ostfyllda ravioli,grain,0,
 skogschampinjoner,vegetable,0,
+fläsk,protein,0,fläskkött
+fläsksida,protein,0,
+kamben,protein,0,
+oxrygg,protein,0,
+hjort,protein,0,hjortrygg|hjortytterfilé|hjortfilé
+kalkonbröstfilé,protein,0,
+marulk,protein,0,marulksfilé
+"bruna bönor",legume,0,"brun böna"
+"svarta linser",legume,0,"svart lins"
+"parmigiano reggiano",protein,0,parmigiano
+emmentaler,protein,0,
+abborre,protein,0,abborrefilé
+mandelmassa,pantry,0,
+prosciutto,protein,0,
+viltskav,protein,0,

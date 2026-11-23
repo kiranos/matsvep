@@ -179,6 +179,15 @@ final class FeatureDeriver
         $premium = false;
         $matchedMain = false;
         $unmatchedMain = false;
+        $unmatchedAnimal = false;
+        $strongMainProtein = false;
+        $eggPresent = false;
+        $nonEggMain = false;
+        $foodLines = 0;
+        $sugarFlourLines = 0;
+        $hasSugar = false;
+        $hasFlour = false;
+        $directBaking = false;
         $ingredientTexts = [];
         foreach ($lines as $line) {
             if (!is_numeric($line['position'] ?? null) || !is_string($line['raw_text'] ?? null)
@@ -191,17 +200,30 @@ final class FeatureDeriver
             $ingredientTexts[] = $text;
             $main = false;
             $lineMapped = false;
+            $lineSugarFlour = false;
+            if ($line['normalise_status'] !== 'ignored') {
+                $foodLines++;
+            }
             foreach ($parts[$position] ?? [] as $part) {
                 $name = $part['canonical_name'] ?? null;
                 if (!is_string($name)) {
                     continue;
                 }
                 $lineMapped = true;
+                $normalisedName = mb_strtolower($name);
                 if (is_string($part['category'] ?? null) && is_numeric($part['is_staple'] ?? null)
                     && (int) $part['is_staple'] === 0 && in_array($part['category'], $mainCategories, true)) {
                     $main = true;
                 }
-                $rule = $this->vocabulary->ingredients[mb_strtolower($name)] ?? null;
+                $bakingSignal = $this->vocabulary->dinnerBakingIngredients[$normalisedName] ?? null;
+                $directBaking = $directBaking || $bakingSignal === 'direct';
+                $hasSugar = $hasSugar || $bakingSignal === 'sugar';
+                $hasFlour = $hasFlour || $bakingSignal === 'flour';
+                $lineSugarFlour = $lineSugarFlour || in_array($bakingSignal, ['sugar', 'flour'], true);
+                $eggPresent = $eggPresent || in_array($normalisedName, $this->vocabulary->dinnerEggIngredients, true);
+                $nonEggMain = $nonEggMain || ($main
+                    && !in_array($normalisedName, $this->vocabulary->dinnerEggIngredients, true));
+                $rule = $this->vocabulary->ingredients[$normalisedName] ?? null;
                 if ($rule === null) {
                     continue;
                 }
@@ -215,6 +237,10 @@ final class FeatureDeriver
                     $substantialVegetarianMain = $substantialVegetarianMain
                         || in_array(mb_strtolower($name), $this->vocabulary->dinnerMainIngredients, true);
                 }
+                $strongMainProtein = $strongMainProtein || ($main
+                    && $rule['protein'] !== null
+                    && ($rule['protein'] !== 'vegetarian'
+                        || in_array($normalisedName, $this->vocabulary->dinnerMainIngredients, true)));
                 if ($rule['protein'] !== null && $rule['protein'] !== 'vegetarian') {
                     $proteinChoices[] = [
                         'code' => $rule['protein'],
@@ -228,6 +254,10 @@ final class FeatureDeriver
                 $main = $this->proteinCandidates->matches($text)
                     || $this->hasMainMass($line, $mainMass);
             }
+            $unmatchedAnimal = $unmatchedAnimal || ($line['normalise_status'] !== 'matched'
+                && $line['normalise_status'] !== 'ignored'
+                && $this->containsAny($line['raw_text'], $this->vocabulary->animalStems));
+            $sugarFlourLines += $lineSugarFlour ? 1 : 0;
             if ($main) {
                 $matchedMain = $matchedMain || $line['normalise_status'] === 'matched';
                 $unmatchedMain = $unmatchedMain || $line['normalise_status'] !== 'matched';
@@ -236,7 +266,9 @@ final class FeatureDeriver
         }
         $titleProtein = $this->proteinFromTitle($recipe['title']);
         $animal = $animal || ($titleProtein !== null && $titleProtein !== 'vegetarian');
-        $vegetarian = $animal ? 0 : ($matchedMain && !$unmatchedMain ? 1 : null);
+        $unmatchedAnimal = $unmatchedAnimal || ($titleProtein === null
+            && $this->containsAny($recipe['title'], $this->vocabulary->animalStems));
+        $vegetarian = $animal ? 0 : ($matchedMain && !$unmatchedMain && !$unmatchedAnimal ? 1 : null);
         usort($proteinChoices, static fn (array $a, array $b): int =>
             ($b['grams'] ?? -1) <=> ($a['grams'] ?? -1)
                 ?: (int) $b['main'] <=> (int) $a['main']
@@ -262,13 +294,38 @@ final class FeatureDeriver
                 + $this->config->decimal('feature.leftover_protein_weight') * $proteinSignal
             ),
         );
+        $savoryTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerSavoryTitles);
+        $clearDinnerEvidence = $strongMainProtein || $savoryTitle
+            || ($titleProtein !== null && $titleProtein !== 'vegetarian');
         $proteinEvidence = $titleProtein !== null || $proteinChoices !== [] || $vegetarianProteinPresent;
         $dinnerCandidate = $mealType === 'main' || ($mealType === null
             && ($proteinEvidence || $carb !== null)
-            && !$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags), 'unknown_only'));
+            && (!$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags), 'unknown_only')
+                || $clearDinnerEvidence));
         $substantialMain = ($titleProtein !== null && $titleProtein !== 'vegetarian')
             || $proteinChoices !== [] || $carb !== null || $substantialVegetarianMain;
-        if ($this->hasDinnerExclusion($recipe['title'], 'always')) {
+        $blockedSourceTag = false;
+        foreach ($tags as $tag) {
+            $blockedSourceTag = $blockedSourceTag || in_array(
+                mb_strtolower(trim($tag)),
+                $this->vocabulary->dinnerBlockedTags,
+                true,
+            );
+        }
+        $bakingShare = $foodLines === 0 ? 0.0 : $sugarFlourLines / $foodLines;
+        $bakingIngredients = $directBaking || ($hasSugar && $hasFlour
+            && $bakingShare >= $this->config->decimal('feature.baking_sugar_flour_share'));
+        $broadTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerBroadTitles);
+        $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles);
+        $eggAlone = $eggPresent && !$nonEggMain && $carb === null && !$savoryTitle
+            && $proteinChoices === [] && !$strongMainProtein;
+        if ($blockedSourceTag) {
+            $dinnerCandidate = false;
+        } elseif (!$clearDinnerEvidence && $bakingIngredients) {
+            $dinnerCandidate = false;
+        } elseif ($unambiguousTitle || (!$clearDinnerEvidence && $broadTitle)) {
+            $dinnerCandidate = false;
+        } elseif ($eggAlone || $this->hasDinnerExclusion($recipe['title'], 'always')) {
             $dinnerCandidate = false;
         } elseif ($dinnerCandidate) {
             $dishTitle = $recipe['title'];
@@ -387,6 +444,17 @@ final class FeatureDeriver
     private function hasDinnerExclusion(string $text, string $scope): bool
     {
         foreach ($this->vocabulary->dinnerExclusions[$scope] as $term) {
+            if ($this->vocabulary->contains($text, $term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @param list<string> $terms */
+    private function containsAny(string $text, array $terms): bool
+    {
+        foreach ($terms as $term) {
             if ($this->vocabulary->contains($text, $term)) {
                 return true;
             }

@@ -10,6 +10,7 @@ use Matsvep\Ingest\Dedupe\DedupeReport;
 use Matsvep\Ingest\Dedupe\DishGrouper;
 use Matsvep\Ingest\Dedupe\RecipeDeduplicator;
 use Matsvep\Ingest\Feature\FeatureDeriver;
+use Matsvep\Ingest\Feature\DinnerCandidateAudit;
 use Matsvep\Ingest\Feature\FeatureReport;
 use Matsvep\Ingest\Feature\FeatureSeeder;
 use Matsvep\Ingest\Ingredient\IngredientLineParser;
@@ -55,9 +56,12 @@ final class RecipeProcessor
             new IngredientLineParser($this->seedDirectory),
         ))->run();
         $featuresBefore = $this->featureCounts();
+        $dinnerAudit = new DinnerCandidateAudit($this->db, $this->seedDirectory);
+        $dinnerBefore = $dinnerAudit->candidates();
         $deriver = new FeatureDeriver($this->db, $this->seedDirectory);
         $derived = $deriver->run();
         $featuresAfter = $this->featureCounts();
+        $dinnerChanges = $dinnerAudit->build($dinnerBefore, $dinnerAudit->candidates());
         $this->saveJson('ingredient-report.json', (new IngredientReport($this->db))->build());
         $after = $this->timeCoverage();
         $duplicates = (new RecipeDeduplicator($this->db))->run();
@@ -77,6 +81,7 @@ final class RecipeProcessor
             'time_coverage_after' => $after,
             'features_before_derivation' => $featuresBefore,
             'features_after_derivation' => $featuresAfter,
+            'dinner_candidate_changes' => $dinnerChanges,
             'affinity_rebuild' => $affinityRebuild,
         ];
         $this->saveJson('processing-report.json', $result);

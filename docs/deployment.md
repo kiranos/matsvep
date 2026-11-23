@@ -70,6 +70,8 @@ It seeds ingredient and feature vocabularies, normalises ingredient lines, deriv
 
 The processing report also records vegetarian true, false and unknown counts and dinner candidates without a main protein before and after derivation. To inspect individual production gaps without modifying the database, run `sudo -u matsvep php bin/derive-features.php --protein-gap-sample=50 --seed=42` from `server/`. Use `--vegetarian-sample=50` to review possible false vegetarian labels. Omit `--seed` for a new random sample; the printed JSON contains the seed so it can be repeated. These commands print recipe URLs, titles and main ingredient lines to standard output and do not save a file. Run processing first if you want the samples to reflect the updated seed data and rule.
 
+After migration 021, `processing-report.json` also contains `dinner_candidate_changes`: counts before and after derivation, 30 removed titles, 30 remaining titles, and every removed title containing a seeded savory audit word. Review that section before sampling production again. The comparison uses the previously stored flags; rerunning unchanged processing yields zero new removals.
+
 To rebuild affinities without rerunning recipe processing, run `sudo -u matsvep php bin/rebuild-affinities.php` from `/srv/matsvep/server`. The standalone command takes the same crawler lock, is idempotent for a fixed calculation time and does not add rating-history entries. No separate affinity timer is installed yet.
 
 After deploying the parser fix, previously exhausted HTTP 200 parse failures can be queued for one more fetch. Run this only after the new parser is installed; the crawler will fetch them on its next run. Inspect the affected count first:
