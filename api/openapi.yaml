@@ -1591,8 +1591,68 @@ components:
         - answer
       properties:
         answer:
-          type: object
-          additionalProperties: true
+          description: Match the question_id in the path to the corresponding answer shape.
+          anyOf:
+            - "$ref": "#/components/schemas/DishRatingAnswer"
+            - "$ref": "#/components/schemas/FeatureRatingAnswer"
+            - "$ref": "#/components/schemas/DislikedIngredientsAnswer"
+    DishRatingAnswer:
+      type: object
+      required:
+        - ratings
+      properties:
+        ratings:
+          type: array
+          items:
+            type: object
+            required:
+              - recipe_id
+              - choice
+            properties:
+              recipe_id:
+                type: integer
+                format: int64
+              choice:
+                type: string
+                enum:
+                  - favourite
+                  - ok
+                  - not_for_us
+            additionalProperties: false
+      additionalProperties: false
+    FeatureRatingAnswer:
+      type: object
+      required:
+        - ratings
+      properties:
+        ratings:
+          type: array
+          items:
+            type: object
+            required:
+              - code
+              - rating
+            properties:
+              code:
+                type: string
+                pattern: "^[a-z][a-z0-9_]*$"
+              rating:
+                type: integer
+                minimum: 1
+                maximum: 5
+            additionalProperties: false
+      additionalProperties: false
+    DislikedIngredientsAnswer:
+      type: object
+      required:
+        - ingredient_ids
+      properties:
+        ingredient_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+      additionalProperties: false
     OnboardingAnswer:
       type: object
       required:
@@ -1602,9 +1662,16 @@ components:
       properties:
         question_id:
           type: string
+          enum:
+            - dish_rating
+            - cuisine_rating
+            - protein_rating
+            - disliked_ingredients
         answer:
-          type: object
-          additionalProperties: true
+          anyOf:
+            - "$ref": "#/components/schemas/DishRatingAnswer"
+            - "$ref": "#/components/schemas/FeatureRatingAnswer"
+            - "$ref": "#/components/schemas/DislikedIngredientsAnswer"
         answered_at:
           type: string
           format: date-time
@@ -2065,7 +2132,11 @@ components:
       required: true
       schema:
         type: string
-        minLength: 1
+        enum:
+          - dish_rating
+          - cuisine_rating
+          - protein_rating
+          - disliked_ingredients
     LocalDate:
       name: date
       in: query

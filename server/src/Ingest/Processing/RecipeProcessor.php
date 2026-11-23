@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Matsvep\Ingest\Processing;
 
+use Matsvep\Engine\EngineConfig;
+use Matsvep\Engine\Learner;
 use Matsvep\Ingest\Dedupe\DedupeReport;
 use Matsvep\Ingest\Dedupe\DishGrouper;
 use Matsvep\Ingest\Dedupe\RecipeDeduplicator;
@@ -61,6 +63,7 @@ final class RecipeProcessor
         $grouped = (new DishGrouper($this->db, $this->seedDirectory))->run();
         (new FeatureReport($this->db))->save($this->reportDirectory . '/feature-report.json');
         (new DedupeReport($this->db))->save($this->reportDirectory . '/dedupe-report.json');
+        $affinityRebuild = (new Learner($this->db, EngineConfig::fromDatabase($this->db)))->rebuildAll();
 
         $result = [
             'seeded_ingredients' => $ingredients,
@@ -71,6 +74,7 @@ final class RecipeProcessor
             'deduplication' => $duplicates + ['group_memberships_assigned' => $grouped],
             'time_coverage_before' => $before,
             'time_coverage_after' => $after,
+            'affinity_rebuild' => $affinityRebuild,
         ];
         $this->saveJson('processing-report.json', $result);
         return $result;

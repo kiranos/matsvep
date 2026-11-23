@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Matsvep\Tests;
 
 use Matsvep\Database\MigrationRunner;
+use Matsvep\Engine\EngineConfig;
+use Matsvep\Engine\Learner;
 use Matsvep\Ingest\Processing\RecipeProcessor;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -92,6 +94,13 @@ final class RecipeProcessorIntegrationTest extends TestCase
             $actor = (int) $db->lastInsertId();
             $override = $db->prepare('INSERT INTO recipe_feature_override (recipe_id, main_protein, updated_by) VALUES (?, ?, ?)');
             $override->execute([$first, 'fish', $actor]);
+            $db->exec("INSERT INTO household (name) VALUES ('Processing test')");
+            $householdId = (int) $db->lastInsertId();
+            (new Learner($db, EngineConfig::fromDatabase($db)))->setRating($householdId, $first, 5);
+            self::assertSame(0, (int) $this->scalar(
+                $db,
+                "SELECT COUNT(*) FROM affinity WHERE household_id = $householdId AND feature_type = 'protein' AND feature_value = 'fish'"
+            ));
             $db->prepare('INSERT INTO dish_group (core_name, manual_override) VALUES (?, TRUE)')->execute(['manual']);
             $group = (int) $db->lastInsertId();
             $db->prepare('UPDATE recipe SET dish_group_id = ?, dish_group_manual = TRUE WHERE id = ?')->execute([$group, $first]);
@@ -106,6 +115,11 @@ final class RecipeProcessorIntegrationTest extends TestCase
             $db->prepare("UPDATE recipe SET total_time_min = 60, total_time_source = 'estimated' WHERE id = ?")
                 ->execute([$second]);
             $secondRun = $processor->run();
+            self::assertSame(['households' => 1, 'affinities' => 1], $secondRun['affinity_rebuild']);
+            self::assertSame(1, (int) $this->scalar(
+                $db,
+                "SELECT COUNT(*) FROM affinity WHERE household_id = $householdId AND feature_type = 'protein' AND feature_value = 'fish'"
+            ));
             $secondBefore = $secondRun['time_coverage_before'] ?? null;
             $secondAfter = $secondRun['time_coverage_after'] ?? null;
             self::assertIsArray($secondBefore);
