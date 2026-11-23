@@ -54,10 +54,11 @@ final class RecipeProcessor
             $this->db,
             new IngredientLineParser($this->seedDirectory),
         ))->run();
-        $this->saveJson('ingredient-report.json', (new IngredientReport($this->db))->build());
-
+        $featuresBefore = $this->featureCounts();
         $deriver = new FeatureDeriver($this->db, $this->seedDirectory);
         $derived = $deriver->run();
+        $featuresAfter = $this->featureCounts();
+        $this->saveJson('ingredient-report.json', (new IngredientReport($this->db))->build());
         $after = $this->timeCoverage();
         $duplicates = (new RecipeDeduplicator($this->db))->run();
         $grouped = (new DishGrouper($this->db, $this->seedDirectory))->run();
@@ -74,9 +75,38 @@ final class RecipeProcessor
             'deduplication' => $duplicates + ['group_memberships_assigned' => $grouped],
             'time_coverage_before' => $before,
             'time_coverage_after' => $after,
+            'features_before_derivation' => $featuresBefore,
+            'features_after_derivation' => $featuresAfter,
             'affinity_rebuild' => $affinityRebuild,
         ];
         $this->saveJson('processing-report.json', $result);
+        return $result;
+    }
+
+    /** @return array{vegetarian_true: int, vegetarian_false: int, vegetarian_unknown: int, dinner_candidates: int, dinner_candidates_without_main_protein: int} */
+    private function featureCounts(): array
+    {
+        $query = $this->db->prepare(
+            'SELECT COALESCE(SUM(is_vegetarian = TRUE), 0) AS vegetarian_true, '
+            . 'COALESCE(SUM(is_vegetarian = FALSE), 0) AS vegetarian_false, '
+            . 'COALESCE(SUM(is_vegetarian IS NULL), 0) AS vegetarian_unknown, '
+            . 'COALESCE(SUM(is_dinner_candidate = TRUE), 0) AS dinner_candidates, '
+            . 'COALESCE(SUM(is_dinner_candidate = TRUE AND main_protein IS NULL), 0) '
+            . 'AS dinner_candidates_without_main_protein FROM recipe WHERE active = TRUE'
+        );
+        $query->execute();
+        $row = $query->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row)) {
+            throw new RuntimeException('Cannot read feature counts.');
+        }
+        $result = [];
+        foreach (['vegetarian_true', 'vegetarian_false', 'vegetarian_unknown',
+            'dinner_candidates', 'dinner_candidates_without_main_protein'] as $key) {
+            if (!is_numeric($row[$key] ?? null)) {
+                throw new RuntimeException('Invalid feature count.');
+            }
+            $result[$key] = (int) $row[$key];
+        }
         return $result;
     }
 

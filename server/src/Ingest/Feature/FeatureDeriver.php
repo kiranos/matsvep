@@ -177,9 +177,8 @@ final class FeatureDeriver
         $carb = null;
         $animal = false;
         $premium = false;
-        $mapped = false;
-        $unknownProtein = false;
-        $uncertainMain = false;
+        $matchedMain = false;
+        $unmatchedMain = false;
         $ingredientTexts = [];
         foreach ($lines as $line) {
             if (!is_numeric($line['position'] ?? null) || !is_string($line['raw_text'] ?? null)
@@ -198,7 +197,6 @@ final class FeatureDeriver
                     continue;
                 }
                 $lineMapped = true;
-                $mapped = true;
                 if (is_string($part['category'] ?? null) && is_numeric($part['is_staple'] ?? null)
                     && (int) $part['is_staple'] === 0 && in_array($part['category'], $mainCategories, true)) {
                     $main = true;
@@ -227,16 +225,18 @@ final class FeatureDeriver
                 }
             }
             if (!$lineMapped && $line['normalise_status'] !== 'ignored') {
-                $unknownProtein = $unknownProtein || $this->proteinCandidates->matches($text);
                 $main = $this->proteinCandidates->matches($text)
                     || $this->hasMainMass($line, $mainMass);
-                $uncertainMain = $uncertainMain || $main;
+            }
+            if ($main) {
+                $matchedMain = $matchedMain || $line['normalise_status'] === 'matched';
+                $unmatchedMain = $unmatchedMain || $line['normalise_status'] !== 'matched';
             }
             $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
         }
         $titleProtein = $this->proteinFromTitle($recipe['title']);
         $animal = $animal || ($titleProtein !== null && $titleProtein !== 'vegetarian');
-        $vegetarian = $animal ? 0 : ($mapped && !$unknownProtein && !$uncertainMain ? 1 : null);
+        $vegetarian = $animal ? 0 : ($matchedMain && !$unmatchedMain ? 1 : null);
         usort($proteinChoices, static fn (array $a, array $b): int =>
             ($b['grams'] ?? -1) <=> ($a['grams'] ?? -1)
                 ?: (int) $b['main'] <=> (int) $a['main']
