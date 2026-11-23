@@ -89,7 +89,11 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'cheese_with_meat', 'halloumi_dinner', 'egg_dinner',
                 'breakfast_cereal_side', 'salsa_side', 'bruschetta_side',
                 'vegetable_salad_side', 'asparagus_side', 'chicken_salad_main', 'tofu_salad_main', 'salsa_accompaniment', 'dip_accompaniment',
-                'porridge_exclusion', 'smoothie_exclusion'] as $key) {
+                'porridge_exclusion', 'smoothie_exclusion', 'category_dessert',
+                'baking_muffin', 'savory_pizza', 'savory_paj', 'savory_broad_title', 'unambiguous_with_meat',
+                'egg_only', 'unknown_meat', 'mapped_meat_other_line', 'marulk_dinner',
+                'beans_dinner', 'shrimp_title', 'game_title', 'perch_title',
+                'meat_with_cheese'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -110,8 +114,20 @@ final class FeatureDeriverIntegrationTest extends TestCase
             }
             $normaliser = new IngredientNormaliser($db, new IngredientLineParser($seedDirectory));
             $normaliser->run();
+            $audit = new \Matsvep\Ingest\Feature\DinnerCandidateAudit($db, $seedDirectory);
+            $categoryDessertId = $ids['category_dessert'] ?? null;
+            self::assertIsInt($categoryDessertId);
+            $db->prepare('UPDATE recipe SET is_dinner_candidate = TRUE WHERE id = ?')
+                ->execute([$categoryDessertId]);
+            $beforeCandidates = $audit->candidates();
             $deriver = new FeatureDeriver($db, $seedDirectory);
             self::assertSame(count($ids), $deriver->run());
+            $changes = $audit->build($beforeCandidates, $audit->candidates());
+            self::assertSame(1, $changes['removed_count']);
+            self::assertIsArray($changes['savory_title_removed']);
+            self::assertCount(1, $changes['savory_title_removed']);
+            self::assertIsArray($changes['savory_title_removed'][0]);
+            self::assertSame($categoryDessertId, $changes['savory_title_removed'][0]['id']);
             $featureQuery = $db->prepare(
                 'SELECT main_protein, carb_base, cuisine, meal_type, is_vegetarian, ' .
                 'is_dinner_candidate, leftover_score, festive_score, effort FROM recipe WHERE id = ?'
@@ -175,7 +191,7 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertGreaterThan(8, $report['matched_main_ingredient_lines']);
             self::assertGreaterThan(80.0, $report['matched_main_ingredient_share_pct']);
             self::assertIsArray($report['main_protein_distribution']);
-            self::assertSame(3, $report['main_protein_distribution']['fish']);
+            self::assertSame(5, $report['main_protein_distribution']['fish']);
             $ingredientReport = (new IngredientReport($db))->build();
             self::assertSame($report['main_ingredient_lines'], $ingredientReport['main_lines']);
             self::assertSame($report['matched_main_ingredient_lines'], $ingredientReport['matched_main_lines']);
@@ -184,7 +200,10 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertCount(min(20, count($ids)), $report['spot_check']);
             $dinners = $report['dinner_candidates'];
             self::assertIsArray($dinners);
-            self::assertSame(20, $dinners['count']);
+            self::assertSame(count(array_filter(
+                $cases,
+                static fn (mixed $case): bool => is_array($case) && ($case['dinner_candidate'] ?? false) === true,
+            )), $dinners['count']);
             self::assertIsArray($dinners['highest_leftover_score']);
             self::assertIsArray($dinners['lowest_leftover_score']);
             self::assertCount(10, $dinners['highest_leftover_score']);

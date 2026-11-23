@@ -39,6 +39,27 @@ final class FeatureVocabulary
     /** @var list<string> */
     public readonly array $dinnerTitleSeparators;
 
+    /** @var list<string> */
+    public readonly array $dinnerBlockedTags;
+
+    /** @var array<string, string> */
+    public readonly array $dinnerBakingIngredients;
+
+    /** @var list<string> */
+    public readonly array $dinnerSavoryTitles;
+
+    /** @var list<string> */
+    public readonly array $dinnerBroadTitles;
+
+    /** @var list<string> */
+    public readonly array $dinnerUnambiguousTitles;
+
+    /** @var list<string> */
+    public readonly array $animalStems;
+
+    /** @var list<string> */
+    public readonly array $dinnerEggIngredients;
+
     /** @var array<string, list<array{keyword: string, value: float}>> */
     public readonly array $leftoverKeywords;
 
@@ -118,6 +139,26 @@ final class FeatureVocabulary
         $this->dinnerExclusions = $exclusions;
         $this->dinnerMainIngredients = $this->readTerms($seedDirectory . '/feature_dinner_main_ingredients.csv');
         $this->dinnerTitleSeparators = $this->readTerms($seedDirectory . '/feature_dinner_title_separators.csv');
+        $this->dinnerBlockedTags = array_map(
+            'mb_strtolower',
+            $this->readTerms($seedDirectory . '/feature_dinner_blocked_tags.csv'),
+        );
+        $bakingIngredients = [];
+        foreach (CsvTable::read(
+            $seedDirectory . '/feature_dinner_baking_ingredients.csv',
+            ['ingredient_name', 'signal'],
+        ) as $row) {
+            if ($row['ingredient_name'] === '' || !in_array($row['signal'], ['direct', 'sugar', 'flour'], true)) {
+                throw new RuntimeException('Invalid dinner baking ingredient seed row.');
+            }
+            $bakingIngredients[mb_strtolower($row['ingredient_name'])] = $row['signal'];
+        }
+        $this->dinnerBakingIngredients = $bakingIngredients;
+        $this->dinnerSavoryTitles = $this->readTerms($seedDirectory . '/feature_dinner_savory_titles.csv');
+        $this->dinnerBroadTitles = $this->readTerms($seedDirectory . '/feature_dinner_broad_titles.csv');
+        $this->dinnerUnambiguousTitles = $this->readTerms($seedDirectory . '/feature_dinner_unambiguous_titles.csv');
+        $this->animalStems = $this->readTerms($seedDirectory . '/feature_animal_stems.csv');
+        $this->dinnerEggIngredients = $this->readTerms($seedDirectory . '/feature_dinner_egg_ingredients.csv');
         $durationUnits = [];
         foreach (CsvTable::read($seedDirectory . '/feature_duration_units.csv', ['unit', 'minutes']) as $row) {
             if ($row['unit'] === '' || !is_numeric($row['minutes']) || (float) $row['minutes'] <= 0) {
