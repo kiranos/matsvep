@@ -1,0 +1,16 @@
+{
+  "folds": {
+    "brûlée": "brulee",
+    "brulée": "brulee",
+    "crème": "creme",
+    "îles flottantes": "iles flottantes",
+    "piñata": "pinata",
+    "façade": "facade"
+  },
+  "distinct": [
+    ["sås", "sas"],
+    ["gös", "gos"],
+    ["mål", "mal"],
+    ["räkfond", "rakfond"]
+  ]
+}

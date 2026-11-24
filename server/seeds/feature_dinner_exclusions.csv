@@ -8,20 +8,16 @@ dessert,unknown_only
 efterrätt,unknown_only
 glass,unknown_only
 dryck,unknown_only
-cocktail,unknown_only
 sås,unknown_only
 dressing,unknown_only
 kryddblandning,unknown_only
 kryddmix,unknown_only
 inläggning,unknown_only
-sylt,unknown_only
-marmelad,unknown_only
-chutney,always
+chutney,leading
 roast potatoes,dish_title
-saft,unknown_only
 müsli,always
 gröt,always
-smoothie,always
+smoothie,leading
 salsa,dish_title
 bruschetta,always
 bruscetta,always
@@ -30,3 +26,21 @@ dipp,dish_title
 sallad,side
 serveras med,side
 tillbehör,side
+fond,leading
+buljong,leading
+marinad,leading
+glaze,leading
+deg,leading
+grundrecept,leading
+marmelad,leading
+sylt,leading
+curd,leading
+ättiksgurka,leading
+drink,leading
+saft,leading
+lemonad,leading
+kaffe,leading
+bål,leading
+glögg,leading
+cocktail,leading
+latte,leading

@@ -99,7 +99,13 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'vegetarian_sausage', 'fish_roe', 'mixed_main_starter', 'mixed_main_dessert',
                 'starter_fish', 'buffet_fish', 'side_chicken', 'snack_chicken',
                 'brunch_chicken', 'fika_chicken', 'breakfast_chicken', 'between_chicken',
-                'occasion_fest', 'occasion_picknick', 'specific_cuisine', 'tag_beats_title'] as $key) {
+                'occasion_fest', 'occasion_picknick', 'specific_cuisine', 'tag_beats_title',
+                'leading_fish_stock', 'leading_shrimp_stock', 'leading_dough',
+                'noodle_stock_dinner', 'chicken_stock_dinner', 'pie_stock_dinner', 'pizza_dough_dinner',
+                'untagged_potato_side', 'untagged_rice_side', 'untagged_couscous_side',
+                'untagged_salad_side', 'untagged_stew', 'sweet_pie', 'sugar_pie',
+                'savory_pie_no_sweet', 'accent_dessert', 'uncertain_tofu_protein',
+                'pork_joint', 'reindeer_fillet'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);

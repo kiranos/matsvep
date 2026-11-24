@@ -1,0 +1,7 @@
+# Positive dinner evidence and protein compounds
+
+Production 100-recipe samples showed non-dinners among candidates, uncertain vegetarian labels and protein gaps. Untagged recipes now need a main protein or a seeded dinner dish word. A carb base alone cannot make a side dish a dinner. Seeded preparation, condiment and drink title terms exclude a recipe only when found in its leading dish name, and only when that part has no protein or dinner-dish evidence. This protects dinners with stock or dough in an accompaniment.
+
+Sweet pies are excluded using seeded sweet title and ingredient terms or a configurable sugar-line share. Foreign accents are folded in feature term matching, but Swedish `å`, `ä` and `ö` are never folded. The new `non_dinner_title` reason distinguishes leading-title exclusions from breakfast and side exclusions.
+
+The protein matcher previously chose the shorter egg suffix in a pork compound. A vegetarian prefix still wins a meat suffix, while a meat prefix now wins a shorter vegetarian suffix; an explicit egg compound can still win. Additional stems and vegetarian protein seed rows address the observed coverage gaps. A substantial vegetarian protein item supplies the main-protein code even when an unrelated unmatched ingredient keeps vegetarian status unknown. Manual feature overrides still apply after derivation. Migration 024 adds the sweet-pie threshold and expands the exclusion-reason check without editing applied migrations.

@@ -72,7 +72,13 @@ final class ProteinStemMatcher
             }
             $vegetarian = $this->firstKind($candidates, 'vegetarian');
             $stock = $this->firstKind($candidates, 'stock');
-            $selected = $vegetarian ?? ($previousVegetarian ? null : $stock);
+            $animal = $this->firstKind($candidates, 'animal');
+            $vegetarianWins = $vegetarian !== null && ($animal === null
+                || str_starts_with($word, $vegetarian['stem'])
+                && (str_starts_with($word, $animal['stem'])
+                    ? mb_strlen($vegetarian['stem']) >= mb_strlen($animal['stem'])
+                    : true));
+            $selected = $vegetarianWins ? $vegetarian : ($previousVegetarian ? null : $stock);
             if ($selected === null && !$previousVegetarian) {
                 foreach ($candidates as $candidate) {
                     if (in_array($candidate['kind'], ['animal', 'roe'], true)
@@ -90,6 +96,7 @@ final class ProteinStemMatcher
                     }
                 }
                 $selected ??= $this->firstKind($candidates, 'generic');
+                $selected ??= $vegetarian;
             }
             if ($selected !== null) {
                 $results[] = [
@@ -98,7 +105,7 @@ final class ProteinStemMatcher
                     'kind' => $selected['kind'],
                 ];
             }
-            $previousVegetarian = $vegetarian !== null;
+            $previousVegetarian = $selected !== null && $selected['kind'] === 'vegetarian';
         }
         return $results;
     }
