@@ -16,15 +16,21 @@ final class FeatureDeriver
 
     private readonly ProteinCandidateMatcher $proteinCandidates;
 
+    private readonly ProteinStemMatcher $stemMatcher;
+
     private readonly RecipeTimeEstimator $timeEstimator;
 
     private int $changedTimeEstimates = 0;
+
+    /** @var array<string, array{title: int, ingredient: int}> */
+    private array $stemMatchCounts = [];
 
     public function __construct(private readonly PDO $db, string $seedDirectory)
     {
         $this->config = new FeatureConfig($db);
         $this->vocabulary = new FeatureVocabulary($db, $seedDirectory);
         $this->proteinCandidates = new ProteinCandidateMatcher($db, $seedDirectory);
+        $this->stemMatcher = new ProteinStemMatcher($seedDirectory);
         $this->timeEstimator = new RecipeTimeEstimator($seedDirectory);
         if ($this->vocabulary->leftoverKeywords['dish_type'] === []) {
             throw new RuntimeException('Seed feature keywords before deriving recipes.');
@@ -44,9 +50,17 @@ final class FeatureDeriver
         return $this->changedTimeEstimates;
     }
 
+    /** @return array<string, array{title: int, ingredient: int}> */
+    public function stemMatchCounts(): array
+    {
+        ksort($this->stemMatchCounts);
+        return $this->stemMatchCounts;
+    }
+
     public function run(?int $recipeId = null): int
     {
         $this->changedTimeEstimates = 0;
+        $this->stemMatchCounts = [];
         $sql = 'SELECT id, title, total_time_min, total_time_source FROM recipe WHERE active = TRUE';
         $arguments = [];
         if ($recipeId !== null) {
@@ -78,7 +92,7 @@ final class FeatureDeriver
         $update = $this->db->prepare(
             'UPDATE recipe SET main_protein = ?, carb_base = ?, cuisine = ?, meal_type = ?, ' .
             'is_dinner_candidate = ?, is_vegetarian = ?, leftover_score = ?, festive_score = ?, effort = ?, ' .
-            'total_time_min = ?, total_time_source = ? WHERE id = ?'
+            'dinner_exclusion_reason = ?, total_time_min = ?, total_time_source = ? WHERE id = ?'
         );
         $count = 0;
         $this->db->beginTransaction();
@@ -140,6 +154,13 @@ final class FeatureDeriver
                             $features[$index] = $override[$column];
                         }
                     }
+                    if ($override['is_dinner_candidate'] !== null) {
+                        if (!is_numeric($override['is_dinner_candidate'])) {
+                            throw new RuntimeException('Invalid manual dinner candidate override.');
+                        }
+                        $features[9] = (int) $override['is_dinner_candidate'] === 1
+                            ? null : 'manual_override';
+                    }
                 }
                 $update->execute([...$features, $time, $timeSource, $id]);
                 $count++;
@@ -158,7 +179,7 @@ final class FeatureDeriver
      * @param array<int, list<array<string, mixed>>> $parts
      * @param list<string> $tags
      * @param list<string> $steps
-     * @return array{?string, ?string, ?string, ?string, int, ?int, float, float, int}
+     * @return array{?string, ?string, ?string, ?string, int, ?int, float, float, int, ?string}
      */
     private function deriveOne(
         array $recipe,
@@ -170,6 +191,37 @@ final class FeatureDeriver
     ): array {
         $mainCategories = $this->config->stringList('feature.main_categories');
         $mainMass = $this->config->decimal('feature.main_min_mass_g');
+        $sourceCategoryKind = null;
+        $sourceDrink = false;
+        foreach ($tags as $tag) {
+            $kind = $this->vocabulary->dinnerBlockedTags[mb_strtolower(trim($tag))] ?? null;
+            if ($kind === 'dessert') {
+                $sourceCategoryKind = 'dessert';
+            } elseif ($kind !== null && $sourceCategoryKind !== 'dessert') {
+                $sourceCategoryKind = 'broad';
+            }
+            $sourceDrink = $sourceDrink || $kind === 'drink';
+        }
+        $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles);
+        $titleStemMatches = $this->stemMatcher->match($recipe['title']);
+        $lineStemMatches = [];
+        $fishContext = $this->hasFishStem($titleStemMatches);
+        foreach ($lines as $line) {
+            if (!is_numeric($line['position'] ?? null) || !is_string($line['raw_text'] ?? null)) {
+                throw new RuntimeException('Invalid ingredient line for protein stem matching.');
+            }
+            $position = (int) $line['position'];
+            $lineStemMatches[$position] = $this->stemMatcher->match($line['raw_text']);
+            $fishContext = $fishContext || $this->hasFishStem($lineStemMatches[$position]);
+        }
+        if ($fishContext && !$sourceDrink && $sourceCategoryKind !== 'dessert' && !$unambiguousTitle) {
+            $titleStemMatches = $this->stemMatcher->match($recipe['title'], true);
+            foreach ($lines as $line) {
+                $position = (int) $line['position'];
+                $lineStemMatches[$position] = $this->stemMatcher->match($line['raw_text'], true);
+            }
+        }
+        $this->recordStemMatches($titleStemMatches, 'title');
         $protein = null;
         $proteinChoices = [];
         $vegetarianProteinPresent = false;
@@ -178,8 +230,8 @@ final class FeatureDeriver
         $animal = false;
         $premium = false;
         $matchedMain = false;
-        $unmatchedMain = false;
-        $unmatchedAnimal = false;
+        $unmatchedMainWithoutVegetarianStem = false;
+        $vegetarianStemPresent = false;
         $strongMainProtein = false;
         $eggPresent = false;
         $nonEggMain = false;
@@ -190,8 +242,7 @@ final class FeatureDeriver
         $directBaking = false;
         $ingredientTexts = [];
         foreach ($lines as $line) {
-            if (!is_numeric($line['position'] ?? null) || !is_string($line['raw_text'] ?? null)
-                || !is_string($line['normalise_status'] ?? null)) {
+            if (!is_string($line['normalise_status'] ?? null)) {
                 throw new RuntimeException('Normalise ingredient lines before deriving recipe features.');
             }
             $position = (int) $line['position'];
@@ -201,6 +252,15 @@ final class FeatureDeriver
             $main = false;
             $lineMapped = false;
             $lineSugarFlour = false;
+            $mappedProteinOnLine = false;
+            $stemMatches = $lineStemMatches[$position] ?? [];
+            $this->recordStemMatches($stemMatches, 'ingredient');
+            $lineVegetarianStem = false;
+            foreach ($stemMatches as $stemMatch) {
+                $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
+                $lineVegetarianStem = $lineVegetarianStem || $stemMatch['kind'] === 'vegetarian';
+            }
+            $vegetarianStemPresent = $vegetarianStemPresent || $lineVegetarianStem;
             if ($line['normalise_status'] !== 'ignored') {
                 $foodLines++;
             }
@@ -242,6 +302,7 @@ final class FeatureDeriver
                     && ($rule['protein'] !== 'vegetarian'
                         || in_array($normalisedName, $this->vocabulary->dinnerMainIngredients, true)));
                 if ($rule['protein'] !== null && $rule['protein'] !== 'vegetarian') {
+                    $mappedProteinOnLine = true;
                     $proteinChoices[] = [
                         'code' => $rule['protein'],
                         'grams' => $this->gramAmount($line),
@@ -254,21 +315,43 @@ final class FeatureDeriver
                 $main = $this->proteinCandidates->matches($text)
                     || $this->hasMainMass($line, $mainMass);
             }
-            $unmatchedAnimal = $unmatchedAnimal || ($line['normalise_status'] !== 'matched'
-                && $line['normalise_status'] !== 'ignored'
-                && $this->containsAny($line['raw_text'], $this->vocabulary->animalStems));
+            if (!$mappedProteinOnLine && $line['normalise_status'] !== 'ignored') {
+                foreach ($stemMatches as $stemMatch) {
+                    if ($stemMatch['protein_code'] === null) {
+                        continue;
+                    }
+                    if ($stemMatch['protein_code'] === 'vegetarian') {
+                        $vegetarianProteinPresent = true;
+                        $substantialVegetarianMain = $substantialVegetarianMain
+                            || ($main && !$lineMapped);
+                    } else {
+                        $proteinChoices[] = [
+                            'code' => $stemMatch['protein_code'],
+                            'grams' => $this->gramAmount($line),
+                            'position' => $position,
+                            'main' => $main,
+                        ];
+                    }
+                    $strongMainProtein = $strongMainProtein || ($main
+                        && ($stemMatch['protein_code'] !== 'vegetarian' || !$lineMapped));
+                    break;
+                }
+            }
             $sugarFlourLines += $lineSugarFlour ? 1 : 0;
             if ($main) {
                 $matchedMain = $matchedMain || $line['normalise_status'] === 'matched';
-                $unmatchedMain = $unmatchedMain || $line['normalise_status'] !== 'matched';
+                $unmatchedMainWithoutVegetarianStem = $unmatchedMainWithoutVegetarianStem
+                    || ($line['normalise_status'] !== 'matched' && !$lineVegetarianStem);
             }
             $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
         }
-        $titleProtein = $this->proteinFromTitle($recipe['title']);
-        $animal = $animal || ($titleProtein !== null && $titleProtein !== 'vegetarian');
-        $unmatchedAnimal = $unmatchedAnimal || ($titleProtein === null
-            && $this->containsAny($recipe['title'], $this->vocabulary->animalStems));
-        $vegetarian = $animal ? 0 : ($matchedMain && !$unmatchedMain && !$unmatchedAnimal ? 1 : null);
+        $titleProtein = null;
+        foreach ($titleStemMatches as $stemMatch) {
+            $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
+            $titleProtein ??= $stemMatch['protein_code'];
+        }
+        $vegetarian = $animal ? 0 : (($matchedMain || $vegetarianStemPresent)
+            && !$unmatchedMainWithoutVegetarianStem ? 1 : null);
         usort($proteinChoices, static fn (array $a, array $b): int =>
             ($b['grams'] ?? -1) <=> ($a['grams'] ?? -1)
                 ?: (int) $b['main'] <=> (int) $a['main']
@@ -299,34 +382,36 @@ final class FeatureDeriver
             || ($titleProtein !== null && $titleProtein !== 'vegetarian');
         $proteinEvidence = $titleProtein !== null || $proteinChoices !== [] || $vegetarianProteinPresent;
         $dinnerCandidate = $mealType === 'main' || ($mealType === null
-            && ($proteinEvidence || $carb !== null)
-            && (!$this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags), 'unknown_only')
-                || $clearDinnerEvidence));
+            && ($proteinEvidence || $carb !== null));
         $substantialMain = ($titleProtein !== null && $titleProtein !== 'vegetarian')
             || $proteinChoices !== [] || $carb !== null || $substantialVegetarianMain;
-        $blockedSourceTag = false;
-        foreach ($tags as $tag) {
-            $blockedSourceTag = $blockedSourceTag || in_array(
-                mb_strtolower(trim($tag)),
-                $this->vocabulary->dinnerBlockedTags,
-                true,
-            );
-        }
         $bakingShare = $foodLines === 0 ? 0.0 : $sugarFlourLines / $foodLines;
         $bakingIngredients = $directBaking || ($hasSugar && $hasFlour
             && $bakingShare >= $this->config->decimal('feature.baking_sugar_flour_share'));
         $broadTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerBroadTitles);
-        $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles);
         $eggAlone = $eggPresent && !$nonEggMain && $carb === null && !$savoryTitle
             && $proteinChoices === [] && !$strongMainProtein;
-        if ($blockedSourceTag) {
+        $exclusionReason = null;
+        if ($sourceCategoryKind === 'dessert') {
             $dinnerCandidate = false;
-        } elseif (!$clearDinnerEvidence && $bakingIngredients) {
+            $exclusionReason = 'source_category';
+        } elseif ($unambiguousTitle) {
             $dinnerCandidate = false;
-        } elseif ($unambiguousTitle || (!$clearDinnerEvidence && $broadTitle)) {
+            $exclusionReason = 'dessert_title';
+        } elseif ($clearDinnerEvidence) {
+            $dinnerCandidate = true;
+        } elseif ($sourceCategoryKind !== null) {
             $dinnerCandidate = false;
+            $exclusionReason = 'source_category';
+        } elseif ($bakingIngredients) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'baking_ingredients';
+        } elseif ($broadTitle) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'dessert_title';
         } elseif ($eggAlone || $this->hasDinnerExclusion($recipe['title'], 'always')) {
             $dinnerCandidate = false;
+            $exclusionReason = $eggAlone ? 'insufficient_evidence' : 'breakfast_or_side';
         } elseif ($dinnerCandidate) {
             $dishTitle = $recipe['title'];
             foreach ($this->vocabulary->dinnerTitleSeparators as $separator) {
@@ -337,6 +422,13 @@ final class FeatureDeriver
             }
             $dinnerCandidate = !$this->hasDinnerExclusion($dishTitle, 'dish_title')
                 && ($substantialMain || !$this->hasDinnerExclusion($recipe['title'], 'side'));
+            if (!$dinnerCandidate) {
+                $exclusionReason = 'breakfast_or_side';
+            }
+        }
+        if (!$dinnerCandidate && $exclusionReason === null) {
+            $exclusionReason = $this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags), 'unknown_only')
+                ? 'breakfast_or_side' : 'insufficient_evidence';
         }
         $time = is_numeric($recipe['total_time_min'] ?? null)
             ? (int) $recipe['total_time_min'] : null;
@@ -354,7 +446,8 @@ final class FeatureDeriver
             || $ingredientCount >= $this->config->integer('feature.effort_hard_ingredient_count')
             ? 3 : (($time !== null && $time <= $this->config->integer('feature.effort_easy_time_min')
                 && $ingredientCount <= $this->config->integer('feature.effort_easy_ingredient_count')) ? 1 : 2);
-        return [$protein, $carb, $cuisine, $mealType, $dinnerCandidate ? 1 : 0, $vegetarian, round($leftover, 4), round($festive, 4), $effort];
+        return [$protein, $carb, $cuisine, $mealType, $dinnerCandidate ? 1 : 0, $vegetarian,
+            round($leftover, 4), round($festive, 4), $effort, $exclusionReason];
     }
 
     /** @param array<string, mixed> $line */
@@ -472,18 +565,27 @@ final class FeatureDeriver
         return false;
     }
 
-    private function proteinFromTitle(string $title): ?string
+    /** @param list<array{stem: string, protein_code: ?string, kind: string}> $matches */
+    private function hasFishStem(array $matches): bool
     {
-        $first = null;
-        $protein = null;
-        foreach ($this->vocabulary->proteinTitleTerms as $term) {
-            $position = mb_stripos($title, $term['term']);
-            if ($position !== false && ($first === null || $position < $first)) {
-                $first = $position;
-                $protein = $term['protein_code'];
+        foreach ($matches as $match) {
+            if (in_array($match['protein_code'], ['fish', 'seafood'], true)) {
+                return true;
             }
         }
-        return $protein;
+        return false;
+    }
+
+    /** @param list<array{stem: string, protein_code: ?string, kind: string}> $matches
+     * @param 'title'|'ingredient' $source
+     */
+    private function recordStemMatches(array $matches, string $source): void
+    {
+        foreach ($matches as $match) {
+            $stem = $match['stem'];
+            $this->stemMatchCounts[$stem] ??= ['title' => 0, 'ingredient' => 0];
+            $this->stemMatchCounts[$stem][$source]++;
+        }
     }
 
     private function clamp(float $value): float

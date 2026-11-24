@@ -1,16 +1,21 @@
-term
-Efterrätt
-Dessert
-Bakning
-Baka
-Bakverk
-Bröd
-Kakor
-Småkakor
-Tårtor
-Tårta
-Godis
-Sötsaker
-Fika
-Muffins
-Pajer och bakverk
+term,kind
+Efterrätt,dessert
+Dessert,dessert
+Bakning,broad
+Baka,broad
+Bakverk,broad
+Bröd,broad
+Kakor,dessert
+Småkakor,dessert
+Tårtor,dessert
+Tårta,dessert
+Godis,dessert
+Sötsaker,dessert
+Fika,broad
+Muffins,dessert
+Pajer och bakverk,broad
+Tillbehör,broad
+Frukost,broad
+Dryck,drink
+Drinkar,drink
+Cocktail,drink

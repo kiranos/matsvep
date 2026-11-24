@@ -100,7 +100,10 @@ final class RecipeProcessorIntegrationTest extends TestCase
             $user = $db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')");
             $user->execute(['admin@example.com', password_hash('test-password', PASSWORD_DEFAULT)]);
             $actor = (int) $db->lastInsertId();
-            $override = $db->prepare('INSERT INTO recipe_feature_override (recipe_id, main_protein, updated_by) VALUES (?, ?, ?)');
+            $override = $db->prepare(
+                'INSERT INTO recipe_feature_override (recipe_id, main_protein, is_dinner_candidate, updated_by) '
+                . 'VALUES (?, ?, FALSE, ?)',
+            );
             $override->execute([$first, 'fish', $actor]);
             $db->exec("INSERT INTO household (name) VALUES ('Processing test')");
             $householdId = (int) $db->lastInsertId();
@@ -137,11 +140,16 @@ final class RecipeProcessorIntegrationTest extends TestCase
             self::assertSame(1, $secondRun['time_estimates_changed']);
             $time->execute([$second]);
             self::assertSame(45, (int) $time->fetchColumn());
-            $saved = $db->prepare('SELECT main_protein, dish_group_id, dish_group_manual FROM recipe WHERE id = ?');
+            $saved = $db->prepare(
+                'SELECT main_protein, dish_group_id, dish_group_manual, '
+                . 'is_dinner_candidate, dinner_exclusion_reason FROM recipe WHERE id = ?',
+            );
             $saved->execute([$first]);
             $row = $saved->fetch(PDO::FETCH_ASSOC);
             self::assertIsArray($row);
             self::assertSame('fish', $row['main_protein']);
+            self::assertSame(0, (int) $row['is_dinner_candidate']);
+            self::assertSame('manual_override', $row['dinner_exclusion_reason']);
             self::assertIsNumeric($row['dish_group_id']);
             self::assertIsNumeric($row['dish_group_manual']);
             self::assertSame($group, (int) $row['dish_group_id']);
