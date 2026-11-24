@@ -81,6 +81,7 @@ final class RecipeProcessor
             'time_coverage_after' => $after,
             'features_before_derivation' => $featuresBefore,
             'features_after_derivation' => $featuresAfter,
+            'protein_stem_matches' => $deriver->stemMatchCounts(),
             'dinner_candidate_changes' => $dinnerChanges,
             'affinity_rebuild' => $affinityRebuild,
         ];
@@ -88,7 +89,7 @@ final class RecipeProcessor
         return $result;
     }
 
-    /** @return array{vegetarian_true: int, vegetarian_false: int, vegetarian_unknown: int, dinner_candidates: int, dinner_candidates_without_main_protein: int} */
+    /** @return array<string, mixed> */
     private function featureCounts(): array
     {
         $query = $this->db->prepare(
@@ -111,6 +112,30 @@ final class RecipeProcessor
                 throw new RuntimeException('Invalid feature count.');
             }
             $result[$key] = (int) $row[$key];
+        }
+        $result['main_protein_distribution'] = $this->distribution(
+            'SELECT COALESCE(main_protein, ?) AS code, COUNT(*) AS total '
+            . 'FROM recipe WHERE active = TRUE GROUP BY code ORDER BY code',
+        );
+        $result['dinner_exclusion_reason_distribution'] = $this->distribution(
+            'SELECT COALESCE(dinner_exclusion_reason, ?) AS code, COUNT(*) AS total '
+            . 'FROM recipe WHERE active = TRUE AND is_dinner_candidate = FALSE '
+            . 'GROUP BY code ORDER BY code',
+        );
+        return $result;
+    }
+
+    /** @return array<string, int> */
+    private function distribution(string $sql): array
+    {
+        $query = $this->db->prepare($sql);
+        $query->execute(['unclassified']);
+        $result = [];
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (!is_array($row) || !is_string($row['code'] ?? null) || !is_numeric($row['total'] ?? null)) {
+                throw new RuntimeException('Invalid feature distribution row.');
+            }
+            $result[$row['code']] = (int) $row['total'];
         }
         return $result;
     }

@@ -93,7 +93,10 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'baking_muffin', 'savory_pizza', 'savory_paj', 'savory_broad_title', 'unambiguous_with_meat',
                 'egg_only', 'unknown_meat', 'mapped_meat_other_line', 'marulk_dinner',
                 'beans_dinner', 'shrimp_title', 'game_title', 'perch_title',
-                'meat_with_cheese'] as $key) {
+                'meat_with_cheese', 'kebab_bread', 'fish_tacos', 'ham_pie',
+                'meat_dumplings', 'cabbage_tacos', 'cheese_pie', 'savory_pancake',
+                'mung_bean_fritters', 'stock_only', 'small_anchovy', 'rum_dessert',
+                'vegetarian_sausage', 'fish_roe'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -130,7 +133,8 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertSame($categoryDessertId, $changes['savory_title_removed'][0]['id']);
             $featureQuery = $db->prepare(
                 'SELECT main_protein, carb_base, cuisine, meal_type, is_vegetarian, ' .
-                'is_dinner_candidate, leftover_score, festive_score, effort FROM recipe WHERE id = ?'
+                'is_dinner_candidate, dinner_exclusion_reason, leftover_score, festive_score, effort '
+                . 'FROM recipe WHERE id = ?'
             );
             foreach ($ids as $key => $id) {
                 $case = $cases[$key];
@@ -141,12 +145,25 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 foreach (['protein' => 'main_protein', 'carb' => 'carb_base',
                     'cuisine' => 'cuisine', 'meal_type' => 'meal_type'] as $expectedKey => $column) {
                     if (isset($case[$expectedKey])) {
-                        self::assertSame($case[$expectedKey], $actual[$column]);
+                        self::assertSame($case[$expectedKey], $actual[$column], $key . ':' . $column);
                     }
                 }
-                self::assertSame($case['dinner_candidate'], (bool) $actual['is_dinner_candidate']);
+                if ($key === 'stock_only') {
+                    self::assertNull($actual['main_protein'], $key . ':main_protein');
+                }
+                if ($key === 'rum_dessert') {
+                    self::assertSame('vegetarian', $actual['main_protein'], $key . ':main_protein');
+                }
+                self::assertSame($case['dinner_candidate'], (bool) $actual['is_dinner_candidate'], $key . ':dinner_candidate');
                 self::assertSame($case['vegetarian'], $actual['is_vegetarian'] === null
-                    ? null : (bool) $actual['is_vegetarian']);
+                    ? null : (bool) $actual['is_vegetarian'], $key . ':vegetarian');
+                if (isset($case['exclusion_reason'])) {
+                    self::assertSame($case['exclusion_reason'], $actual['dinner_exclusion_reason'], $key);
+                } elseif ($case['dinner_candidate']) {
+                    self::assertNull($actual['dinner_exclusion_reason'], $key);
+                } else {
+                    self::assertNotNull($actual['dinner_exclusion_reason'], $key);
+                }
                 self::assertIsNumeric($actual['leftover_score']);
                 if (isset($case['leftover_score'])) {
                     self::assertIsNumeric($case['leftover_score']);
@@ -191,7 +208,15 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertGreaterThan(8, $report['matched_main_ingredient_lines']);
             self::assertGreaterThan(80.0, $report['matched_main_ingredient_share_pct']);
             self::assertIsArray($report['main_protein_distribution']);
-            self::assertSame(5, $report['main_protein_distribution']['fish']);
+            self::assertSame(7, $report['main_protein_distribution']['fish']);
+            $tagReport = (new \Matsvep\Ingest\Feature\RecipeTagReport($db))->build();
+            self::assertContains('Huvudrätt', array_column($tagReport, 'tag'));
+            $mainTag = array_values(array_filter(
+                $tagReport,
+                static fn (array $row): bool => $row['tag'] === 'Huvudrätt',
+            ));
+            self::assertCount(1, $mainTag);
+            self::assertGreaterThan(0, $mainTag[0]['dinner_candidates']);
             $ingredientReport = (new IngredientReport($db))->build();
             self::assertSame($report['main_ingredient_lines'], $ingredientReport['main_lines']);
             self::assertSame($report['matched_main_ingredient_lines'], $ingredientReport['matched_main_lines']);

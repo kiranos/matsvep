@@ -18,9 +18,6 @@ final class FeatureVocabulary
     /** @var list<array{term: string, feature: string, code: string}> */
     public readonly array $titleTerms;
 
-    /** @var list<array{term: string, protein_code: string}> */
-    public readonly array $proteinTitleTerms;
-
     /** @var list<string> */
     public readonly array $cutUpTerms;
 
@@ -39,7 +36,7 @@ final class FeatureVocabulary
     /** @var list<string> */
     public readonly array $dinnerTitleSeparators;
 
-    /** @var list<string> */
+    /** @var array<string, string> */
     public readonly array $dinnerBlockedTags;
 
     /** @var array<string, string> */
@@ -53,9 +50,6 @@ final class FeatureVocabulary
 
     /** @var list<string> */
     public readonly array $dinnerUnambiguousTitles;
-
-    /** @var list<string> */
-    public readonly array $animalStems;
 
     /** @var list<string> */
     public readonly array $dinnerEggIngredients;
@@ -109,17 +103,6 @@ final class FeatureVocabulary
             $titleTerms[] = $row;
         }
         $this->titleTerms = $titleTerms;
-        $proteinTitleTerms = [];
-        foreach (CsvTable::read(
-            $seedDirectory . '/feature_protein_title_terms.csv',
-            ['term', 'protein_code']
-        ) as $row) {
-            if ($row['term'] === '' || $row['protein_code'] === '') {
-                throw new RuntimeException('Invalid protein title term seed row.');
-            }
-            $proteinTitleTerms[] = $row;
-        }
-        $this->proteinTitleTerms = $proteinTitleTerms;
         $cutUpTerms = [];
         foreach (CsvTable::read($seedDirectory . '/feature_cut_up_terms.csv', ['term']) as $row) {
             if ($row['term'] === '') {
@@ -139,10 +122,17 @@ final class FeatureVocabulary
         $this->dinnerExclusions = $exclusions;
         $this->dinnerMainIngredients = $this->readTerms($seedDirectory . '/feature_dinner_main_ingredients.csv');
         $this->dinnerTitleSeparators = $this->readTerms($seedDirectory . '/feature_dinner_title_separators.csv');
-        $this->dinnerBlockedTags = array_map(
-            'mb_strtolower',
-            $this->readTerms($seedDirectory . '/feature_dinner_blocked_tags.csv'),
-        );
+        $blockedTags = [];
+        foreach (CsvTable::read(
+            $seedDirectory . '/feature_dinner_blocked_tags.csv',
+            ['term', 'kind'],
+        ) as $row) {
+            if ($row['term'] === '' || !in_array($row['kind'], ['dessert', 'drink', 'broad'], true)) {
+                throw new RuntimeException('Invalid blocked source tag seed row.');
+            }
+            $blockedTags[mb_strtolower($row['term'])] = $row['kind'];
+        }
+        $this->dinnerBlockedTags = $blockedTags;
         $bakingIngredients = [];
         foreach (CsvTable::read(
             $seedDirectory . '/feature_dinner_baking_ingredients.csv',
@@ -157,7 +147,6 @@ final class FeatureVocabulary
         $this->dinnerSavoryTitles = $this->readTerms($seedDirectory . '/feature_dinner_savory_titles.csv');
         $this->dinnerBroadTitles = $this->readTerms($seedDirectory . '/feature_dinner_broad_titles.csv');
         $this->dinnerUnambiguousTitles = $this->readTerms($seedDirectory . '/feature_dinner_unambiguous_titles.csv');
-        $this->animalStems = $this->readTerms($seedDirectory . '/feature_animal_stems.csv');
         $this->dinnerEggIngredients = $this->readTerms($seedDirectory . '/feature_dinner_egg_ingredients.csv');
         $durationUnits = [];
         foreach (CsvTable::read($seedDirectory . '/feature_duration_units.csv', ['unit', 'minutes']) as $row) {

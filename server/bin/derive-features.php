@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Matsvep\Ingest\Feature\FeatureDeriver;
 use Matsvep\Ingest\Feature\FeatureDiagnosticSample;
 use Matsvep\Ingest\Feature\FeatureReport;
+use Matsvep\Ingest\Feature\RecipeTagReport;
 use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -16,12 +17,20 @@ if (PHP_SAPI !== 'cli') {
 
 try {
     $arguments = $_SERVER['argv'] ?? null;
-    $usage = 'Usage: php bin/derive-features.php [--all|--recipe=ID|--report|--protein-gap-sample=N|--vegetarian-sample=N] [--seed=N]';
+    $usage = 'Usage: php bin/derive-features.php [--all|--recipe=ID|--report|--tag-report|--protein-gap-sample=N|--vegetarian-sample=N] [--seed=N]';
     if (!is_array($arguments) || count($arguments) > 3 || !is_string($arguments[1] ?? '--report')) {
         throw new RuntimeException($usage);
     }
     $option = $arguments[1] ?? '--report';
     $seedOption = $arguments[2] ?? null;
+    if ($option === '--tag-report' && $seedOption === null) {
+        $db = DatabaseConnection::fromEnvironment(dirname(__DIR__));
+        fwrite(STDOUT, json_encode(
+            (new RecipeTagReport($db))->build(),
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+        ) . PHP_EOL);
+        exit(0);
+    }
     $sample = preg_match('/^--(protein-gap|vegetarian)-sample=([1-9][0-9]*)$/', $option, $match) === 1;
     if ($sample) {
         if ($seedOption !== null && (!is_string($seedOption)

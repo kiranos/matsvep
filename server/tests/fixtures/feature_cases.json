@@ -200,7 +200,7 @@
     "protein": "fish",
     "meal_type": "buffet",
     "vegetarian": false,
-    "dinner_candidate": false,
+      "dinner_candidate": true,
     "leftover_score": 0.5,
     "effort": 1
   },
@@ -437,7 +437,7 @@
     "tags": [
       "Huvudrätt"
     ],
-    "dinner_candidate": false,
+    "dinner_candidate": true,
     "vegetarian": true,
     "effort": 1
   },
@@ -671,7 +671,8 @@
     "steps": ["Koka"],
     "tags": ["Huvudrätt"],
     "dinner_candidate": true,
-    "vegetarian": null,
+    "protein": "pork",
+    "vegetarian": false,
     "effort": 2
   },
   "mapped_meat_other_line": {
@@ -753,10 +754,23 @@
     "steps": ["Blanda"],
     "tags": ["Förrätt"],
     "protein": "pork",
-    "dinner_candidate": false,
+    "dinner_candidate": true,
     "vegetarian": false,
     "effort": 2
   },
+  "kebab_bread": {"url":"https://www.koket.se/test-kebab-bread","title":"Kebab med naanbröd","time":40,"ingredients":["300 g kebabkött","200 g naanbröd"],"steps":["Stek"],"tags":["Bröd"],"protein":"meat","dinner_candidate":true,"vegetarian":false,"effort":2},
+  "fish_tacos": {"url":"https://www.koket.se/test-fish-tacos","title":"Fisktacos","time":40,"ingredients":["300 g fisk","200 g tortilla"],"steps":["Stek"],"tags":["Bröd"],"protein":"fish","dinner_candidate":true,"vegetarian":false,"effort":2},
+  "ham_pie": {"url":"https://www.koket.se/test-ham-pie","title":"Ost- och skinkpaj","time":40,"ingredients":["200 g skinka","200 g vetemjöl"],"steps":["Grädda"],"tags":["Bakning"],"protein":"pork","dinner_candidate":true,"vegetarian":false,"effort":2},
+  "meat_dumplings": {"url":"https://www.koket.se/test-meat-dumplings","title":"Kroppkakor","time":40,"ingredients":["300 g sidfläsk","300 g potatis"],"steps":["Koka"],"tags":["Bakning"],"protein":"pork","dinner_candidate":true,"vegetarian":false,"effort":2},
+  "cabbage_tacos": {"url":"https://www.koket.se/test-cabbage-tacos","title":"Kåltacos","time":40,"ingredients":["300 g kål","200 g tortilla"],"steps":["Blanda"],"tags":["Bröd"],"dinner_candidate":true,"vegetarian":null,"effort":2},
+  "cheese_pie": {"url":"https://www.koket.se/test-cheese-pie","title":"Parmesanostpaj","time":40,"ingredients":["250 g parmesanost","200 g vetemjöl"],"steps":["Grädda"],"tags":["Bakning"],"protein":"vegetarian","dinner_candidate":true,"vegetarian":true,"effort":2},
+  "savory_pancake": {"url":"https://www.koket.se/test-savory-pancake","title":"Pajeon","time":40,"ingredients":["2 ägg","200 g vetemjöl"],"steps":["Stek"],"tags":["Bakning"],"dinner_candidate":true,"vegetarian":true,"effort":2},
+  "mung_bean_fritters": {"url":"https://www.koket.se/test-mung-bean-fritters","title":"Vegetarisk tallrik med mungbönplättar","time":40,"ingredients":["300 g mungbönplättar"],"steps":["Stek"],"tags":["Bakning"],"protein":"vegetarian","dinner_candidate":true,"vegetarian":true,"effort":2},
+  "stock_only": {"url":"https://www.koket.se/test-stock-only","title":"Fiskbuljong med potatis","time":40,"ingredients":["1 dl fiskbuljong","300 g potatis"],"steps":["Koka"],"tags":["Huvudrätt"],"dinner_candidate":true,"vegetarian":false,"effort":2},
+  "small_anchovy": {"url":"https://www.koket.se/test-small-anchovy","title":"Gryta med potatis","time":40,"ingredients":["500 g kyckling","5 g ansjovis","200 g potatis"],"steps":["Koka"],"tags":["Huvudrätt"],"protein":"chicken","dinner_candidate":true,"vegetarian":false,"effort":2},
+  "rum_dessert": {"url":"https://www.koket.se/test-rum-dessert","title":"Romrussinkaka","time":40,"ingredients":["1 dl rom","200 g russin"],"steps":["Grädda"],"tags":["Efterrätt"],"dinner_candidate":false,"vegetarian":true,"effort":2,"exclusion_reason":"source_category"},
+  "vegetarian_sausage": {"url":"https://www.koket.se/test-vegetarian-sausage","title":"Vegetarisk korv","time":40,"ingredients":["300 g vegokorv"],"steps":["Stek"],"tags":["Huvudrätt"],"protein":"vegetarian","dinner_candidate":true,"vegetarian":true,"effort":2},
+  "fish_roe": {"url":"https://www.koket.se/test-fish-roe","title":"Fisk med rom","time":40,"ingredients":["300 g fisk","50 g rom"],"steps":["Stek"],"tags":["Huvudrätt"],"protein":"fish","dinner_candidate":true,"vegetarian":false,"effort":2},
   "smoothie_exclusion": {
     "url": "https://www.koket.se/test-smoothie-exclusion",
     "title": "Smoothie med yoghurt",
