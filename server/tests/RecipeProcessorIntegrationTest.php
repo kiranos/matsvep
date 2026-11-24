@@ -83,6 +83,10 @@ final class RecipeProcessorIntegrationTest extends TestCase
             self::assertSame(0, $firstRun['time_estimates_changed']);
             self::assertIsArray($firstRun['features_before_derivation']);
             self::assertIsArray($firstRun['features_after_derivation']);
+            self::assertSame(2, $firstRun['features_before_derivation']['recipes_without_meal_type_tag']);
+            self::assertSame(2, $firstRun['features_after_derivation']['recipes_without_meal_type_tag']);
+            self::assertIsArray($firstRun['features_before_derivation']['dinner_cuisine_distribution']);
+            self::assertIsArray($firstRun['features_after_derivation']['dinner_cuisine_distribution']);
             self::assertSame(2, $firstRun['features_before_derivation']['vegetarian_unknown']);
             self::assertSame(0, $firstRun['features_before_derivation']['dinner_candidates_without_main_protein']);
             self::assertSame(2, array_sum(array_intersect_key(
@@ -105,6 +109,10 @@ final class RecipeProcessorIntegrationTest extends TestCase
                 . 'VALUES (?, ?, FALSE, ?)',
             );
             $override->execute([$first, 'fish', $actor]);
+            $cuisineOverride = $db->prepare(
+                'INSERT INTO recipe_feature_override (recipe_id, cuisine, updated_by) VALUES (?, ?, ?)',
+            );
+            $cuisineOverride->execute([$second, 'japanese', $actor]);
             $db->exec("INSERT INTO household (name) VALUES ('Processing test')");
             $householdId = (int) $db->lastInsertId();
             (new Learner($db, EngineConfig::fromDatabase($db)))->setRating($householdId, $first, 5);
@@ -141,7 +149,7 @@ final class RecipeProcessorIntegrationTest extends TestCase
             $time->execute([$second]);
             self::assertSame(45, (int) $time->fetchColumn());
             $saved = $db->prepare(
-                'SELECT main_protein, dish_group_id, dish_group_manual, '
+                'SELECT main_protein, cuisine, dish_group_id, dish_group_manual, '
                 . 'is_dinner_candidate, dinner_exclusion_reason FROM recipe WHERE id = ?',
             );
             $saved->execute([$first]);
@@ -151,6 +159,10 @@ final class RecipeProcessorIntegrationTest extends TestCase
             self::assertIsNumeric($row['is_dinner_candidate']);
             self::assertSame(0, (int) $row['is_dinner_candidate']);
             self::assertSame('manual_override', $row['dinner_exclusion_reason']);
+            $saved->execute([$second]);
+            $secondRow = $saved->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($secondRow);
+            self::assertSame('japanese', $secondRow['cuisine']);
             self::assertIsNumeric($row['dish_group_id']);
             self::assertIsNumeric($row['dish_group_manual']);
             self::assertSame($group, (int) $row['dish_group_id']);

@@ -96,7 +96,10 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'meat_with_cheese', 'kebab_bread', 'fish_tacos', 'ham_pie',
                 'meat_dumplings', 'cabbage_tacos', 'cheese_pie', 'savory_pancake',
                 'mung_bean_fritters', 'stock_only', 'small_anchovy', 'rum_dessert',
-                'vegetarian_sausage', 'fish_roe'] as $key) {
+                'vegetarian_sausage', 'fish_roe', 'mixed_main_starter', 'mixed_main_dessert',
+                'starter_fish', 'buffet_fish', 'side_chicken', 'snack_chicken',
+                'brunch_chicken', 'fika_chicken', 'breakfast_chicken', 'between_chicken',
+                'occasion_fest', 'occasion_picknick', 'specific_cuisine', 'tag_beats_title'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -208,7 +211,7 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertGreaterThan(8, $report['matched_main_ingredient_lines']);
             self::assertGreaterThan(80.0, $report['matched_main_ingredient_share_pct']);
             self::assertIsArray($report['main_protein_distribution']);
-            self::assertSame(7, $report['main_protein_distribution']['fish']);
+            self::assertSame(9, $report['main_protein_distribution']['fish']);
             $tagReport = (new \Matsvep\Ingest\Feature\RecipeTagReport($db))->build();
             self::assertContains('Huvudrätt', array_column($tagReport, 'tag'));
             $mainTag = array_values(array_filter(
@@ -235,6 +238,18 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertCount(10, $dinners['lowest_leftover_score']);
             self::assertSame(count($ids), $deriver->run());
             self::assertSame($report, (new FeatureReport($db))->build());
+            $festId = $ids['occasion_fest'] ?? null;
+            self::assertIsInt($festId);
+            $setBonus = $db->prepare('UPDATE engine_config SET value = ? WHERE `key` = ?');
+            $setBonus->execute(['1', 'feature.fest_tag_bonus']);
+            self::assertSame(1, (new FeatureDeriver($db, $seedDirectory))->run($festId));
+            $festiveQuery = $db->prepare('SELECT festive_score FROM recipe WHERE id = ?');
+            $festiveQuery->execute([$festId]);
+            $capped = $festiveQuery->fetchColumn();
+            self::assertIsNumeric($capped);
+            self::assertSame(1.0, (float) $capped);
+            $setBonus->execute(['0.2', 'feature.fest_tag_bonus']);
+            self::assertSame(1, $deriver->run($festId));
             $reportPath = sys_get_temp_dir() . '/matsvep-feature-' . bin2hex(random_bytes(5)) . '.json';
             try {
                 (new FeatureReport($db))->save($reportPath);

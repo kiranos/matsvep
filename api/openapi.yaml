@@ -1125,6 +1125,8 @@ components:
             cuisine:
               type: string
               nullable: true
+              description: Derived cuisine code; a manual correction takes precedence over source tags.
+              enum: [swedish, italian, french, american, indian, mexican, middle_eastern, thai, greek, spanish, japanese, asian, eastern_european, african, british, south_american, german, caribbean]
             meal_type:
               type: string
               nullable: true
@@ -1636,6 +1638,7 @@ components:
               code:
                 type: string
                 pattern: "^[a-z][a-z0-9_]*$"
+                description: For cuisine ratings, use a cuisine code from Recipe.cuisine.
               rating:
                 type: integer
                 minimum: 1

@@ -71,7 +71,7 @@
     "meal_type": "main",
     "vegetarian": true,
     "leftover_score": 0.95,
-    "festive_score": 0.65,
+    "festive_score": 0.6,
     "effort": 3,
     "dinner_candidate": true
   },
@@ -198,9 +198,10 @@
       "Frukost"
     ],
     "protein": "fish",
-    "meal_type": "buffet",
+    "meal_type": "breakfast",
     "vegetarian": false,
-      "dinner_candidate": true,
+    "dinner_candidate": false,
+    "exclusion_reason": "source_category",
     "leftover_score": 0.5,
     "effort": 1
   },
@@ -470,9 +471,7 @@
     "steps": [
       "Blanda"
     ],
-    "tags": [
-      "Huvudrätt"
-    ],
+    "tags": [],
     "dinner_candidate": false,
     "vegetarian": true,
     "effort": 1
@@ -488,9 +487,7 @@
     "steps": [
       "Blanda"
     ],
-    "tags": [
-      "Huvudrätt"
-    ],
+    "tags": [],
     "dinner_candidate": false,
     "vegetarian": true,
     "effort": 1
@@ -589,10 +586,11 @@
     "url": "https://www.koket.se/test-category-dessert",
     "title": "Pizza med choklad",
     "time": 35,
-    "ingredients": ["300 g halloumi", "200 g tomat"],
+    "ingredients": ["300 g halloumi", "200 g tomat", "1 tsk bakpulver"],
     "steps": ["Blanda"],
     "tags": ["Huvudrätt", "Efterrätt"],
     "dinner_candidate": false,
+    "exclusion_reason": "baking_ingredients",
     "vegetarian": true,
     "effort": 2
   },
@@ -754,7 +752,8 @@
     "steps": ["Blanda"],
     "tags": ["Förrätt"],
     "protein": "pork",
-    "dinner_candidate": true,
+    "dinner_candidate": false,
+    "exclusion_reason": "source_category",
     "vegetarian": false,
     "effort": 2
   },
@@ -771,6 +770,20 @@
   "rum_dessert": {"url":"https://www.koket.se/test-rum-dessert","title":"Romrussinkaka","time":40,"ingredients":["1 dl rom","200 g russin"],"steps":["Grädda"],"tags":["Efterrätt"],"dinner_candidate":false,"vegetarian":true,"effort":2,"exclusion_reason":"source_category"},
   "vegetarian_sausage": {"url":"https://www.koket.se/test-vegetarian-sausage","title":"Vegetarisk korv","time":40,"ingredients":["300 g vegokorv"],"steps":["Stek"],"tags":["Huvudrätt"],"protein":"vegetarian","dinner_candidate":true,"vegetarian":true,"effort":2},
   "fish_roe": {"url":"https://www.koket.se/test-fish-roe","title":"Fisk med rom","time":40,"ingredients":["300 g fisk","50 g rom"],"steps":["Stek"],"tags":["Huvudrätt"],"protein":"fish","dinner_candidate":true,"vegetarian":false,"effort":2},
+  "mixed_main_starter": {"url":"https://www.koket.se/test-mixed-main-starter","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Förrätt","Huvudrätt"],"protein":"chicken","meal_type":"main","dinner_candidate":true,"vegetarian":false,"effort":1},
+  "mixed_main_dessert": {"url":"https://www.koket.se/test-mixed-main-dessert","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Efterrätt","Huvudrätt"],"protein":"chicken","meal_type":"main","dinner_candidate":true,"vegetarian":false,"effort":1},
+  "starter_fish": {"url":"https://www.koket.se/test-starter-fish","title":"Gravad lax","time":30,"ingredients":["300 g lax"],"steps":["Blanda"],"tags":["Förrätt"],"protein":"fish","meal_type":"starter","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "buffet_fish": {"url":"https://www.koket.se/test-buffet-fish","title":"Aquavitsill","time":30,"ingredients":["300 g sill"],"steps":["Blanda"],"tags":["Buffé"],"protein":"fish","meal_type":"buffet","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "side_chicken": {"url":"https://www.koket.se/test-side-chicken","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Tillbehör"],"protein":"chicken","meal_type":"side","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "snack_chicken": {"url":"https://www.koket.se/test-snack-chicken","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Snittar/tilltugg"],"protein":"chicken","meal_type":"snack","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "brunch_chicken": {"url":"https://www.koket.se/test-brunch-chicken","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Brunch"],"protein":"chicken","meal_type":"breakfast","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "fika_chicken": {"url":"https://www.koket.se/test-fika-chicken","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Fika"],"protein":"chicken","meal_type":"snack","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "breakfast_chicken": {"url":"https://www.koket.se/test-breakfast-chicken","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Frukost"],"protein":"chicken","meal_type":"breakfast","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "between_chicken": {"url":"https://www.koket.se/test-between-chicken","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Mellanmål"],"protein":"chicken","meal_type":"snack","dinner_candidate":false,"vegetarian":false,"exclusion_reason":"source_category","effort":1},
+  "occasion_fest": {"url":"https://www.koket.se/test-occasion-fest","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Fest"],"protein":"chicken","dinner_candidate":true,"vegetarian":false,"festive_score":0.3,"effort":1},
+  "occasion_picknick": {"url":"https://www.koket.se/test-occasion-picknick","title":"Kyckling med tomat","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Picknick"],"protein":"chicken","dinner_candidate":true,"vegetarian":false,"festive_score":0.1,"effort":1},
+  "specific_cuisine": {"url":"https://www.koket.se/test-specific-cuisine","title":"Taco med kyckling","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Asien","Thailand","Huvudrätt"],"protein":"chicken","cuisine":"thai","meal_type":"main","dinner_candidate":true,"vegetarian":false,"effort":1},
+  "tag_beats_title": {"url":"https://www.koket.se/test-tag-beats-title","title":"Pizza med kyckling","time":30,"ingredients":["300 g kyckling"],"steps":["Stek"],"tags":["Japan","Huvudrätt"],"protein":"chicken","cuisine":"japanese","meal_type":"main","dinner_candidate":true,"vegetarian":false,"effort":1},
   "smoothie_exclusion": {
     "url": "https://www.koket.se/test-smoothie-exclusion",
     "title": "Smoothie med yoghurt",

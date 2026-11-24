@@ -1,0 +1,38 @@
+{
+  "meal_tag_roles": {
+    "Huvudrätt": "main",
+    "Förrätt": "exclude",
+    "Efterrätt": "exclude",
+    "Buffé": "exclude",
+    "Brunch": "exclude",
+    "Tillbehör": "exclude",
+    "Snittar/tilltugg": "exclude",
+    "Fika": "exclude",
+    "Frukost": "exclude",
+    "Mellanmål": "exclude"
+  },
+  "occasion_tags": ["Fest", "Picknick"],
+  "cuisine_tags": {
+    "Sverige/Norden": "swedish",
+    "Svensk husmanskost": "swedish",
+    "Italien": "italian",
+    "Frankrike": "french",
+    "Amerika": "american",
+    "Indien": "indian",
+    "Mexiko": "mexican",
+    "Mellanöstern": "middle_eastern",
+    "Thailand": "thai",
+    "Grekland": "greek",
+    "Spanien": "spanish",
+    "Japan": "japanese",
+    "Asien": "asian",
+    "Östeuropa": "eastern_european",
+    "Afrika": "african",
+    "England": "british",
+    "Sydamerika": "south_american",
+    "Tyskland": "german",
+    "Karibien": "caribbean"
+  },
+  "broad_cuisine_tags": ["Sverige/Norden", "Amerika", "Mellanöstern", "Asien", "Östeuropa", "Afrika", "Sydamerika", "Karibien"],
+  "specific_cuisine_examples": ["Thailand", "Japan", "Indien"]
+}

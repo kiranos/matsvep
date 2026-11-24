@@ -191,14 +191,27 @@ final class FeatureDeriver
     ): array {
         $mainCategories = $this->config->stringList('feature.main_categories');
         $mainMass = $this->config->decimal('feature.main_min_mass_g');
+        $hasMainTag = false;
+        $hasExcludedMealTag = false;
+        $hasDessertMealTag = false;
+        foreach ($tags as $tag) {
+            $rule = $this->vocabulary->tags[mb_strtolower(trim($tag))] ?? null;
+            $role = $rule['meal_tag_role'] ?? 'none';
+            $hasMainTag = $hasMainTag || $role === 'main';
+            $hasExcludedMealTag = $hasExcludedMealTag || $role === 'exclude';
+            $hasDessertMealTag = $hasDessertMealTag
+                || ($role === 'exclude' && ($rule['meal_type'] ?? null) === 'dessert');
+        }
         $sourceCategoryKind = null;
         $sourceDrink = false;
         foreach ($tags as $tag) {
             $kind = $this->vocabulary->dinnerBlockedTags[mb_strtolower(trim($tag))] ?? null;
-            if ($kind === 'dessert') {
-                $sourceCategoryKind = 'dessert';
-            } elseif ($kind !== null && $sourceCategoryKind !== 'dessert') {
-                $sourceCategoryKind = 'broad';
+            if (!$hasMainTag && !$hasExcludedMealTag) {
+                if ($kind === 'dessert') {
+                    $sourceCategoryKind = 'dessert';
+                } elseif ($kind !== null && $sourceCategoryKind !== 'dessert') {
+                    $sourceCategoryKind = 'broad';
+                }
             }
             $sourceDrink = $sourceDrink || $kind === 'drink';
         }
@@ -358,7 +371,7 @@ final class FeatureDeriver
                 ?: $a['position'] <=> $b['position']);
         $protein = ($titleProtein !== null && $titleProtein !== 'vegetarian')
             ? $titleProtein : ($proteinChoices[0]['code'] ?? ($vegetarian === 1 ? 'vegetarian' : null));
-        [$cuisine, $mealType, $festiveTag] = $this->tagFeatures($recipe['title'], $tags);
+        [$cuisine, $mealType, $festiveTag, $festBonusTag] = $this->tagFeatures($recipe['title'], $tags);
         $stepText = implode(' ', $steps);
         $dishSignal = $this->signal('dish_type', $recipe['title'] . ' ' . implode(' ', $tags));
         $methodSignal = $this->signal('method', $stepText);
@@ -392,12 +405,28 @@ final class FeatureDeriver
         $eggAlone = $eggPresent && !$nonEggMain && $carb === null && !$savoryTitle
             && $proteinChoices === [] && !$strongMainProtein;
         $exclusionReason = null;
-        if ($sourceCategoryKind === 'dessert') {
-            $dinnerCandidate = false;
-            $exclusionReason = 'source_category';
-        } elseif ($unambiguousTitle) {
+        if ($unambiguousTitle) {
             $dinnerCandidate = false;
             $exclusionReason = 'dessert_title';
+        } elseif ($hasMainTag && $hasDessertMealTag && $bakingIngredients) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'baking_ingredients';
+        } elseif ($hasMainTag && $hasDessertMealTag) {
+            $dinnerCandidate = true;
+        } elseif ($hasMainTag && $bakingIngredients && !$clearDinnerEvidence) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'baking_ingredients';
+        } elseif ($hasMainTag && ($eggAlone || $this->hasDinnerExclusion($recipe['title'], 'always'))) {
+            $dinnerCandidate = false;
+            $exclusionReason = $eggAlone ? 'insufficient_evidence' : 'breakfast_or_side';
+        } elseif ($hasMainTag) {
+            $dinnerCandidate = true;
+        } elseif ($hasExcludedMealTag) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'source_category';
+        } elseif ($sourceCategoryKind === 'dessert') {
+            $dinnerCandidate = false;
+            $exclusionReason = 'source_category';
         } elseif ($clearDinnerEvidence) {
             $dinnerCandidate = true;
         } elseif ($sourceCategoryKind !== null) {
@@ -439,7 +468,8 @@ final class FeatureDeriver
         $festive = $this->clamp(
             $this->config->decimal('feature.festive_time_weight') * $timeShare
             + $this->config->decimal('feature.festive_premium_weight') * ($premium ? 1 : 0)
-            + $this->config->decimal('feature.festive_tag_weight') * ($festiveTag ? 1 : 0),
+            + $this->config->decimal('feature.festive_tag_weight') * ($festiveTag ? 1 : 0)
+            + $this->config->decimal('feature.fest_tag_bonus') * ($festBonusTag ? 1 : 0),
         );
         $ingredientCount = count($lines);
         $effort = ($time !== null && $time >= $this->config->integer('feature.effort_hard_time_min'))
@@ -470,33 +500,52 @@ final class FeatureDeriver
     }
 
     /** @param list<string> $tags
-     * @return array{?string, ?string, bool}
+     * @return array{?string, ?string, bool, bool}
      */
     private function tagFeatures(string $title, array $tags): array
     {
-        $cuisine = null;
-        $mealType = null;
+        $titleCuisine = null;
+        $titleMealType = null;
         foreach ($this->vocabulary->titleTerms as $term) {
             if ($this->vocabulary->contains($title, $term['term'])) {
-                if ($term['feature'] === 'cuisine' && $cuisine === null) {
-                    $cuisine = $term['code'];
+                if ($term['feature'] === 'cuisine' && $titleCuisine === null) {
+                    $titleCuisine = $term['code'];
                 }
-                if ($term['feature'] === 'meal_type' && $mealType === null) {
-                    $mealType = $term['code'];
+                if ($term['feature'] === 'meal_type' && $titleMealType === null) {
+                    $titleMealType = $term['code'];
                 }
             }
         }
         $tagSet = array_fill_keys(array_map('mb_strtolower', $tags), true);
+        $tagCuisine = null;
+        $cuisineScope = null;
+        $categoryMealType = null;
+        $legacyMealType = null;
+        $mainTag = false;
         $festive = false;
+        $festBonus = false;
         foreach ($this->vocabulary->tags as $tag => $rule) {
             if (!isset($tagSet[$tag])) {
                 continue;
             }
-            $cuisine ??= $rule['cuisine'];
-            $mealType ??= $rule['meal_type'];
+            if ($rule['cuisine'] !== null && ($tagCuisine === null
+                || ($cuisineScope === 'broad' && $rule['cuisine_scope'] === 'specific'))) {
+                $tagCuisine = $rule['cuisine'];
+                $cuisineScope = $rule['cuisine_scope'];
+            }
+            if ($rule['meal_tag_role'] === 'main') {
+                $mainTag = true;
+            } elseif ($rule['meal_tag_role'] === 'exclude') {
+                $categoryMealType ??= $rule['meal_type'];
+            } else {
+                $legacyMealType ??= $rule['meal_type'];
+            }
             $festive = $festive || $rule['festive'];
+            $festBonus = $festBonus || $rule['fest_bonus'];
         }
-        return [$cuisine, $mealType, $festive];
+        return [$tagCuisine ?? $titleCuisine,
+            $mainTag ? 'main' : ($categoryMealType ?? $titleMealType ?? $legacyMealType),
+            $festive, $festBonus];
     }
 
     private function signal(string $type, string $text): float

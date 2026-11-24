@@ -12,7 +12,7 @@ final class FeatureVocabulary
     /** @var array<string, array{protein: ?string, carb: ?string, animal: bool, premium: bool}> */
     public readonly array $ingredients;
 
-    /** @var array<string, array{cuisine: ?string, meal_type: ?string, festive: bool}> */
+    /** @var array<string, array{cuisine: ?string, meal_type: ?string, festive: bool, fest_bonus: bool, cuisine_scope: ?string, meal_tag_role: string}> */
     public readonly array $tags;
 
     /** @var list<array{term: string, feature: string, code: string}> */
@@ -79,15 +79,24 @@ final class FeatureVocabulary
         $tags = [];
         foreach (CsvTable::read(
             $seedDirectory . '/feature_tag_map.csv',
-            ['tag', 'cuisine_code', 'meal_type_code', 'festive']
+            ['tag', 'cuisine_code', 'meal_type_code', 'festive', 'fest_bonus', 'cuisine_scope', 'meal_tag_role']
         ) as $row) {
-            if ($row['tag'] === '' || !in_array($row['festive'], ['0', '1'], true)) {
+            if ($row['tag'] === '' || !in_array($row['festive'], ['0', '1'], true)
+                || !in_array($row['fest_bonus'], ['0', '1'], true)
+                || !in_array($row['cuisine_scope'], ['', 'broad', 'specific'], true)
+                || !in_array($row['meal_tag_role'], ['none', 'main', 'exclude'], true)
+                || ($row['cuisine_code'] === '') !== ($row['cuisine_scope'] === '')
+                || ($row['meal_tag_role'] === 'main' && $row['meal_type_code'] !== 'main')
+                || ($row['meal_tag_role'] === 'exclude' && $row['meal_type_code'] === '')) {
                 throw new RuntimeException('Invalid feature tag seed row.');
             }
             $tags[mb_strtolower($row['tag'])] = [
                 'cuisine' => $row['cuisine_code'] === '' ? null : $row['cuisine_code'],
                 'meal_type' => $row['meal_type_code'] === '' ? null : $row['meal_type_code'],
                 'festive' => $row['festive'] === '1',
+                'fest_bonus' => $row['fest_bonus'] === '1',
+                'cuisine_scope' => $row['cuisine_scope'] === '' ? null : $row['cuisine_scope'],
+                'meal_tag_role' => $row['meal_tag_role'],
             ];
         }
         $this->tags = $tags;
