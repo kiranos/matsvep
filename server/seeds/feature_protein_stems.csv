@@ -94,6 +94,10 @@ lax,fish,animal,edge
 torsk,fish,animal,edge
 fond,,stock,edge
 buljong,,stock,edge
+svampbuljong,vegetarian,vegetarian,edge
+grönsaksbuljong,vegetarian,vegetarian,edge
+svampfond,vegetarian,vegetarian,edge
+grönsaksfond,vegetarian,vegetarian,edge
 vego,vegetarian,vegetarian,prefix
 soja,vegetarian,vegetarian,prefix
 quorn,vegetarian,vegetarian,edge

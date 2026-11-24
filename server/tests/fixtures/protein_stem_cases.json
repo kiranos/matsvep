@@ -17,6 +17,7 @@
   {"text":"renad"},
   {"text":"renskrapad"},
   {"text":"fiskbuljong", "stem":"buljong", "kind":"stock"},
+  {"text":"svampbuljong", "stem":"svampbuljong", "protein":"vegetarian", "kind":"vegetarian"},
   {"text":"oxbuljong", "stem":"buljong", "kind":"stock"},
   {"text":"buljongtärning", "stem":"buljong", "kind":"stock"},
   {"text":"fond", "stem":"fond", "kind":"stock"},
