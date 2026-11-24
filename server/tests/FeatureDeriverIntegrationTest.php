@@ -105,7 +105,9 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'untagged_potato_side', 'untagged_rice_side', 'untagged_couscous_side',
                 'untagged_salad_side', 'untagged_stew', 'sweet_pie', 'sugar_pie',
                 'savory_pie_no_sweet', 'accent_dessert', 'uncertain_tofu_protein',
-                'pork_joint', 'reindeer_fillet'] as $key) {
+                'pork_joint', 'reindeer_fillet', 'savory_citrus_pie', 'foamy_sauce_meat',
+                'savory_sylta', 'untagged_linguine', 'untagged_frittata',
+                'untagged_chicken_parm', 'untagged_cabbage_rolls', 'sweet_foam', 'fruit_jam'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -236,7 +238,7 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertGreaterThan(8, $report['matched_main_ingredient_lines']);
             self::assertGreaterThan(80.0, $report['matched_main_ingredient_share_pct']);
             self::assertIsArray($report['main_protein_distribution']);
-            self::assertSame(9, $report['main_protein_distribution']['fish']);
+            self::assertSame(10, $report['main_protein_distribution']['fish']);
             $tagReport = (new \Matsvep\Ingest\Feature\RecipeTagReport($db))->build();
             self::assertContains('Huvudrätt', array_column($tagReport, 'tag'));
             $mainTag = array_values(array_filter(

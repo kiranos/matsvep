@@ -33,7 +33,7 @@ glaze,leading
 deg,leading
 grundrecept,leading
 marmelad,leading
-sylt,leading
+sylt,leading_suffix
 curd,leading
 ättiksgurka,leading
 drink,leading
@@ -44,3 +44,4 @@ bål,leading
 glögg,leading
 cocktail,leading
 latte,leading
+toddy,leading

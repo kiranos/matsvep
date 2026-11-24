@@ -52,6 +52,9 @@ final class FeatureVocabulary
     public readonly array $dinnerUnambiguousTitles;
 
     /** @var list<string> */
+    public readonly array $dinnerUnambiguousSuffixTitles;
+
+    /** @var list<string> */
     public readonly array $dinnerSweetPieTitles;
 
     /** @var list<string> */
@@ -130,7 +133,8 @@ final class FeatureVocabulary
         }
         $this->cutUpTerms = $cutUpTerms;
         $this->longCookTerms = $this->readTerms($seedDirectory . '/feature_long_cook_terms.csv');
-        $exclusions = ['unknown_only' => [], 'always' => [], 'leading' => [], 'side' => [], 'dish_title' => []];
+        $exclusions = ['unknown_only' => [], 'always' => [], 'leading' => [],
+            'leading_suffix' => [], 'side' => [], 'dish_title' => []];
         foreach (CsvTable::read($seedDirectory . '/feature_dinner_exclusions.csv', ['term', 'scope']) as $row) {
             if ($row['term'] === '' || !isset($exclusions[$row['scope']])) {
                 throw new RuntimeException('Invalid dinner exclusion seed row.');
@@ -165,6 +169,9 @@ final class FeatureVocabulary
         $this->dinnerSavoryTitles = $this->readTerms($seedDirectory . '/feature_dinner_savory_titles.csv');
         $this->dinnerBroadTitles = $this->readTerms($seedDirectory . '/feature_dinner_broad_titles.csv');
         $this->dinnerUnambiguousTitles = $this->readTerms($seedDirectory . '/feature_dinner_unambiguous_titles.csv');
+        $this->dinnerUnambiguousSuffixTitles = $this->readTerms(
+            $seedDirectory . '/feature_dinner_unambiguous_suffix_titles.csv'
+        );
         $sweetTitles = [];
         $sweetIngredients = [];
         foreach (CsvTable::read($seedDirectory . '/feature_dinner_sweet_pie_terms.csv', ['term', 'scope']) as $row) {
@@ -222,5 +229,13 @@ final class FeatureVocabulary
     public function contains(string $text, string $term): bool
     {
         return str_contains(ForeignAccentFolder::fold($text), ForeignAccentFolder::fold($term));
+    }
+
+    public function containsAtWordEnd(string $text, string $term): bool
+    {
+        return preg_match(
+            '/' . preg_quote(ForeignAccentFolder::fold($term), '/') . '(?!\p{L})/u',
+            ForeignAccentFolder::fold($text),
+        ) === 1;
     }
 }

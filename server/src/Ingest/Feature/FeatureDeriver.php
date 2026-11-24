@@ -215,7 +215,8 @@ final class FeatureDeriver
             }
             $sourceDrink = $sourceDrink || $kind === 'drink';
         }
-        $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles);
+        $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles)
+            || $this->containsAnyAtWordEnd($recipe['title'], $this->vocabulary->dinnerUnambiguousSuffixTitles);
         $titleStemMatches = $this->stemMatcher->match($recipe['title']);
         $lineStemMatches = [];
         $fishContext = $this->hasFishStem($titleStemMatches);
@@ -428,7 +429,8 @@ final class FeatureDeriver
         foreach ($this->stemMatcher->match($dishName) as $match) {
             $leadingProtein = $leadingProtein || $match['protein_code'] !== null;
         }
-        $leadingExcluded = $this->hasDinnerExclusion($dishName, 'leading')
+        $leadingExcluded = ($this->hasDinnerExclusion($dishName, 'leading')
+                || $this->hasDinnerExclusion($dishName, 'leading_suffix'))
             && !$leadingProtein && !$this->containsAny($dishName, $this->vocabulary->dinnerSavoryTitles);
         if ($leadingExcluded) {
             $dinnerCandidate = false;
@@ -618,7 +620,9 @@ final class FeatureDeriver
     private function hasDinnerExclusion(string $text, string $scope): bool
     {
         foreach ($this->vocabulary->dinnerExclusions[$scope] as $term) {
-            if ($this->vocabulary->contains($text, $term)) {
+            if ($scope === 'leading_suffix'
+                ? $this->vocabulary->containsAtWordEnd($text, $term)
+                : $this->vocabulary->contains($text, $term)) {
                 return true;
             }
         }
@@ -630,6 +634,17 @@ final class FeatureDeriver
     {
         foreach ($terms as $term) {
             if ($this->vocabulary->contains($text, $term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @param list<string> $terms */
+    private function containsAnyAtWordEnd(string $text, array $terms): bool
+    {
+        foreach ($terms as $term) {
+            if ($this->vocabulary->containsAtWordEnd($text, $term)) {
                 return true;
             }
         }
