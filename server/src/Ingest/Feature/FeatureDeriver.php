@@ -215,7 +215,8 @@ final class FeatureDeriver
             }
             $sourceDrink = $sourceDrink || $kind === 'drink';
         }
-        $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles);
+        $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles)
+            || $this->containsAnyAtWordEnd($recipe['title'], $this->vocabulary->dinnerUnambiguousSuffixTitles);
         $titleStemMatches = $this->stemMatcher->match($recipe['title']);
         $lineStemMatches = [];
         $fishContext = $this->hasFishStem($titleStemMatches);
@@ -250,6 +251,7 @@ final class FeatureDeriver
         $nonEggMain = false;
         $foodLines = 0;
         $sugarFlourLines = 0;
+        $sugarLines = 0;
         $hasSugar = false;
         $hasFlour = false;
         $directBaking = false;
@@ -265,6 +267,7 @@ final class FeatureDeriver
             $main = false;
             $lineMapped = false;
             $lineSugarFlour = false;
+            $lineHasSugar = false;
             $mappedProteinOnLine = false;
             $stemMatches = $lineStemMatches[$position] ?? [];
             $this->recordStemMatches($stemMatches, 'ingredient');
@@ -291,6 +294,7 @@ final class FeatureDeriver
                 $bakingSignal = $this->vocabulary->dinnerBakingIngredients[$normalisedName] ?? null;
                 $directBaking = $directBaking || $bakingSignal === 'direct';
                 $hasSugar = $hasSugar || $bakingSignal === 'sugar';
+                $lineHasSugar = $lineHasSugar || $bakingSignal === 'sugar';
                 $hasFlour = $hasFlour || $bakingSignal === 'flour';
                 $lineSugarFlour = $lineSugarFlour || in_array($bakingSignal, ['sugar', 'flour'], true);
                 $eggPresent = $eggPresent || in_array($normalisedName, $this->vocabulary->dinnerEggIngredients, true);
@@ -351,6 +355,7 @@ final class FeatureDeriver
                 }
             }
             $sugarFlourLines += $lineSugarFlour ? 1 : 0;
+            $sugarLines += $lineHasSugar ? 1 : 0;
             if ($main) {
                 $matchedMain = $matchedMain || $line['normalise_status'] === 'matched';
                 $unmatchedMainWithoutVegetarianStem = $unmatchedMainWithoutVegetarianStem
@@ -359,9 +364,14 @@ final class FeatureDeriver
             $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
         }
         $titleProtein = null;
+        $titleGenericProtein = null;
         foreach ($titleStemMatches as $stemMatch) {
             $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
-            $titleProtein ??= $stemMatch['protein_code'];
+            if ($stemMatch['kind'] === 'generic') {
+                $titleGenericProtein ??= $stemMatch['protein_code'];
+            } else {
+                $titleProtein ??= $stemMatch['protein_code'];
+            }
         }
         $vegetarian = $animal ? 0 : (($matchedMain || $vegetarianStemPresent)
             && !$unmatchedMainWithoutVegetarianStem ? 1 : null);
@@ -370,7 +380,9 @@ final class FeatureDeriver
                 ?: (int) $b['main'] <=> (int) $a['main']
                 ?: $a['position'] <=> $b['position']);
         $protein = ($titleProtein !== null && $titleProtein !== 'vegetarian')
-            ? $titleProtein : ($proteinChoices[0]['code'] ?? ($vegetarian === 1 ? 'vegetarian' : null));
+            ? $titleProtein : ($proteinChoices[0]['code'] ?? $titleGenericProtein ?? (
+                ($substantialVegetarianMain && !$animal) || $vegetarian === 1 ? 'vegetarian' : null
+            ));
         [$cuisine, $mealType, $festiveTag, $festBonusTag] = $this->tagFeatures($recipe['title'], $tags);
         $stepText = implode(' ', $steps);
         $dishSignal = $this->signal('dish_type', $recipe['title'] . ' ' . implode(' ', $tags));
@@ -390,13 +402,19 @@ final class FeatureDeriver
                 + $this->config->decimal('feature.leftover_protein_weight') * $proteinSignal
             ),
         );
-        $savoryTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerSavoryTitles);
-        $clearDinnerEvidence = $strongMainProtein || $savoryTitle
+        $sweetPie = $this->containsAny($recipe['title'], $this->vocabulary->dinnerPieTitles)
+            && ($this->containsAny($recipe['title'], $this->vocabulary->dinnerSweetPieTitles)
+                || $this->containsAny(implode(' ', $ingredientTexts), $this->vocabulary->dinnerSweetPieIngredients)
+                || ($foodLines > 0 && $sugarLines / $foodLines
+                    >= $this->config->decimal('feature.sweet_pie_sugar_share')));
+        $savoryTitle = !$sweetPie && $this->containsAny($recipe['title'], $this->vocabulary->dinnerSavoryTitles);
+        $clearDinnerEvidence = $strongMainProtein || $savoryTitle || $titleGenericProtein !== null
             || ($titleProtein !== null && $titleProtein !== 'vegetarian');
-        $proteinEvidence = $titleProtein !== null || $proteinChoices !== [] || $vegetarianProteinPresent;
-        $dinnerCandidate = $mealType === 'main' || ($mealType === null
-            && ($proteinEvidence || $carb !== null));
+        $proteinEvidence = $titleProtein !== null || $titleGenericProtein !== null
+            || $proteinChoices !== [] || $vegetarianProteinPresent;
+        $dinnerCandidate = $mealType === 'main' || ($mealType === null && $proteinEvidence);
         $substantialMain = ($titleProtein !== null && $titleProtein !== 'vegetarian')
+            || $titleGenericProtein !== null
             || $proteinChoices !== [] || $carb !== null || $substantialVegetarianMain;
         $bakingShare = $foodLines === 0 ? 0.0 : $sugarFlourLines / $foodLines;
         $bakingIngredients = $directBaking || ($hasSugar && $hasFlour
@@ -405,7 +423,19 @@ final class FeatureDeriver
         $eggAlone = $eggPresent && !$nonEggMain && $carb === null && !$savoryTitle
             && $proteinChoices === [] && !$strongMainProtein;
         $exclusionReason = null;
-        if ($unambiguousTitle) {
+        $leadingTitle = preg_split('/,|\s+(?:med|i|på|och|till|samt)\s+/iu', $recipe['title'], 2);
+        $dishName = is_array($leadingTitle) ? trim($leadingTitle[0]) : $recipe['title'];
+        $leadingProtein = false;
+        foreach ($this->stemMatcher->match($dishName) as $match) {
+            $leadingProtein = $leadingProtein || $match['protein_code'] !== null;
+        }
+        $leadingExcluded = ($this->hasDinnerExclusion($dishName, 'leading')
+                || $this->hasDinnerExclusion($dishName, 'leading_suffix'))
+            && !$leadingProtein && !$this->containsAny($dishName, $this->vocabulary->dinnerSavoryTitles);
+        if ($leadingExcluded) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'non_dinner_title';
+        } elseif ($unambiguousTitle || $sweetPie) {
             $dinnerCandidate = false;
             $exclusionReason = 'dessert_title';
         } elseif ($hasMainTag && $hasDessertMealTag && $bakingIngredients) {
@@ -454,6 +484,10 @@ final class FeatureDeriver
             if (!$dinnerCandidate) {
                 $exclusionReason = 'breakfast_or_side';
             }
+        }
+        if (!$hasMainTag && !$hasExcludedMealTag && !$clearDinnerEvidence && $dinnerCandidate) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'insufficient_evidence';
         }
         if (!$dinnerCandidate && $exclusionReason === null) {
             $exclusionReason = $this->hasDinnerExclusion($recipe['title'] . ' ' . implode(' ', $tags), 'unknown_only')
@@ -586,7 +620,9 @@ final class FeatureDeriver
     private function hasDinnerExclusion(string $text, string $scope): bool
     {
         foreach ($this->vocabulary->dinnerExclusions[$scope] as $term) {
-            if ($this->vocabulary->contains($text, $term)) {
+            if ($scope === 'leading_suffix'
+                ? $this->vocabulary->containsAtWordEnd($text, $term)
+                : $this->vocabulary->contains($text, $term)) {
                 return true;
             }
         }
@@ -598,6 +634,17 @@ final class FeatureDeriver
     {
         foreach ($terms as $term) {
             if ($this->vocabulary->contains($text, $term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @param list<string> $terms */
+    private function containsAnyAtWordEnd(string $text, array $terms): bool
+    {
+        foreach ($terms as $term) {
+            if ($this->vocabulary->containsAtWordEnd($text, $term)) {
                 return true;
             }
         }
