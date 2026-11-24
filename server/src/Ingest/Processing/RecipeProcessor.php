@@ -13,6 +13,7 @@ use Matsvep\Ingest\Feature\FeatureDeriver;
 use Matsvep\Ingest\Feature\DinnerCandidateAudit;
 use Matsvep\Ingest\Feature\FeatureReport;
 use Matsvep\Ingest\Feature\FeatureSeeder;
+use Matsvep\Ingest\Feature\CsvTable;
 use Matsvep\Ingest\Ingredient\IngredientLineParser;
 use Matsvep\Ingest\Ingredient\IngredientNormaliser;
 use Matsvep\Ingest\Ingredient\IngredientReport;
@@ -113,6 +114,7 @@ final class RecipeProcessor
             }
             $result[$key] = (int) $row[$key];
         }
+        $result['recipes_without_meal_type_tag'] = $this->countRecipesWithoutMealTypeTag();
         $result['main_protein_distribution'] = $this->distribution(
             'SELECT COALESCE(main_protein, ?) AS code, COUNT(*) AS total '
             . 'FROM recipe WHERE active = TRUE GROUP BY code ORDER BY code',
@@ -122,7 +124,39 @@ final class RecipeProcessor
             . 'FROM recipe WHERE active = TRUE AND is_dinner_candidate = FALSE '
             . 'GROUP BY code ORDER BY code',
         );
+        $result['dinner_cuisine_distribution'] = $this->distribution(
+            'SELECT COALESCE(cuisine, ?) AS code, COUNT(*) AS total '
+            . 'FROM recipe WHERE active = TRUE AND is_dinner_candidate = TRUE '
+            . 'GROUP BY code ORDER BY code',
+        );
         return $result;
+    }
+
+    private function countRecipesWithoutMealTypeTag(): int
+    {
+        $tags = [];
+        foreach (CsvTable::read(
+            $this->seedDirectory . '/feature_tag_map.csv',
+            ['tag', 'cuisine_code', 'meal_type_code', 'festive', 'fest_bonus', 'cuisine_scope', 'meal_tag_role'],
+        ) as $row) {
+            if (in_array($row['meal_tag_role'], ['main', 'exclude'], true)) {
+                $tags[] = $row['tag'];
+            }
+        }
+        if ($tags === []) {
+            throw new RuntimeException('No meal-type tags are seeded.');
+        }
+        $placeholders = implode(', ', array_fill(0, count($tags), '?'));
+        $query = $this->db->prepare(
+            'SELECT COUNT(*) FROM recipe r WHERE r.active = TRUE AND NOT EXISTS ('
+            . 'SELECT 1 FROM recipe_tag t WHERE t.recipe_id = r.id AND t.tag IN (' . $placeholders . '))',
+        );
+        $query->execute($tags);
+        $count = $query->fetchColumn();
+        if (!is_numeric($count)) {
+            throw new RuntimeException('Invalid meal-type tag coverage count.');
+        }
+        return (int) $count;
     }
 
     /** @return array<string, int> */

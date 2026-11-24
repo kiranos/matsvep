@@ -9,25 +9,42 @@ use RuntimeException;
 
 final class FeatureDiagnosticSample
 {
-    public function __construct(private readonly PDO $db)
+    /** @var array<string, true> */
+    private readonly array $mealTags;
+
+    public function __construct(private readonly PDO $db, ?string $seedDirectory = null)
     {
+        $mealTags = [];
+        foreach (CsvTable::read(
+            ($seedDirectory ?? dirname(__DIR__, 3) . '/seeds') . '/feature_tag_map.csv',
+            ['tag', 'cuisine_code', 'meal_type_code', 'festive', 'fest_bonus', 'cuisine_scope', 'meal_tag_role'],
+        ) as $row) {
+            if (in_array($row['meal_tag_role'], ['main', 'exclude'], true)) {
+                $mealTags[mb_strtolower($row['tag'])] = true;
+            }
+        }
+        $this->mealTags = $mealTags;
     }
 
     /** @return array<string, mixed> */
     public function build(string $kind, int $limit, int $seed): array
     {
-        if (!in_array($kind, ['protein_gap', 'vegetarian'], true) || $limit < 1 || $limit > 100) {
+        if (!in_array($kind, ['protein_gap', 'vegetarian', 'dinner'], true) || $limit < 1 || $limit > 100) {
             throw new RuntimeException('Invalid diagnostic sample request.');
         }
-        $condition = $kind === 'protein_gap' ? 'main_protein IS NULL' : 'is_vegetarian = TRUE';
-        $where = 'active = TRUE AND is_dinner_candidate = TRUE AND ' . $condition;
+        $condition = match ($kind) {
+            'protein_gap' => ' AND main_protein IS NULL',
+            'vegetarian' => ' AND is_vegetarian = TRUE',
+            default => '',
+        };
+        $where = 'active = TRUE AND is_dinner_candidate = TRUE' . $condition;
         $countQuery = $this->db->query('SELECT COUNT(*) FROM recipe WHERE ' . $where);
         $count = $countQuery === false ? false : $countQuery->fetchColumn();
         if (!is_numeric($count)) {
             throw new RuntimeException('Cannot count diagnostic recipes.');
         }
         $recipes = $this->db->prepare(
-            'SELECT id, url, title FROM recipe WHERE ' . $where
+            'SELECT id, url, title, main_protein, cuisine, is_vegetarian FROM recipe WHERE ' . $where
             . ' ORDER BY SHA2(CONCAT(:seed, ":", id), 256), id LIMIT :limit'
         );
         $recipes->bindValue(':seed', (string) $seed);
@@ -43,6 +60,9 @@ final class FeatureDiagnosticSample
             . 'LEFT JOIN ingredient i ON i.id = p.ingredient_id '
             . 'WHERE ri.recipe_id = ? AND ri.is_main = TRUE '
             . 'GROUP BY ri.recipe_id, ri.position, ri.raw_text, ri.normalise_status ORDER BY ri.position'
+        );
+        $tags = $this->db->prepare(
+            'SELECT tag FROM recipe_tag WHERE recipe_id = ? ORDER BY tag'
         );
         $examples = [];
         foreach ($recipes->fetchAll(PDO::FETCH_ASSOC) as $recipe) {
@@ -71,6 +91,17 @@ final class FeatureDiagnosticSample
                 $mixed = $mixed || (int) $line['part_count'] > 1;
             }
             $example = ['url' => $recipe['url'], 'title' => $recipe['title'], 'main_ingredients' => $mainLines];
+            if ($kind === 'dinner') {
+                $tags->execute([(int) $recipe['id']]);
+                $example['meal_type_tags'] = array_values(array_filter(
+                    $tags->fetchAll(PDO::FETCH_COLUMN),
+                    fn (mixed $tag): bool => is_string($tag) && isset($this->mealTags[mb_strtolower($tag)]),
+                ));
+                $example['main_protein'] = $recipe['main_protein'];
+                $example['cuisine'] = $recipe['cuisine'];
+                $example['is_vegetarian'] = $recipe['is_vegetarian'] === null
+                    ? null : (bool) $recipe['is_vegetarian'];
+            }
             if ($kind === 'protein_gap') {
                 $example['reason'] = $unmatched ? 'unmatched_ingredient'
                     : ($mixed ? 'mixed' : 'missing_protein_category');
