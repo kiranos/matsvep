@@ -205,6 +205,25 @@ final class FeatureDeriverIntegrationTest extends TestCase
             $vegetarianSample = $diagnostics->build('vegetarian', 50, 42);
             self::assertSame($vegetarianSample, $diagnostics->build('vegetarian', 50, 42));
             self::assertGreaterThan(0, $vegetarianSample['eligible']);
+            $dinnerSample = $diagnostics->build('dinner', 100, 42);
+            self::assertSame($dinnerSample, $diagnostics->build('dinner', 100, 42));
+            self::assertSame('dinner', $dinnerSample['kind']);
+            self::assertSame(42, $dinnerSample['seed']);
+            self::assertSame(min(100, $dinnerSample['eligible']), $dinnerSample['returned']);
+            self::assertIsArray($dinnerSample['examples']);
+            $hasMainTag = false;
+            foreach ($dinnerSample['examples'] as $example) {
+                self::assertIsArray($example);
+                self::assertSame(
+                    ['url', 'title', 'main_ingredients', 'meal_type_tags', 'main_protein', 'cuisine', 'is_vegetarian'],
+                    array_keys($example),
+                );
+                self::assertIsArray($example['meal_type_tags']);
+                self::assertNotContains('Fest', $example['meal_type_tags']);
+                self::assertNotContains('Picknick', $example['meal_type_tags']);
+                $hasMainTag = $hasMainTag || in_array('Huvudrätt', $example['meal_type_tags'], true);
+            }
+            self::assertTrue($hasMainTag);
             $report = (new FeatureReport($db))->build();
             self::assertSame(count($ids), $report['recipes']);
             self::assertGreaterThan(10, $report['main_ingredient_lines']);

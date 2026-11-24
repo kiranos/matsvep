@@ -17,7 +17,7 @@ if (PHP_SAPI !== 'cli') {
 
 try {
     $arguments = $_SERVER['argv'] ?? null;
-    $usage = 'Usage: php bin/derive-features.php [--all|--recipe=ID|--report|--tag-report|--protein-gap-sample=N|--vegetarian-sample=N] [--seed=N]';
+    $usage = 'Usage: php bin/derive-features.php [--all|--recipe=ID|--report|--tag-report|--protein-gap-sample=N|--vegetarian-sample=N|--dinner-sample=N] [--seed=N]';
     if (!is_array($arguments) || count($arguments) > 3 || !is_string($arguments[1] ?? '--report')) {
         throw new RuntimeException($usage);
     }
@@ -31,7 +31,7 @@ try {
         ) . PHP_EOL);
         exit(0);
     }
-    $sample = preg_match('/^--(protein-gap|vegetarian)-sample=([1-9][0-9]*)$/', $option, $match) === 1;
+    $sample = preg_match('/^--(protein-gap|vegetarian|dinner)-sample=([1-9][0-9]*)$/', $option, $match) === 1;
     if ($sample) {
         if ($seedOption !== null && (!is_string($seedOption)
             || preg_match('/^--seed=([0-9]+)$/', $seedOption, $seedMatch) !== 1)) {
@@ -48,7 +48,7 @@ try {
         }
         $db = DatabaseConnection::fromEnvironment(dirname(__DIR__));
         $result = (new FeatureDiagnosticSample($db))->build(
-            $match[1] === 'protein-gap' ? 'protein_gap' : 'vegetarian',
+            str_replace('-', '_', $match[1]),
             $limit,
             $seed,
         );
