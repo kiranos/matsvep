@@ -148,6 +148,7 @@ final class RecipeProcessorIntegrationTest extends TestCase
             $row = $saved->fetch(PDO::FETCH_ASSOC);
             self::assertIsArray($row);
             self::assertSame('fish', $row['main_protein']);
+            self::assertIsNumeric($row['is_dinner_candidate']);
             self::assertSame(0, (int) $row['is_dinner_candidate']);
             self::assertSame('manual_override', $row['dinner_exclusion_reason']);
             self::assertIsNumeric($row['dish_group_id']);
