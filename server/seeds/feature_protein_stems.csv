@@ -34,7 +34,7 @@ nötkött,beef,animal,edge
 biff,beef,animal,whole
 flankstek,beef,animal,edge
 köttbull,meat,animal,prefix
-kött,meat,animal,edge
+kött,meat,generic,edge
 oxlägg,beef,animal,edge
 kalv,beef,animal,edge
 fläsk,pork,animal,edge

@@ -27,7 +27,7 @@
   {"text":"sojakorv", "stem":"soja", "protein":"vegetarian", "kind":"vegetarian"},
   {"text":"vegetarisk korv", "stem":"vegetarisk", "protein":"vegetarian", "kind":"vegetarian"},
   {"text":"vegofärs", "stem":"vego", "protein":"vegetarian", "kind":"vegetarian"},
-  {"text":"köttfärs", "stem":"kött", "protein":"meat", "kind":"animal"},
+  {"text":"köttfärs", "stem":"kött", "protein":"meat", "kind":"generic"},
   {"text":"siktat mjöl"},
   {"text":"parmesanostpaj", "stem":"parmesanost", "protein":"vegetarian", "kind":"vegetarian"},
   {"text":"mungbönplättar", "stem":"mungbön", "protein":"vegetarian", "kind":"vegetarian"},

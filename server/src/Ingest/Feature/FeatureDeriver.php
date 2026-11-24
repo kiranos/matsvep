@@ -363,9 +363,14 @@ final class FeatureDeriver
             $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
         }
         $titleProtein = null;
+        $titleGenericProtein = null;
         foreach ($titleStemMatches as $stemMatch) {
             $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
-            $titleProtein ??= $stemMatch['protein_code'];
+            if ($stemMatch['kind'] === 'generic') {
+                $titleGenericProtein ??= $stemMatch['protein_code'];
+            } else {
+                $titleProtein ??= $stemMatch['protein_code'];
+            }
         }
         $vegetarian = $animal ? 0 : (($matchedMain || $vegetarianStemPresent)
             && !$unmatchedMainWithoutVegetarianStem ? 1 : null);
@@ -374,7 +379,7 @@ final class FeatureDeriver
                 ?: (int) $b['main'] <=> (int) $a['main']
                 ?: $a['position'] <=> $b['position']);
         $protein = ($titleProtein !== null && $titleProtein !== 'vegetarian')
-            ? $titleProtein : ($proteinChoices[0]['code'] ?? (
+            ? $titleProtein : ($proteinChoices[0]['code'] ?? $titleGenericProtein ?? (
                 ($substantialVegetarianMain && !$animal) || $vegetarian === 1 ? 'vegetarian' : null
             ));
         [$cuisine, $mealType, $festiveTag, $festBonusTag] = $this->tagFeatures($recipe['title'], $tags);
@@ -402,11 +407,13 @@ final class FeatureDeriver
                 || ($foodLines > 0 && $sugarLines / $foodLines
                     >= $this->config->decimal('feature.sweet_pie_sugar_share')));
         $savoryTitle = !$sweetPie && $this->containsAny($recipe['title'], $this->vocabulary->dinnerSavoryTitles);
-        $clearDinnerEvidence = $strongMainProtein || $savoryTitle
+        $clearDinnerEvidence = $strongMainProtein || $savoryTitle || $titleGenericProtein !== null
             || ($titleProtein !== null && $titleProtein !== 'vegetarian');
-        $proteinEvidence = $titleProtein !== null || $proteinChoices !== [] || $vegetarianProteinPresent;
+        $proteinEvidence = $titleProtein !== null || $titleGenericProtein !== null
+            || $proteinChoices !== [] || $vegetarianProteinPresent;
         $dinnerCandidate = $mealType === 'main' || ($mealType === null && $proteinEvidence);
         $substantialMain = ($titleProtein !== null && $titleProtein !== 'vegetarian')
+            || $titleGenericProtein !== null
             || $proteinChoices !== [] || $carb !== null || $substantialVegetarianMain;
         $bakingShare = $foodLines === 0 ? 0.0 : $sugarFlourLines / $foodLines;
         $bakingIngredients = $directBaking || ($hasSugar && $hasFlour
