@@ -123,7 +123,8 @@ final class PlanCandidateRepository
             );
         }
         $kept = [];
-        foreach ((new PlanCandidatePool($this->config))->select($all) as $candidate) {
+        $selected = $planId === null ? (new PlanCandidatePool($this->config))->select($all) : $all;
+        foreach ($selected as $candidate) {
             $kept[$candidate->id] = $candidate;
         }
         foreach ($all as $candidate) {

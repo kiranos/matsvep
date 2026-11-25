@@ -18,6 +18,9 @@ final class PlanBuilder
     /** @var array<string, list<array{protein: ?string, cuisine: ?string, carb: ?string, ingredients: list<int>, adjacent: bool, chosen: bool, in_plan_week: bool, vegetarian: bool}>> */
     private array $recentCache = [];
 
+    /** @var array<string, array{proteins: array<string, int>, cuisines: array<string, int>, carbs: array<string, int>, adjacent_proteins: array<string, bool>, fish_count: int, vegetarian_count: int, chosen_ingredients: list<list<int>>}> */
+    private array $recentSummaryCache = [];
+
     /** @var list<array{date: string, recipe_id: int}> */
     private array $recentHistory = [];
 
@@ -73,6 +76,7 @@ final class PlanBuilder
     ): array {
         $this->kindCache = [];
         $this->recentCache = [];
+        $this->recentSummaryCache = [];
         $this->explainedCandidates = [];
         $this->recentHistory = $recentHistory;
         $minimumRating = $this->config->integer('explain.similar_rating_min');
@@ -402,13 +406,15 @@ final class PlanBuilder
         }
         $score = $scores[$baseKey];
         if ($recent !== []) {
-            $variety = $this->scorer->varietyPenalty($recipe->scoreInput(
+            $summary = $this->recentSummaryCache[$historyKey]
+                ??= $this->scorer->summarizeRecent($recent);
+            $variety = $this->scorer->varietyPenaltyFromSummary($recipe->scoreInput(
                 $profile,
                 $this->weekday($date) === 0,
-                $recent,
+                [],
                 $this->daysLeft($date),
                 $blockVegetarian
-            ));
+            ), $summary);
             $score['total'] -= $this->config->decimal('weight.variety') * ($variety - $score['variety_pen']);
             $score['variety_pen'] = $variety;
         }

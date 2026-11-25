@@ -98,39 +98,64 @@ final class Scorer
         return self::clamp(($daysSinceGroupCooked - $cooldown) / $cooldown);
     }
 
-    public function varietyPenalty(ScoreInput $input): float
+    /** @param list<array{protein: ?string, cuisine: ?string, carb: ?string, ingredients: list<int>, adjacent: bool, chosen: bool, in_plan_week: bool, vegetarian: bool}> $recent
+     *  @return array{proteins: array<string, int>, cuisines: array<string, int>, carbs: array<string, int>, adjacent_proteins: array<string, bool>, fish_count: int, vegetarian_count: int, chosen_ingredients: list<list<int>>}
+     */
+    public function summarizeRecent(array $recent): array
     {
-        $penalty = 0.0;
-        $proteinCount = 0;
-        $cuisineCount = 0;
-        $carbCount = 0;
+        $proteins = [];
+        $cuisines = [];
+        $carbs = [];
+        $adjacentProteins = [];
         $fishCount = 0;
         $vegCount = 0;
-        $overlapFound = false;
-        $adjacentProtein = false;
-        foreach ($input->recentDinners as $dinner) {
+        $chosenIngredients = [];
+        foreach ($recent as $dinner) {
             if ($dinner['in_plan_week'] && $dinner['protein'] === 'fish') {
                 $fishCount++;
             }
             if ($dinner['in_plan_week'] && $dinner['vegetarian']) {
                 $vegCount++;
             }
-            if ($input->mainProtein !== null && $dinner['protein'] === $input->mainProtein) {
-                if ($dinner['in_plan_week']) {
-                    $proteinCount++;
-                }
-                if ($dinner['adjacent']) {
-                    $adjacentProtein = true;
-                }
+            if ($dinner['in_plan_week'] && $dinner['protein'] !== null) {
+                $proteins[$dinner['protein']] = ($proteins[$dinner['protein']] ?? 0) + 1;
             }
-            if ($dinner['in_plan_week'] && $input->cuisine !== null && $dinner['cuisine'] === $input->cuisine) {
-                $cuisineCount++;
+            if ($dinner['in_plan_week'] && $dinner['cuisine'] !== null) {
+                $cuisines[$dinner['cuisine']] = ($cuisines[$dinner['cuisine']] ?? 0) + 1;
             }
-            if ($dinner['in_plan_week'] && $input->carbBase !== null && $dinner['carb'] === $input->carbBase) {
-                $carbCount++;
+            if ($dinner['in_plan_week'] && $dinner['carb'] !== null) {
+                $carbs[$dinner['carb']] = ($carbs[$dinner['carb']] ?? 0) + 1;
             }
-            if (!$overlapFound && $dinner['chosen'] && $this->jaccard($input->mainIngredientIds, $dinner['ingredients']) > $this->config->decimal('variety.overlap_jaccard')) {
+            if ($dinner['adjacent'] && $dinner['protein'] !== null) {
+                $adjacentProteins[$dinner['protein']] = true;
+            }
+            if ($dinner['chosen']) {
+                $chosenIngredients[] = $dinner['ingredients'];
+            }
+        }
+        return ['proteins' => $proteins, 'cuisines' => $cuisines, 'carbs' => $carbs,
+            'adjacent_proteins' => $adjacentProteins, 'fish_count' => $fishCount,
+            'vegetarian_count' => $vegCount, 'chosen_ingredients' => $chosenIngredients];
+    }
+
+    public function varietyPenalty(ScoreInput $input): float
+    {
+        return $this->varietyPenaltyFromSummary($input, $this->summarizeRecent($input->recentDinners));
+    }
+
+    /** @param array{proteins: array<string, int>, cuisines: array<string, int>, carbs: array<string, int>, adjacent_proteins: array<string, bool>, fish_count: int, vegetarian_count: int, chosen_ingredients: list<list<int>>} $summary */
+    public function varietyPenaltyFromSummary(ScoreInput $input, array $summary): float
+    {
+        $penalty = 0.0;
+        $proteinCount = $input->mainProtein === null ? 0 : ($summary['proteins'][$input->mainProtein] ?? 0);
+        $cuisineCount = $input->cuisine === null ? 0 : ($summary['cuisines'][$input->cuisine] ?? 0);
+        $carbCount = $input->carbBase === null ? 0 : ($summary['carbs'][$input->carbBase] ?? 0);
+        $adjacentProtein = $input->mainProtein !== null && isset($summary['adjacent_proteins'][$input->mainProtein]);
+        $overlapFound = false;
+        foreach ($summary['chosen_ingredients'] as $ingredients) {
+            if ($this->jaccard($input->mainIngredientIds, $ingredients) > $this->config->decimal('variety.overlap_jaccard')) {
                 $overlapFound = true;
+                break;
             }
         }
         if ($adjacentProtein) {
@@ -143,10 +168,10 @@ final class Scorer
             $penalty += $this->config->decimal('variety.pen.overlap');
         }
         if ($input->daysLeftInPlanWeek <= $this->config->integer('variety.target_days_left')) {
-            if ($fishCount < $this->config->integer('variety.target_fish') && $input->mainProtein === 'fish') {
+            if ($summary['fish_count'] < $this->config->integer('variety.target_fish') && $input->mainProtein === 'fish') {
                 $penalty -= $this->config->decimal('variety.bonus.fish');
             }
-            if (!$input->blockVegetarian && $vegCount < $this->config->integer('variety.target_veg') && $input->vegetarian) {
+            if (!$input->blockVegetarian && $summary['vegetarian_count'] < $this->config->integer('variety.target_veg') && $input->vegetarian) {
                 $penalty -= $this->config->decimal('variety.bonus.vegetarian');
             }
         }
