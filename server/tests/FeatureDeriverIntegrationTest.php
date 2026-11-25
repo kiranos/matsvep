@@ -113,7 +113,8 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'roast_potatoes_side', 'roast_potatoes_with_fat',
                 'greek_chickpea_salad', 'summer_couscous_chickpea_salad',
                 'halloumi_potato_gratin', 'feta_bulgur_salad', 'untagged_orange_herring',
-                'pancetta_wrapped_fish', 'bacon_fish', 'celery_stock', 'oyster_sauce_beef',
+                'pancetta_wrapped_fish', 'bacon_fish', 'bacon_pasta_shrimp',
+                'celery_stock', 'oyster_sauce_beef',
                 'oyster_mushroom_wok', 'actual_oysters', 'hen_stew', 'langoustine',
                 'kabanoss_stew', 'hare_saddle', 'hare_back'] as $key) {
                 $case = $cases[$key] ?? null;

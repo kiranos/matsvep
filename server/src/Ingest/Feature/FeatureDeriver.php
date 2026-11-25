@@ -217,6 +217,9 @@ final class FeatureDeriver
         }
         $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles)
             || $this->containsAnyAtWordEnd($recipe['title'], $this->vocabulary->dinnerUnambiguousSuffixTitles);
+        $leadingTitle = preg_split('/,|\s+(?:med|i|på|och|till|samt)\s+/iu', $recipe['title'], 2);
+        $dishName = is_array($leadingTitle) ? trim($leadingTitle[0]) : $recipe['title'];
+        $leadingStemMatches = $this->stemMatcher->match($dishName);
         $titleStemMatches = $this->stemMatcher->match($recipe['title']);
         $lineStemMatches = [];
         $fishContext = $this->hasFishStem($titleStemMatches);
@@ -368,7 +371,6 @@ final class FeatureDeriver
             $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
         }
         $titleProtein = null;
-        $accompanimentTitleProtein = null;
         $titleGenericProtein = null;
         foreach ($titleStemMatches as $stemMatch) {
             $animal = $animal || in_array(
@@ -378,13 +380,17 @@ final class FeatureDeriver
             );
             if ($stemMatch['kind'] === 'generic') {
                 $titleGenericProtein ??= $stemMatch['protein_code'];
-            } elseif (in_array($stemMatch['stem'], $this->vocabulary->proteinAccompaniments, true)) {
-                $accompanimentTitleProtein ??= $stemMatch['protein_code'];
             } else {
                 $titleProtein ??= $stemMatch['protein_code'];
             }
         }
-        $titleProtein ??= $accompanimentTitleProtein;
+        foreach ($leadingStemMatches as $stemMatch) {
+            if ($stemMatch['kind'] === 'animal'
+                && !in_array($stemMatch['stem'], $this->vocabulary->proteinAccompaniments, true)) {
+                $titleProtein = $stemMatch['protein_code'];
+                break;
+            }
+        }
         $vegetarian = $animal ? 0 : (($matchedMain || $vegetarianStemPresent)
             && !$unmatchedMainWithoutVegetarianStem ? 1 : null);
         usort($proteinChoices, static fn (array $a, array $b): int =>
@@ -437,10 +443,8 @@ final class FeatureDeriver
         $eggAlone = $eggPresent && !$nonEggMain && $carb === null && !$savoryTitle
             && $proteinChoices === [] && !$strongMainProtein;
         $exclusionReason = null;
-        $leadingTitle = preg_split('/,|\s+(?:med|i|på|och|till|samt)\s+/iu', $recipe['title'], 2);
-        $dishName = is_array($leadingTitle) ? trim($leadingTitle[0]) : $recipe['title'];
         $leadingProtein = false;
-        foreach ($this->stemMatcher->match($dishName) as $match) {
+        foreach ($leadingStemMatches as $match) {
             $leadingProtein = $leadingProtein || $match['protein_code'] !== null;
         }
         $leadingExcluded = ($this->hasDinnerExclusion($dishName, 'leading')
