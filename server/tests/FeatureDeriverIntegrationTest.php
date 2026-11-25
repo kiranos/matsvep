@@ -107,7 +107,15 @@ final class FeatureDeriverIntegrationTest extends TestCase
                 'savory_pie_no_sweet', 'accent_dessert', 'uncertain_tofu_protein',
                 'pork_joint', 'reindeer_fillet', 'savory_citrus_pie', 'foamy_sauce_meat',
                 'savory_sylta', 'untagged_linguine', 'untagged_frittata',
-                'untagged_chicken_parm', 'untagged_cabbage_rolls', 'sweet_foam', 'fruit_jam'] as $key) {
+                'untagged_chicken_parm', 'untagged_cabbage_rolls', 'sweet_foam', 'fruit_jam',
+                'standalone_aioli', 'standalone_pesto', 'pickled_cucumber', 'lassi_drink',
+                'fruit_compote', 'norwegian_omelette', 'potato_gratin_side', 'cauliflower_tabbouleh_side',
+                'roast_potatoes_side', 'roast_potatoes_with_fat',
+                'greek_chickpea_salad', 'summer_couscous_chickpea_salad',
+                'halloumi_potato_gratin', 'feta_bulgur_salad', 'untagged_orange_herring',
+                'pancetta_wrapped_fish', 'bacon_fish', 'celery_stock', 'oyster_sauce_beef',
+                'oyster_mushroom_wok', 'actual_oysters', 'hen_stew', 'langoustine',
+                'kabanoss_stew', 'hare_saddle', 'hare_back'] as $key) {
                 $case = $cases[$key] ?? null;
                 self::assertIsArray($case);
                 $recipeInsert->execute([$sourceId, $case['url'], $case['title'], $case['time']]);
@@ -238,7 +246,10 @@ final class FeatureDeriverIntegrationTest extends TestCase
             self::assertGreaterThan(8, $report['matched_main_ingredient_lines']);
             self::assertGreaterThan(80.0, $report['matched_main_ingredient_share_pct']);
             self::assertIsArray($report['main_protein_distribution']);
-            self::assertSame(10, $report['main_protein_distribution']['fish']);
+            self::assertSame(count(array_filter(
+                $cases,
+                static fn (mixed $case): bool => is_array($case) && ($case['protein'] ?? null) === 'fish',
+            )), $report['main_protein_distribution']['fish']);
             $tagReport = (new \Matsvep\Ingest\Feature\RecipeTagReport($db))->build();
             self::assertContains('Huvudrätt', array_column($tagReport, 'tag'));
             $mainTag = array_values(array_filter(

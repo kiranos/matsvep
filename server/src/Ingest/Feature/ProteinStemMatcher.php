@@ -11,6 +11,9 @@ final class ProteinStemMatcher
     /** @var list<array{stem: string, protein_code: ?string, kind: string, match_mode: string}> */
     private readonly array $rules;
 
+    /** @var array<string, list<string>> */
+    private readonly array $excludedWordPrefixes;
+
     public function __construct(string $seedDirectory)
     {
         $rules = [];
@@ -19,9 +22,9 @@ final class ProteinStemMatcher
             ['stem', 'protein_code', 'kind', 'match_mode'],
         ) as $row) {
             if ($row['stem'] === ''
-                || !in_array($row['kind'], ['animal', 'vegetarian', 'stock', 'roe', 'generic'], true)
+                || !in_array($row['kind'], ['animal', 'vegetarian', 'stock', 'animal_flavour', 'roe', 'generic'], true)
                 || !in_array($row['match_mode'], ['whole', 'prefix', 'suffix', 'edge'], true)
-                || ($row['protein_code'] === '' && $row['kind'] !== 'stock')) {
+                || ($row['protein_code'] === '' && !in_array($row['kind'], ['stock', 'animal_flavour'], true))) {
                 throw new RuntimeException('Invalid protein stem seed row.');
             }
             $rules[] = [
@@ -51,6 +54,17 @@ final class ProteinStemMatcher
         }
         usort($rules, static fn (array $a, array $b): int => mb_strlen($b['stem']) <=> mb_strlen($a['stem']));
         $this->rules = $rules;
+        $excludedWordPrefixes = [];
+        foreach (CsvTable::read(
+            $seedDirectory . '/feature_protein_stem_exclusions.csv',
+            ['stem', 'word_prefix'],
+        ) as $row) {
+            if ($row['stem'] === '' || $row['word_prefix'] === '' || !isset($explicit[mb_strtolower($row['stem'])])) {
+                throw new RuntimeException('Invalid protein stem exclusion seed row.');
+            }
+            $excludedWordPrefixes[mb_strtolower($row['stem'])][] = mb_strtolower($row['word_prefix']);
+        }
+        $this->excludedWordPrefixes = $excludedWordPrefixes;
     }
 
     /** @return list<array{stem: string, protein_code: ?string, kind: string}> */
@@ -66,19 +80,25 @@ final class ProteinStemMatcher
                 if ($rule['kind'] === 'roe' && !$allowRoe) {
                     continue;
                 }
+                foreach ($this->excludedWordPrefixes[$rule['stem']] ?? [] as $prefix) {
+                    if (str_starts_with($word, $prefix)) {
+                        continue 2;
+                    }
+                }
                 if ($this->matches($word, $rule['stem'], $rule['match_mode'])) {
                     $candidates[] = $rule;
                 }
             }
             $vegetarian = $this->firstKind($candidates, 'vegetarian');
             $stock = $this->firstKind($candidates, 'stock');
+            $animalFlavour = $this->firstKind($candidates, 'animal_flavour');
             $animal = $this->firstKind($candidates, 'animal');
             $vegetarianWins = $vegetarian !== null && ($animal === null
                 || str_starts_with($word, $vegetarian['stem'])
                 && (str_starts_with($word, $animal['stem'])
                     ? mb_strlen($vegetarian['stem']) >= mb_strlen($animal['stem'])
                     : true));
-            $selected = $vegetarianWins ? $vegetarian : ($previousVegetarian ? null : $stock);
+            $selected = $vegetarianWins ? $vegetarian : ($previousVegetarian ? null : ($stock ?? $animalFlavour));
             if ($selected === null && !$previousVegetarian) {
                 foreach ($candidates as $candidate) {
                     if (in_array($candidate['kind'], ['animal', 'roe'], true)

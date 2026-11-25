@@ -273,7 +273,11 @@ final class FeatureDeriver
             $this->recordStemMatches($stemMatches, 'ingredient');
             $lineVegetarianStem = false;
             foreach ($stemMatches as $stemMatch) {
-                $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
+                $animal = $animal || in_array(
+                    $stemMatch['kind'],
+                    ['animal', 'generic', 'stock', 'animal_flavour', 'roe'],
+                    true,
+                );
                 $lineVegetarianStem = $lineVegetarianStem || $stemMatch['kind'] === 'vegetarian';
             }
             $vegetarianStemPresent = $vegetarianStemPresent || $lineVegetarianStem;
@@ -364,15 +368,23 @@ final class FeatureDeriver
             $setMain->execute([$main ? 1 : 0, $recipe['id'], $position]);
         }
         $titleProtein = null;
+        $accompanimentTitleProtein = null;
         $titleGenericProtein = null;
         foreach ($titleStemMatches as $stemMatch) {
-            $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
+            $animal = $animal || in_array(
+                $stemMatch['kind'],
+                ['animal', 'generic', 'stock', 'animal_flavour', 'roe'],
+                true,
+            );
             if ($stemMatch['kind'] === 'generic') {
                 $titleGenericProtein ??= $stemMatch['protein_code'];
+            } elseif (in_array($stemMatch['stem'], $this->vocabulary->proteinAccompaniments, true)) {
+                $accompanimentTitleProtein ??= $stemMatch['protein_code'];
             } else {
                 $titleProtein ??= $stemMatch['protein_code'];
             }
         }
+        $titleProtein ??= $accompanimentTitleProtein;
         $vegetarian = $animal ? 0 : (($matchedMain || $vegetarianStemPresent)
             && !$unmatchedMainWithoutVegetarianStem ? 1 : null);
         usort($proteinChoices, static fn (array $a, array $b): int =>
@@ -412,6 +424,8 @@ final class FeatureDeriver
             || ($titleProtein !== null && $titleProtein !== 'vegetarian');
         $proteinEvidence = $titleProtein !== null || $titleGenericProtein !== null
             || $proteinChoices !== [] || $vegetarianProteinPresent;
+        $substantialProteinEvidence = ($titleProtein !== null && $titleProtein !== 'vegetarian')
+            || $titleGenericProtein !== null || $proteinChoices !== [] || $substantialVegetarianMain;
         $dinnerCandidate = $mealType === 'main' || ($mealType === null && $proteinEvidence);
         $substantialMain = ($titleProtein !== null && $titleProtein !== 'vegetarian')
             || $titleGenericProtein !== null
@@ -454,6 +468,9 @@ final class FeatureDeriver
         } elseif ($hasExcludedMealTag) {
             $dinnerCandidate = false;
             $exclusionReason = 'source_category';
+        } elseif ($mealType === 'buffet') {
+            $dinnerCandidate = false;
+            $exclusionReason = 'breakfast_or_side';
         } elseif ($sourceCategoryKind === 'dessert') {
             $dinnerCandidate = false;
             $exclusionReason = 'source_category';
@@ -483,6 +500,16 @@ final class FeatureDeriver
                 && ($substantialMain || !$this->hasDinnerExclusion($recipe['title'], 'side'));
             if (!$dinnerCandidate) {
                 $exclusionReason = 'breakfast_or_side';
+            }
+        }
+        if (($this->hasDinnerExclusion($recipe['title'], 'starch_side')
+                || $this->hasDinnerExclusion($recipe['title'], 'starch_side_word_end'))
+            && !$substantialProteinEvidence
+            && ($dinnerCandidate || $exclusionReason === null || $exclusionReason === 'insufficient_evidence')) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'breakfast_or_side';
+            if (!$hasMainTag && !$hasExcludedMealTag && $mealType === null) {
+                $mealType = 'side';
             }
         }
         if (!$hasMainTag && !$hasExcludedMealTag && !$clearDinnerEvidence && $dinnerCandidate) {
@@ -620,7 +647,7 @@ final class FeatureDeriver
     private function hasDinnerExclusion(string $text, string $scope): bool
     {
         foreach ($this->vocabulary->dinnerExclusions[$scope] as $term) {
-            if ($scope === 'leading_suffix'
+            if (in_array($scope, ['leading_suffix', 'starch_side_word_end'], true)
                 ? $this->vocabulary->containsAtWordEnd($text, $term)
                 : $this->vocabulary->contains($text, $term)) {
                 return true;

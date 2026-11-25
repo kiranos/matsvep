@@ -16,10 +16,13 @@ renytterfilé,game,animal,edge
 häst,game,animal,edge
 hare,game,animal,whole
 harstek,game,animal,edge
+harsadel,game,animal,edge
+harrygg,game,animal,edge
 kanin,game,animal,edge
 vildsvin,game,animal,edge
 duva,game,animal,whole
 ank,poultry,animal,prefix
+höna,poultry,animal,edge
 gås,poultry,animal,whole
 fasan,game,animal,edge
 vaktel,game,animal,prefix
@@ -45,6 +48,7 @@ porchetta,pork,animal,edge
 pancetta,pork,animal,edge
 sidfläsk,pork,animal,edge
 korv,sausage,animal,edge
+kabanoss,sausage,animal,edge
 isterband,sausage,animal,edge
 chorizo,sausage,animal,edge
 salami,sausage,animal,edge
@@ -52,6 +56,7 @@ skinka,pork,animal,edge
 skink,pork,animal,prefix
 parma,pork,animal,prefix
 bacon,pork,animal,edge
+baconfett,,animal_flavour,prefix
 kebab,meat,animal,edge
 färs,meat,generic,suffix
 sik,fish,animal,whole
@@ -62,7 +67,8 @@ bergtunga,fish,animal,edge
 rödtunga,fish,animal,edge
 sardell,fish,animal,edge
 sardin,fish,animal,edge
-ostron,seafood,animal,edge
+ostron,seafood,animal,prefix
+havskräft,seafood,animal,prefix
 snigel,seafood,animal,edge
 sniglar,seafood,animal,edge
 hummer,seafood,animal,edge
@@ -77,7 +83,7 @@ löjrom,seafood,animal,edge
 sikrom,seafood,animal,edge
 forellrom,seafood,animal,edge
 rom,seafood,roe,whole
-gös,fish,animal,whole
+gös,fish,animal,prefix
 gädda,fish,animal,edge
 makrill,fish,animal,edge
 sill,fish,animal,edge
@@ -95,6 +101,10 @@ lax,fish,animal,edge
 torsk,fish,animal,edge
 fond,,stock,edge
 buljong,,stock,edge
+fondtärning,,stock,suffix
+buljongtärning,,stock,suffix
+fondkoncentrat,,stock,suffix
+buljongpulver,,stock,suffix
 svampbuljong,vegetarian,vegetarian,edge
 grönsaksbuljong,vegetarian,vegetarian,edge
 svampfond,vegetarian,vegetarian,edge
