@@ -9,12 +9,40 @@ efterrätt,leading
 glass,unknown_only
 dryck,unknown_only
 sås,unknown_only
+sås,leading_suffix
+såser,leading_suffix
+majonnäs,leading_suffix
+aioli,leading_suffix
+rouille,leading_suffix
+röra,leading_suffix
+dipp,leading_suffix
+böncrème,leading_suffix
+pesto,leading_suffix
+pressgurka,leading_suffix
+mjölksyrad,leading
+inlagd,leading
+lassi,leading_suffix
+kompott,leading_suffix
+omelette norvegienne,leading_suffix
 dressing,unknown_only
 kryddblandning,unknown_only
 kryddmix,unknown_only
 inläggning,unknown_only
 chutney,leading
 roast potatoes,dish_title
+roast potatoes,starch_side
+fries,starch_side
+potatis,starch_side
+potatoes,starch_side
+potato,starch_side
+ris,starch_side_word_end
+rice,starch_side_word_end
+couscous,starch_side
+bulgur,starch_side
+sallad,starch_side
+salad,starch_side
+tabouleh,starch_side
+tabbouleh,starch_side
 müsli,always
 gröt,always
 smoothie,leading

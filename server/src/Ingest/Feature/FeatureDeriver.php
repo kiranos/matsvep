@@ -217,6 +217,9 @@ final class FeatureDeriver
         }
         $unambiguousTitle = $this->containsAny($recipe['title'], $this->vocabulary->dinnerUnambiguousTitles)
             || $this->containsAnyAtWordEnd($recipe['title'], $this->vocabulary->dinnerUnambiguousSuffixTitles);
+        $leadingTitle = preg_split('/,|\s+(?:med|i|på|och|till|samt)\s+/iu', $recipe['title'], 2);
+        $dishName = is_array($leadingTitle) ? trim($leadingTitle[0]) : $recipe['title'];
+        $leadingStemMatches = $this->stemMatcher->match($dishName);
         $titleStemMatches = $this->stemMatcher->match($recipe['title']);
         $lineStemMatches = [];
         $fishContext = $this->hasFishStem($titleStemMatches);
@@ -273,7 +276,11 @@ final class FeatureDeriver
             $this->recordStemMatches($stemMatches, 'ingredient');
             $lineVegetarianStem = false;
             foreach ($stemMatches as $stemMatch) {
-                $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
+                $animal = $animal || in_array(
+                    $stemMatch['kind'],
+                    ['animal', 'generic', 'stock', 'animal_flavour', 'roe'],
+                    true,
+                );
                 $lineVegetarianStem = $lineVegetarianStem || $stemMatch['kind'] === 'vegetarian';
             }
             $vegetarianStemPresent = $vegetarianStemPresent || $lineVegetarianStem;
@@ -366,11 +373,22 @@ final class FeatureDeriver
         $titleProtein = null;
         $titleGenericProtein = null;
         foreach ($titleStemMatches as $stemMatch) {
-            $animal = $animal || in_array($stemMatch['kind'], ['animal', 'generic', 'stock', 'roe'], true);
+            $animal = $animal || in_array(
+                $stemMatch['kind'],
+                ['animal', 'generic', 'stock', 'animal_flavour', 'roe'],
+                true,
+            );
             if ($stemMatch['kind'] === 'generic') {
                 $titleGenericProtein ??= $stemMatch['protein_code'];
             } else {
                 $titleProtein ??= $stemMatch['protein_code'];
+            }
+        }
+        foreach ($leadingStemMatches as $stemMatch) {
+            if ($stemMatch['kind'] === 'animal'
+                && !in_array($stemMatch['stem'], $this->vocabulary->proteinAccompaniments, true)) {
+                $titleProtein = $stemMatch['protein_code'];
+                break;
             }
         }
         $vegetarian = $animal ? 0 : (($matchedMain || $vegetarianStemPresent)
@@ -412,6 +430,8 @@ final class FeatureDeriver
             || ($titleProtein !== null && $titleProtein !== 'vegetarian');
         $proteinEvidence = $titleProtein !== null || $titleGenericProtein !== null
             || $proteinChoices !== [] || $vegetarianProteinPresent;
+        $substantialProteinEvidence = ($titleProtein !== null && $titleProtein !== 'vegetarian')
+            || $titleGenericProtein !== null || $proteinChoices !== [] || $substantialVegetarianMain;
         $dinnerCandidate = $mealType === 'main' || ($mealType === null && $proteinEvidence);
         $substantialMain = ($titleProtein !== null && $titleProtein !== 'vegetarian')
             || $titleGenericProtein !== null
@@ -423,10 +443,8 @@ final class FeatureDeriver
         $eggAlone = $eggPresent && !$nonEggMain && $carb === null && !$savoryTitle
             && $proteinChoices === [] && !$strongMainProtein;
         $exclusionReason = null;
-        $leadingTitle = preg_split('/,|\s+(?:med|i|på|och|till|samt)\s+/iu', $recipe['title'], 2);
-        $dishName = is_array($leadingTitle) ? trim($leadingTitle[0]) : $recipe['title'];
         $leadingProtein = false;
-        foreach ($this->stemMatcher->match($dishName) as $match) {
+        foreach ($leadingStemMatches as $match) {
             $leadingProtein = $leadingProtein || $match['protein_code'] !== null;
         }
         $leadingExcluded = ($this->hasDinnerExclusion($dishName, 'leading')
@@ -454,6 +472,9 @@ final class FeatureDeriver
         } elseif ($hasExcludedMealTag) {
             $dinnerCandidate = false;
             $exclusionReason = 'source_category';
+        } elseif ($mealType === 'buffet') {
+            $dinnerCandidate = false;
+            $exclusionReason = 'breakfast_or_side';
         } elseif ($sourceCategoryKind === 'dessert') {
             $dinnerCandidate = false;
             $exclusionReason = 'source_category';
@@ -483,6 +504,16 @@ final class FeatureDeriver
                 && ($substantialMain || !$this->hasDinnerExclusion($recipe['title'], 'side'));
             if (!$dinnerCandidate) {
                 $exclusionReason = 'breakfast_or_side';
+            }
+        }
+        if (($this->hasDinnerExclusion($recipe['title'], 'starch_side')
+                || $this->hasDinnerExclusion($recipe['title'], 'starch_side_word_end'))
+            && !$substantialProteinEvidence
+            && ($dinnerCandidate || $exclusionReason === null || $exclusionReason === 'insufficient_evidence')) {
+            $dinnerCandidate = false;
+            $exclusionReason = 'breakfast_or_side';
+            if (!$hasMainTag && !$hasExcludedMealTag && $mealType === null) {
+                $mealType = 'side';
             }
         }
         if (!$hasMainTag && !$hasExcludedMealTag && !$clearDinnerEvidence && $dinnerCandidate) {
@@ -620,7 +651,7 @@ final class FeatureDeriver
     private function hasDinnerExclusion(string $text, string $scope): bool
     {
         foreach ($this->vocabulary->dinnerExclusions[$scope] as $term) {
-            if ($scope === 'leading_suffix'
+            if (in_array($scope, ['leading_suffix', 'starch_side_word_end'], true)
                 ? $this->vocabulary->containsAtWordEnd($text, $term)
                 : $this->vocabulary->contains($text, $term)) {
                 return true;
