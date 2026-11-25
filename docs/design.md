@@ -462,7 +462,7 @@ These metrics guide tuning of `engine_config`.
 
 ## Server-side configuration
 
-Every engine number is a row in `engine_config`, so tuning is an admin-page change, never a code deploy. Values are cached per request and versioned; each plan records the `config_version` that built it. A config edit increments its version, causing saved planning shortlists to rebuild on the next access.
+Every engine number is a row in `engine_config`, so tuning is an admin-page change, never a code deploy. Values are cached per request and versioned; each plan records the aggregate `config_version` that built it. A config edit increments that key's version. The aggregate is the sum of per-key versions, so any increment causes saved planning shortlists to rebuild on the next access.
 
 | Area | Key | Default | Meaning |
 | --- | --- | --- | --- |

@@ -49,6 +49,8 @@ final class PlanManagerIntegrationTest extends TestCase
             $householdRecipe->execute([$householdId, 14, 'library', 2, 'user', '2026-11-22 00:00:00']);
             $db->prepare("UPDATE engine_config SET value = '2', version = 2 "
                 . "WHERE `key` = 'builder.discovery_prefilter'")->execute();
+            $db->prepare("UPDATE engine_config SET version = 4 "
+                . "WHERE `key` = 'builder.temperature'")->execute();
             $engineConfig = EngineConfig::fromDatabase($db);
             $candidateIds = array_map(
                 static fn ($candidate): int => $candidate->id,
@@ -89,10 +91,14 @@ final class PlanManagerIntegrationTest extends TestCase
             self::assertNotContains(9, array_column($blocked['decks'][$dates[1]], 'recipe_id'));
             self::assertSame(0, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 17'));
 
+            $priorConfigVersion = $this->value($db, 'SELECT shortlist_config_version FROM plan');
             $db->prepare("UPDATE engine_config SET value = '3', version = 3 "
                 . "WHERE `key` = 'builder.discovery_prefilter'")->execute();
             $manager->prepare($householdId, '2026-11-22', 1, $dates);
-            self::assertSame(3, $this->value($db, 'SELECT shortlist_config_version FROM plan'));
+            self::assertSame(
+                $priorConfigVersion + 1,
+                $this->value($db, 'SELECT shortlist_config_version FROM plan')
+            );
             self::assertSame(1, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 17'));
             $pick = $prepared['decks'][$dates[0]][0]['recipe_id'];
             $chosen = $manager->choose($planId, 1, $dates[0], $pick);

@@ -466,7 +466,7 @@ final class PlanManager
 
     private function configVersion(): int
     {
-        $query = $this->db->prepare('SELECT COALESCE(MAX(version), 1) FROM engine_config');
+        $query = $this->db->prepare('SELECT COALESCE(SUM(version), 1) FROM engine_config');
         $query->execute();
         return self::integer($query->fetchColumn());
     }
