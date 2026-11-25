@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Engine;
 
+use Closure;
 use InvalidArgumentException;
 
 final class PlanBuilder
@@ -20,6 +21,12 @@ final class PlanBuilder
     /** @var list<array{date: string, recipe_id: int}> */
     private array $recentHistory = [];
 
+    /** @var list<PlanCandidate> */
+    private array $likedRecipes = [];
+
+    /** @var array<int, PlanCandidate> */
+    private array $explainedCandidates = [];
+
     /** @var \WeakMap<PlanCandidate, array<string, array<string, float>>> */
     private \WeakMap $baseScoreCache;
 
@@ -30,7 +37,7 @@ final class PlanBuilder
 
     private readonly Explainer $explainer;
 
-    public function __construct(private readonly EngineConfig $config)
+    public function __construct(private readonly EngineConfig $config, private readonly ?Closure $observer = null)
     {
         $this->scorer = new Scorer($config);
         $this->explainer = new Explainer($config);
@@ -66,7 +73,13 @@ final class PlanBuilder
     ): array {
         $this->kindCache = [];
         $this->recentCache = [];
+        $this->explainedCandidates = [];
         $this->recentHistory = $recentHistory;
+        $minimumRating = $this->config->integer('explain.similar_rating_min');
+        $this->likedRecipes = array_values(array_filter(
+            $recipes,
+            static fn (PlanCandidate $recipe): bool => $recipe->rating !== null && $recipe->rating >= $minimumRating
+        ));
         $weekDayCount ??= $this->config->integer('builder.default_plan_days');
         if ($favouriteShare < 0 || $favouriteShare > 1 || $weekDayCount < count($days)) {
             throw new InvalidArgumentException('Invalid planning quota.');
@@ -151,6 +164,7 @@ final class PlanBuilder
         usort($openDays, static fn (array $a, array $b): int =>
             (($priority[$a['profile']] ?? count($priority)) <=> ($priority[$b['profile']] ?? count($priority)))
             ?: strcmp($a['date'], $b['date']));
+        $phaseStarted = hrtime(true);
         foreach ($openDays as $index => $day) {
             $date = $day['date'];
             $ranked = ['favourite' => [], 'discovery' => []];
@@ -209,7 +223,11 @@ final class PlanBuilder
                 $remainingFavourite--;
             }
         }
+        $this->observe('select_slots', $phaseStarted);
+        $phaseStarted = hrtime(true);
         $this->swap($slots, $pinnedDates, $profiles, $byId, $earlierWeek, $blockVegetarian);
+        $this->observe('swap', $phaseStarted);
+        $phaseStarted = hrtime(true);
         foreach ($slots as $date => $slot) {
             $slots[$date] = $this->card(
                 $byId[$slot['recipe_id']],
@@ -225,8 +243,10 @@ final class PlanBuilder
                 true
             );
         }
+        $this->observe('explain_slots', $phaseStarted);
         ksort($slots);
         $decks = [];
+        $phaseStarted = hrtime(true);
         foreach ($days as $day) {
             $date = $day['date'];
             if (isset($fixed[$date])) {
@@ -285,7 +305,15 @@ final class PlanBuilder
             }
             $decks[$date] = $deck;
         }
+        $this->observe('build_decks', $phaseStarted);
         return ['slots' => $slots, 'decks' => $decks];
+    }
+
+    private function observe(string $phase, int $started): void
+    {
+        if ($this->observer !== null) {
+            ($this->observer)($phase, (hrtime(true) - $started) / 1_000_000);
+        }
     }
 
     private function kind(PlanCandidate $recipe): string
@@ -385,7 +413,49 @@ final class PlanBuilder
             $score['variety_pen'] = $variety;
         }
         return ['recipe_id' => $recipe->id, 'kind' => $kind, 'score' => $score['total'],
-            'explanation' => $withExplanation ? $this->explainer->explain($recipe, $profile, $score, $fromDate) : []];
+            'explanation' => $withExplanation
+                ? $this->explainer->explain($this->withSimilarRecipe($recipe), $profile, $score, $fromDate) : []];
+    }
+
+    private function withSimilarRecipe(PlanCandidate $recipe): PlanCandidate
+    {
+        if ($recipe->rating !== null || $recipe->siblingMeanRating !== null
+            || $recipe->similarRatedRecipeId !== null) {
+            return $recipe;
+        }
+        if (isset($this->explainedCandidates[$recipe->id])) {
+            return $this->explainedCandidates[$recipe->id];
+        }
+        $best = null;
+        $bestScore = 0.0;
+        foreach ($this->likedRecipes as $liked) {
+            $similarity = $this->similarity($recipe, $liked);
+            if ($similarity > $bestScore || ($similarity === $bestScore && $best !== null && $liked->id < $best->id)) {
+                $best = $liked;
+                $bestScore = $similarity;
+            }
+        }
+        return $this->explainedCandidates[$recipe->id] = $best === null
+            ? $recipe : $recipe->withSimilarity($best->id, $best->rating);
+    }
+
+    private function similarity(PlanCandidate $left, PlanCandidate $right): float
+    {
+        $score = 0.0;
+        foreach (['mainProtein' => 'protein', 'cuisine' => 'cuisine',
+            'carbBase' => 'carb', 'mealType' => 'meal_type'] as $property => $type) {
+            if ($left->$property !== null && $left->$property === $right->$property) {
+                $score += $this->config->decimal('content.beta.' . $type);
+            }
+        }
+        $leftIngredients = array_unique($left->mainIngredientIds);
+        $rightIngredients = array_unique($right->mainIngredientIds);
+        if ($leftIngredients !== [] && $rightIngredients !== []) {
+            $shared = count(array_intersect($leftIngredients, $rightIngredients));
+            $total = count(array_unique(array_merge($leftIngredients, $rightIngredients)));
+            $score += $this->config->decimal('content.beta.ingredients') * $shared / $total;
+        }
+        return $score;
     }
 
     /** @return array{protein: ?string, cuisine: ?string, carb: ?string, ingredients: list<int>, adjacent: bool, chosen: bool, in_plan_week: bool, vegetarian: bool} */

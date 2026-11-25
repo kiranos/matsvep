@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Engine;
 
+use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
@@ -17,13 +18,13 @@ use Throwable;
  */
 final class PlanManager
 {
-    private readonly PlanBuilder $builder;
+    private PlanBuilder $builder;
 
-    private readonly PlanCandidateRepository $candidates;
+    private PlanCandidateRepository $candidates;
 
-    public function __construct(private readonly PDO $db, private readonly EngineConfig $config)
+    public function __construct(private readonly PDO $db, private EngineConfig $config, private readonly ?Closure $observer = null)
     {
-        $this->builder = new PlanBuilder($config);
+        $this->builder = new PlanBuilder($config, $observer);
         $this->candidates = new PlanCandidateRepository($db, $config);
     }
 
@@ -49,13 +50,19 @@ final class PlanManager
                 $insert->execute([$householdId, $weekStart, $part, json_encode($dates, JSON_THROW_ON_ERROR), $seed, $version]);
                 $planId = self::integer($this->db->lastInsertId());
             }
+            $started = hrtime(true);
             $state = $this->loadState(self::integer($planId));
+            $this->observe('load_state', $started);
+            $started = hrtime(true);
             $result = $this->build($state);
+            $this->observe('build', $started);
+            $started = hrtime(true);
             if ($state['slots'] === []) {
                 $this->writeOpenSlots(self::integer($planId), $householdId, $result, [], 'proposed');
             }
             $this->markCarryoversPlaced($householdId, $weekStart, $part, $state['carryovers'], $result);
             $this->db->commit();
+            $this->observe('write_and_commit', $started);
             return ['plan_id' => self::integer($planId),
                 'version' => self::intField($state['plan'], 'version')] + $result;
         } catch (Throwable $error) {
@@ -93,7 +100,9 @@ final class PlanManager
     {
         $this->db->beginTransaction();
         try {
+            $started = hrtime(true);
             $state = $this->loadState($planId, ($action === 'choose' || $action === 'replace') ? $recipeId : null);
+            $this->observe('load_state', $started);
             $plan = $state['plan'];
             if (self::intField($plan, 'version') !== $expectedVersion) {
                 throw new PlanVersionConflict();
@@ -152,7 +161,10 @@ final class PlanManager
                 }
             }
             $state['fixed'] = $fixed;
+            $started = hrtime(true);
             $result = $this->build($state);
+            $this->observe('build', $started);
+            $started = hrtime(true);
             $chosenDates = [];
             if (($action === 'choose' || $action === 'replace') && $date !== null) {
                 $chosenDates[$date] = 'family';
@@ -187,6 +199,7 @@ final class PlanManager
                 throw new PlanVersionConflict();
             }
             $this->db->commit();
+            $this->observe('write_and_commit', $started);
             return ['plan_id' => $planId, 'version' => $expectedVersion + 1] + $result;
         } catch (Throwable $error) {
             $this->db->rollBack();
@@ -261,12 +274,14 @@ final class PlanManager
         if (!is_bool($blockVegetarian)) {
             throw new RuntimeException('Invalid vegetarian setting.');
         }
-        $query = $this->db->prepare('SELECT timezone FROM household WHERE id = ?');
+        $query = $this->db->prepare('SELECT timezone, state_version FROM household WHERE id = ? FOR UPDATE');
         $query->execute([self::intField($plan, 'household_id')]);
-        $timezone = $query->fetchColumn();
-        if (!is_string($timezone)) {
-            throw new RuntimeException('Household time zone is missing.');
+        $household = $this->row($query);
+        if ($household === false) {
+            throw new RuntimeException('Household is missing.');
         }
+        $timezone = self::stringField($household, 'timezone');
+        $stateVersion = self::intField($household, 'state_version');
         $today = new DateTimeImmutable('now', new DateTimeZone($timezone));
         $include = array_values(array_unique(array_merge(
             array_values($fixed),
@@ -274,25 +289,42 @@ final class PlanManager
             array_column($earlier, 'recipe_id'),
             array_column($history, 'recipe_id')
         )));
-        $shortlist = $this->shortlistExists($planId);
-        if ($shortlist) {
+        $configVersion = $this->configVersion();
+        $shortlist = $this->shortlistExists($planId)
+            && self::nullableInteger($plan['shortlist_state_version'] ?? null) === $stateVersion
+            && self::nullableInteger($plan['shortlist_config_version'] ?? null) === $configVersion;
+        if (!$shortlist) {
+            if (self::nullableInteger($plan['shortlist_config_version'] ?? null) !== $configVersion) {
+                $this->config = EngineConfig::fromDatabase($this->db);
+                $this->builder = new PlanBuilder($this->config, $this->observer);
+                $this->candidates = new PlanCandidateRepository($this->db, $this->config);
+            }
+            $delete = $this->db->prepare('DELETE FROM plan_candidate WHERE plan_id = ?');
+            $delete->execute([$planId]);
+        } else {
             $this->saveCandidates($planId, $include);
             if ($requestedRecipeId !== null) {
                 $this->saveCandidates($planId, [$requestedRecipeId]);
             }
         }
+        $started = hrtime(true);
         $recipes = $this->candidates->load(
             self::intField($plan, 'household_id'),
             $today,
             $blockVegetarian,
             $include,
-            $shortlist ? $planId : null
+            $shortlist ? $planId : null,
+            $requestedRecipeId === null ? [] : [$requestedRecipeId]
         );
+        $this->observe('load_candidates', $started);
         if (!$shortlist) {
             $this->saveCandidates($planId, array_map(
                 static fn (PlanCandidate $candidate): int => $candidate->id,
                 $recipes
             ));
+            $stamp = $this->db->prepare('UPDATE plan SET shortlist_state_version = ?, '
+                . 'shortlist_config_version = ?, config_version = ? WHERE id = ?');
+            $stamp->execute([$stateVersion, $configVersion, $configVersion, $planId]);
         }
         return ['plan' => $plan, 'dates' => $validDates, 'days' => $days, 'slots' => $slots, 'fixed' => $fixed,
             'recipes' => $recipes, 'carryovers' => $carryovers, 'earlier' => $earlier,
@@ -424,7 +456,7 @@ final class PlanManager
         }
         $placed = array_column(array_values($result['slots']), 'recipe_id');
         $query = $this->db->prepare("UPDATE carryover SET status = 'placed' WHERE household_id = ? "
-            . 'AND target_week = ? AND target_part = ? AND recipe_id = ?');
+            . "AND target_week = ? AND target_part = ? AND recipe_id = ? AND status = 'pending'");
         foreach ($carryovers as $carryover) {
             if (in_array($carryover['recipe_id'], $placed, true)) {
                 $query->execute([$householdId, $weekStart, $part, $carryover['recipe_id']]);
@@ -437,6 +469,13 @@ final class PlanManager
         $query = $this->db->prepare('SELECT COALESCE(MAX(version), 1) FROM engine_config');
         $query->execute();
         return self::integer($query->fetchColumn());
+    }
+
+    private function observe(string $phase, int $started): void
+    {
+        if ($this->observer !== null) {
+            ($this->observer)($phase, (hrtime(true) - $started) / 1_000_000);
+        }
     }
 
     private function shortlistExists(int $planId): bool
@@ -492,6 +531,11 @@ final class PlanManager
             return (int) $value;
         }
         throw new RuntimeException('Invalid planning integer.');
+    }
+
+    private static function nullableInteger(mixed $value): ?int
+    {
+        return $value === null ? null : self::integer($value);
     }
 
     /** @param array<string, int|float|string|null> $row */

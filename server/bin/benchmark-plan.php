@@ -9,9 +9,16 @@ use Matsvep\Engine\PlanCandidatePool;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+$arguments = $_SERVER['argv'] ?? [];
+if (!is_array($arguments)) {
+    throw new RuntimeException('Invalid command arguments.');
+}
 $count = null;
 $rated = null;
-foreach (array_slice($argv, 1) as $argument) {
+foreach (array_slice($arguments, 1) as $argument) {
+    if (!is_string($argument)) {
+        throw new InvalidArgumentException('Invalid command argument.');
+    }
     if (preg_match('/^--candidates=([1-9][0-9]*)$/', $argument, $matches) === 1) {
         $count = (int) $matches[1];
     } elseif (preg_match('/^--rated=(0|[1-9][0-9]*)$/', $argument, $matches) === 1) {

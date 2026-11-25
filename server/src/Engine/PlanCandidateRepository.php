@@ -17,9 +17,10 @@ final class PlanCandidateRepository
     }
 
     /** @param list<int> $alwaysInclude
+     *  @param list<int> $requestedInclude
      *  @return list<PlanCandidate>
      */
-    public function load(int $householdId, DateTimeImmutable $today, bool $blockVegetarian, array $alwaysInclude = [], ?int $planId = null): array
+    public function load(int $householdId, DateTimeImmutable $today, bool $blockVegetarian, array $alwaysInclude = [], ?int $planId = null, array $requestedInclude = []): array
     {
         $date = $today->format('Y-m-d');
         $includeClause = $alwaysInclude === [] ? '' : ' OR r.id IN (' . implode(',', array_fill(0, count($alwaysInclude), '?')) . ')';
@@ -126,52 +127,13 @@ final class PlanCandidateRepository
             $kept[$candidate->id] = $candidate;
         }
         foreach ($all as $candidate) {
-            if (in_array($candidate->id, $alwaysInclude, true)) {
+            if (in_array($candidate->id, $alwaysInclude, true)
+                || in_array($candidate->id, $requestedInclude, true)) {
                 $kept[$candidate->id] = $candidate;
-            }
-        }
-        $rated = array_values(array_filter(
-            $all,
-            static fn (PlanCandidate $candidate): bool => $candidate->rating !== null && $candidate->rating >= 4
-        ));
-        foreach ($kept as $id => $candidate) {
-            if ($candidate->rating !== null || $candidate->siblingMeanRating !== null) {
-                continue;
-            }
-            $best = null;
-            $bestScore = 0.0;
-            foreach ($rated as $liked) {
-                $similarity = $this->similarity($candidate, $liked);
-                if ($similarity > $bestScore || ($similarity === $bestScore && $best !== null && $liked->id < $best->id)) {
-                    $best = $liked;
-                    $bestScore = $similarity;
-                }
-            }
-            if ($best !== null) {
-                $kept[$id] = $candidate->withSimilarity($best->id, $best->rating);
             }
         }
         ksort($kept, SORT_NUMERIC);
         return array_values($kept);
-    }
-
-    private function similarity(PlanCandidate $left, PlanCandidate $right): float
-    {
-        $score = 0.0;
-        foreach (['mainProtein' => 'protein', 'cuisine' => 'cuisine',
-            'carbBase' => 'carb', 'mealType' => 'meal_type'] as $property => $type) {
-            if ($left->$property !== null && $left->$property === $right->$property) {
-                $score += $this->config->decimal('content.beta.' . $type);
-            }
-        }
-        $leftIngredients = array_unique($left->mainIngredientIds);
-        $rightIngredients = array_unique($right->mainIngredientIds);
-        if ($leftIngredients !== [] && $rightIngredients !== []) {
-            $shared = count(array_intersect($leftIngredients, $rightIngredients));
-            $total = count(array_unique(array_merge($leftIngredients, $rightIngredients)));
-            $score += $this->config->decimal('content.beta.ingredients') * $shared / $total;
-        }
-        return $score;
     }
 
     /** @return array<string, array<int|string, array{affinity: float, confidence: float}>> */

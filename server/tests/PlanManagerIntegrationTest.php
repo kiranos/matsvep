@@ -35,7 +35,7 @@ final class PlanManagerIntegrationTest extends TestCase
             $recipe = $db->prepare('INSERT INTO recipe (source_id, url, title, is_dinner_candidate, '
                 . 'main_protein, leftover_score, festive_score, effort, active) '
                 . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            for ($id = 1; $id <= 16; $id++) {
+            for ($id = 1; $id <= 20; $id++) {
                 $recipe->execute([$source, 'https://example.com/plan-' . $id, 'Plan ' . $id,
                     $id !== 15 ? 1 : 0, $id % 3 === 0 ? 'fish' : 'vegetarian', 0.7, 0.5, 2, $id !== 16 ? 1 : 0]);
             }
@@ -47,6 +47,8 @@ final class PlanManagerIntegrationTest extends TestCase
             }
             $householdRecipe->execute([$householdId, 13, 'blocked', null, null, null]);
             $householdRecipe->execute([$householdId, 14, 'library', 2, 'user', '2026-11-22 00:00:00']);
+            $db->prepare("UPDATE engine_config SET value = '2', version = 2 "
+                . "WHERE `key` = 'builder.discovery_prefilter'")->execute();
             $engineConfig = EngineConfig::fromDatabase($db);
             $candidateIds = array_map(
                 static fn ($candidate): int => $candidate->id,
@@ -69,6 +71,29 @@ final class PlanManagerIntegrationTest extends TestCase
             self::assertCount(7, $prepared['slots']);
             self::assertGreaterThanOrEqual(10, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate'));
             $planId = $prepared['plan_id'];
+            self::assertSame(0, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 12'));
+            $initialStateVersion = $this->value($db, 'SELECT state_version FROM household');
+            $householdRecipe->execute([$householdId, 12, 'library', 5, 'user', '2026-11-22 00:00:00']);
+            $rerated = $manager->prepare($householdId, '2026-11-22', 1, $dates);
+            self::assertGreaterThan($initialStateVersion, $this->value($db, 'SELECT state_version FROM household'));
+            self::assertSame(1, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 12'));
+            self::assertContains(12, array_column($rerated['decks'][$dates[1]], 'recipe_id'));
+            self::assertSame(
+                $this->value($db, 'SELECT state_version FROM household'),
+                $this->value($db, 'SELECT shortlist_state_version FROM plan')
+            );
+
+            $householdRecipe->execute([$householdId, 9, 'blocked', null, null, null]);
+            $blocked = $manager->prepare($householdId, '2026-11-22', 1, $dates);
+            self::assertSame(0, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 9'));
+            self::assertNotContains(9, array_column($blocked['decks'][$dates[1]], 'recipe_id'));
+            self::assertSame(0, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 17'));
+
+            $db->prepare("UPDATE engine_config SET value = '3', version = 3 "
+                . "WHERE `key` = 'builder.discovery_prefilter'")->execute();
+            $manager->prepare($householdId, '2026-11-22', 1, $dates);
+            self::assertSame(3, $this->value($db, 'SELECT shortlist_config_version FROM plan'));
+            self::assertSame(1, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 17'));
             $pick = $prepared['decks'][$dates[0]][0]['recipe_id'];
             $chosen = $manager->choose($planId, 1, $dates[0], $pick);
             self::assertSame(2, $chosen['version']);

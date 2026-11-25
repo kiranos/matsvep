@@ -50,3 +50,6 @@ jobs:
       - name: Tests
         working-directory: server
         run: composer test -- --display-deprecations --display-phpunit-deprecations --fail-on-deprecation --fail-on-phpunit-deprecation
+      - name: Database-backed planning benchmark
+        working-directory: server
+        run: php bin/benchmark-plan-database.php --candidates=16365 --rated=100

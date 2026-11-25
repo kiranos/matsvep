@@ -174,9 +174,13 @@ final class Scorer
         if (count($left) === 1 && count($right) === 1) {
             return $left[0] === $right[0] ? 1.0 : 0.0;
         }
-        $a = array_unique($left);
-        $b = array_unique($right);
-        return count(array_intersect($a, $b)) / count(array_unique(array_merge($a, $b)));
+        $leftSet = array_fill_keys($left, true);
+        $rightSet = array_fill_keys($right, true);
+        $shared = 0;
+        foreach ($leftSet as $ingredientId => $_present) {
+            $shared += isset($rightSet[$ingredientId]) ? 1 : 0;
+        }
+        return $shared / (count($leftSet) + count($rightSet) - $shared);
     }
 
     private static function clamp(float $value): float
