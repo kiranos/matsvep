@@ -144,6 +144,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 | `affinity` | household\_id, feature\_type (ingredient / cuisine / protein / carb / meal\_type / tag), feature\_value, score, weight\_sum, updated\_at | Learned taste per feature |
 | `onboarding_answer` | household\_id, question\_id, answer | Raw quiz answers, so starting ratings and seeds can be recomputed |
 | `plan` | id, household\_id, week\_start (Sunday), part (1 / 2), days, seed, status, version, config\_version | One planned week or split half; version is incremented on each plan mutation |
+| `plan_candidate` | plan\_id, recipe\_id | Filtered planning shortlist kept for fast re-ranking after a pick; hard filters are checked again when it is read |
 | `plan_slot` | id, plan\_id, household\_id, date, day\_profile, recipe\_id, chosen\_by (engine / family), status (proposed / chosen / cooked / not\_cooked / unconfirmed), kind (favourite / discovery), score, predicted\_pref, explanation\_json, replaced\_from\_recipe\_id | One household-scoped dinner and why it was chosen |
 | `carryover` | household\_id, recipe\_id, from\_slot\_id, target\_week, target\_part, status (pending / placed / expired) | Uncooked dinners pinned into the next planning |
 | `slot_skip` | household\_id, recipe\_id, reason (replaced / swipe\_rejects), skipped\_at, expires\_at | Source of SkipPen |
@@ -343,11 +344,11 @@ The builder ranks recipes for every open day of a planning: the whole week, or o
 
 1. **Set up:** read the days to plan, each day's profile, the favourite share, the active config version and any pending carry-overs. The seed is a hash of household, week, part and reshuffle count.
 2. **Place carry-overs:** pinned dinners go first, each on the open day where its DayFit is highest, and count toward their kind's quota.
-3. **Build pools:**
+3. **Build pools:** push active, dinner, household status, rating, vegetarian and group-cooldown hard filters into SQL. On first preparation, retain the filtered shortlist in `plan_candidate` so later swipes do not scan the full catalogue. Recheck hard filters on each read; an eligible recipe chosen from search can join the shortlist.
    - *Favourites:* rated recipes with Pref ≥ 0.6 (about 3.4★) that pass the hard filters.
    - *Discovery:* unrated recipes that pass the hard filters: every wishlisted recipe, plus the top 300 others by Content.
 4. **Set quotas:** favourites = round(N × share) for the week, discoveries for the rest. With 7 days at 70% that is 5 + 2. In split mode, the second half's quota is the week's target minus the favourites already chosen. If the favourites pool runs short, discoveries fill the gap.
-5. **Order the days:** most constrained first, so Fri and Sat go before the lunch-box days.
+5. **Order the days:** use the configured `builder.profile_order` for the most constrained profiles, so Fri and Sat go before the lunch-box days.
 6. **Score each day:** score both pools against the dinners chosen so far. If one kind's remaining quota equals the remaining days, that kind is forced; otherwise the higher top score wins.
 7. **Pick with controlled variation:** sample from the top 5 with a seeded softmax (temperature 0.05), so the best recipe usually wins but weeks still differ.
 8. **Swap pass:** try exchanging every pair of open days and keep any swap that raises the total score, for at most 2 passes.
@@ -355,7 +356,7 @@ The builder ranks recipes for every open day of a planning: the whole week, or o
 
 **Timing:** cron prepares the decks every Sunday at 07:00, and also every Wednesday at 07:00 in split mode, then sends a `planning_ready` event with date parameters. The app builds the localised notification text. Reshuffling or re-preparing keeps every day the family has already chosen and every carry-over, and redraws only open days.
 
-**Performance:** 7 days × about 400 candidates × 6 components is roughly 17,000 simple calculations, well under 100 ms in PHP.
+**Performance:** first preparation scores a filtered pool from the full catalogue, then saves that pool. A pick reads only its planning's shortlist and re-ranks the open days; the target for this re-rank is under 100 ms. The generated-catalogue benchmark reports both first-preparation and cold re-rank times, separately from database and network time.
 
 ## Choosing meals
 
@@ -385,6 +386,7 @@ The family doesn't approve a finished plan. It swipes through a ranked deck per 
 
 - Each card shows title, image (linked from the source), cook time, a localised discovery badge and a reason rendered from server reason codes and parameters. A card for a dish group has a localised link to other variants.
 - The server returns the top 20 cards per day for the whole planning in one call, and the app pre-loads images. After each pick, one call (under 100 ms) re-ranks the other days. The next 20 cards load if a deck runs out. All scoring stays on the server.
+- Choose, replace, autofill and shuffle require the caller's expected plan version. Each successful operation increments `plan.version` in the same transaction as its slot changes. A stale version raises `plan_version_conflict` before any change.
 - A recipe swiped past in 5 separate sessions without being picked gets a 30-day SkipPen. A single left swipe has no lasting effect.
 - A search box lets the family choose any recipe in the database for a day. Hard filters still apply, and a warning shows if it breaks a variety rule.
 
@@ -412,7 +414,7 @@ The day after each chosen dinner, the app renders a localised cooking confirmati
 
 ## Explainability
 
-Each card shows one short reason built from its two largest positive components. Tapping it shows the full breakdown. The server returns English reason codes and structured parameters, never display text. Both the reasons and score components are saved in `explanation_json` with the slot when the dish is chosen, so the explanation always matches the decision. The app renders Swedish text from `app/lib/l10n/app_sv.arb` (or English from `app_en.arb`).
+Each card shows one short reason built from its two largest positive components. Tapping it shows the full breakdown. The server returns English reason codes and structured parameters, never display text. Both the reasons and score components are saved in `explanation_json` with the slot when the dish is chosen, so the explanation always matches the decision. Proposed slots have no stored explanation. The app renders Swedish text from `app/lib/l10n/app_sv.arb` (or English from `app_en.arb`).
 
 | Top component | Reason code | Example parameters |
 | --- | --- | --- |
@@ -498,6 +500,9 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | After dinner | `wishlist.bonus` | 0.10 | Score bonus for wishlisted recipes |
 | After dinner | `flag.count` / `flag.days` | 3 / 60 | Uncooked or replaced this often → admin flag |
 | Builder | `builder.fav_threshold` | 0.6 | Pref needed to count as a favourite |
+| Builder | `builder.default_favourite_share` / `builder.default_plan_days` | 0.7 / 7 | Household planning defaults |
+| Builder | `builder.plan_days.all_seven` / `builder.plan_days.sunday_thursday` | 7 / 5 | Number of planned days for each setting code |
+| Builder | `builder.profile_order` | friday_treat, saturday_dinner, weekday_leftovers | Most constrained day profiles first |
 | Builder | `builder.top_k` / `builder.temperature` | 5 / 0.05 | Controlled variation |
 | Builder | `builder.discovery_prefilter` | 300 | Discovery candidates scored per planning |
 | Builder | `builder.swap_passes` | 2 | Local improvement passes |

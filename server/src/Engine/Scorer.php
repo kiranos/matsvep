@@ -171,6 +171,9 @@ final class Scorer
         if ($left === [] || $right === []) {
             return 0.0;
         }
+        if (count($left) === 1 && count($right) === 1) {
+            return $left[0] === $right[0] ? 1.0 : 0.0;
+        }
         $a = array_unique($left);
         $b = array_unique($right);
         return count(array_intersect($a, $b)) / count(array_unique(array_merge($a, $b)));
