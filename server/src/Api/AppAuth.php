@@ -142,7 +142,7 @@ final class AppAuth
         $this->db->beginTransaction();
         try {
             $tokens = $this->issue(DbValue::integer($user['id']), $platform);
-            $clear = $this->db->prepare('DELETE FROM app_login_attempt WHERE email_hash = ?');
+            $clear = $this->db->prepare('UPDATE app_login_attempt SET email_hash = NULL WHERE email_hash = ?');
             $clear->execute([$emailHash]);
             $this->db->commit();
             return $tokens;
