@@ -12,19 +12,33 @@ use RuntimeException;
 
 final class PlanCandidateRepository
 {
+    private int $lastLoadedCount = 0;
+
     public function __construct(private readonly PDO $db, private readonly EngineConfig $config)
     {
     }
 
+    public function lastLoadedCount(): int
+    {
+        return $this->lastLoadedCount;
+    }
+
     /** @param list<int> $alwaysInclude
      *  @param list<int> $requestedInclude
+     *  @param list<int>|null $shortlistIds
      *  @return list<PlanCandidate>
      */
-    public function load(int $householdId, DateTimeImmutable $today, bool $blockVegetarian, array $alwaysInclude = [], ?int $planId = null, array $requestedInclude = []): array
+    public function load(int $householdId, DateTimeImmutable $today, bool $blockVegetarian, array $alwaysInclude = [], ?int $planId = null, array $requestedInclude = [], ?array $shortlistIds = null): array
     {
+        $this->lastLoadedCount = 0;
+        if ($shortlistIds !== null && ($planId !== null || $shortlistIds === [])) {
+            throw new \InvalidArgumentException('A read-only shortlist requires recipe IDs and no plan ID.');
+        }
         $date = $today->format('Y-m-d');
         $includeClause = $alwaysInclude === [] ? '' : ' OR r.id IN (' . implode(',', array_fill(0, count($alwaysInclude), '?')) . ')';
         $planJoin = $planId === null ? '' : ' JOIN plan_candidate pc ON pc.plan_id = ? AND pc.recipe_id = r.id ';
+        $shortlistClause = $shortlistIds === null ? '' : ' AND r.id IN ('
+            . implode(',', array_fill(0, count($shortlistIds), '?')) . ')';
         $query = $this->db->prepare(
             'SELECT r.id, COALESCE(r.dish_group_id, -r.id) AS group_id, r.total_time_min, '
             . 'r.leftover_score, r.festive_score, r.effort, r.main_protein, r.cuisine, r.carb_base, '
@@ -42,7 +56,7 @@ final class PlanCandidateRepository
             . 'AND cooked_recipe.dish_group_id = r.dish_group_id)) '
             . 'AND DATEDIFF(?, cooked.last_cooked_at) < CASE '
             . 'WHEN cooked.rating = 5 THEN ? WHEN cooked.rating = 3 THEN ? ELSE ? END))'
-            . $includeClause . ') '
+            . $includeClause . ')' . $shortlistClause . ' '
             . 'ORDER BY r.id'
         );
         $query->execute(array_merge($planId === null ? [] : [$planId], [
@@ -54,7 +68,7 @@ final class PlanCandidateRepository
             $this->config->integer('cooldown.days.5'),
             $this->config->integer('cooldown.days.3'),
             $this->config->integer('cooldown.days.4'),
-        ], $alwaysInclude));
+        ], $alwaysInclude, $shortlistIds ?? []));
         /** @var array<int, array<string, int|float|string|null>> $rows */
         $rows = [];
         foreach ($this->rows($query) as $row) {
@@ -64,8 +78,8 @@ final class PlanCandidateRepository
             return [];
         }
         $affinities = $this->affinities($householdId);
-        $tags = $this->tags($rows, $planId !== null);
-        $ingredients = $this->ingredients($rows, $planId !== null);
+        $tags = $this->tags($rows, $planId !== null || $shortlistIds !== null);
+        $ingredients = $this->ingredients($rows, $planId !== null || $shortlistIds !== null);
         $siblings = $this->siblings($householdId);
         $skips = $this->skips($householdId, $date);
         $groupCookedDays = $this->groupCookedDays($householdId, $date);
@@ -122,8 +136,10 @@ final class PlanCandidateRepository
                 is_string($row['meal_type']) ? $row['meal_type'] : null,
             );
         }
+        $this->lastLoadedCount = count($all);
         $kept = [];
-        $selected = $planId === null ? (new PlanCandidatePool($this->config))->select($all) : $all;
+        $selected = $planId === null && $shortlistIds === null
+            ? (new PlanCandidatePool($this->config))->select($all) : $all;
         foreach ($selected as $candidate) {
             $kept[$candidate->id] = $candidate;
         }
