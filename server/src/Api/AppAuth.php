@@ -190,8 +190,16 @@ final class AppAuth
 
     public function revokeDevice(int $id): void
     {
-        $update = $this->db->prepare('UPDATE device_token SET revoked_at = UTC_TIMESTAMP(6), access_token_hash = NULL, access_expires_at = NULL WHERE id = ?');
+        $update = $this->db->prepare('UPDATE device_token SET revoked_at = UTC_TIMESTAMP(6) WHERE id = ?');
         $update->execute([$id]);
+    }
+
+    public function revokedUserForReplay(string $token): ?int
+    {
+        $query = $this->db->prepare('SELECT user_id FROM device_token WHERE access_token_hash = ? AND revoked_at IS NOT NULL AND access_expires_at > UTC_TIMESTAMP(6)');
+        $query->execute([hash('sha256', $token)]);
+        $id = $query->fetchColumn();
+        return $id === false ? null : DbValue::integer($id);
     }
 
     /** @return array<string, mixed> */

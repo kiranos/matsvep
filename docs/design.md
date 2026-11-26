@@ -135,9 +135,9 @@ The model has three layers: the **recipe database**, shared by all households; *
 | Table | Key columns | Purpose |
 | --- | --- | --- |
 | `household` | id, name, size, timezone, state\_version, created\_at | The family; default time zone is `Europe/Stockholm`. State version advances on planning-relevant household changes |
-| `device_token` | id, user\_id, platform (android / windows), refresh\_token\_hash, push\_token, expires\_at, revoked\_at, last\_seen\_at | Member app logins and push notifications; refresh tokens are rotated and stored only as hashes |
+| `device_token` | id, user\_id, platform (android / windows), refresh\_token\_hash, access\_token\_hash, push\_token, expires\_at, access\_expires\_at, revoked\_at, last\_seen\_at | App logins and push notifications; tokens are stored only as hashes and refresh tokens rotate |
 | `household_invite` | id, household\_id, created\_by, code\_hash, expires\_at, used\_by, used\_at | One-time member invitation; plaintext code is returned only when created |
-| `api_idempotency` | user\_id, idempotency\_key, request\_hash, response\_status, response\_json, expires\_at | Stores the original result of a retryable member write per user |
+| `api_idempotency` | user\_id, endpoint, idempotency\_key, request\_hash, response\_status, response\_json, expires\_at | Stores the original result of a retryable write per user and endpoint |
 | `household_setting` | household\_id, key, value | Favourite share, plan days, planning mode, block vegetarian |
 | `day_profile_default` | weekday (0=Sunday through 6=Saturday), profile\_code | Seven seeded global profiles |
 | `day_profile` | household\_id, weekday, profile\_code | Optional household override of a global weekday profile |
@@ -468,7 +468,7 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 
 | Area | Key | Default | Meaning |
 | --- | --- | --- | --- |
-| App auth | `auth.access_ttl_minutes` / `auth.refresh_ttl_days` | 15 / 30 | Member access and rotating refresh lifetime |
+| App auth | `auth.access_ttl_minutes` / `auth.refresh_ttl_days` | 15 / 30 | Opaque access and rotating refresh lifetime for admin and member apps |
 | Household | `household.invite_ttl_hours` | 72 | One-time invite validity |
 | API | `api.idempotency_ttl_hours` | 48 | Per-user retry result retention |
 | Weights | `weight.pref` / `.dayfit` / `.due` / `.explore` | 0.45 / 0.25 / 0.15 / 0.10 | Positive component weights |

@@ -57,4 +57,12 @@ final class Idempotency
             $release->execute([$lock]);
         }
     }
+
+    /** @return array{0:int,1:array<string,mixed>} */
+    public function replayOnly(int $userId, string $endpoint, string $key, string $body): array
+    {
+        return $this->execute($userId, $endpoint, $key, $body, static function (): array {
+            throw new ApiError(401, 'access_token_expired');
+        });
+    }
 }

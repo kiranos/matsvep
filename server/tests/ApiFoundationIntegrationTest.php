@@ -92,9 +92,15 @@ final class ApiFoundationIntegrationTest extends TestCase
         [$status, $refreshed] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $login['refresh_token']], JSON_THROW_ON_ERROR), [], '127.0.0.1');
         self::assertSame(200, $status);
         $schema->assertResponse('/auth/refresh', 'POST', $status, $refreshed);
-        [$status, $revoked] = $api->handle('POST', '/api/v1/auth/revoke', json_encode(['refresh_token' => $registered['refresh_token']], JSON_THROW_ON_ERROR), $bearer, '127.0.0.1');
+        $revokeBody = json_encode(['refresh_token' => $registered['refresh_token']], JSON_THROW_ON_ERROR);
+        $revokeHeaders = $bearer + ['Idempotency-Key' => '123e4567-e89b-42d3-a456-426614174001'];
+        [$status, $revoked] = $api->handle('POST', '/api/v1/auth/revoke', $revokeBody, $revokeHeaders, '127.0.0.1');
         self::assertSame(200, $status);
         $schema->assertResponse('/auth/revoke', 'POST', $status, $revoked);
+        self::assertSame([$status, $revoked], $api->handle('POST', '/api/v1/auth/revoke', $revokeBody, $revokeHeaders, '127.0.0.1'));
+        [$changedStatus, $changed] = $api->handle('POST', '/api/v1/auth/revoke', '{"refresh_token":"different"}', $revokeHeaders, '127.0.0.1');
+        self::assertSame(422, $changedStatus);
+        self::assertSame('idempotency_key_reused', $changed['code']);
         [$status, $loggedOut] = $api->handle('POST', '/api/v1/auth/logout', '{}', ['Authorization' => 'Bearer ' . DbValue::text($refreshed['access_token'])], '127.0.0.1');
         self::assertSame(200, $status);
         $schema->assertResponse('/auth/logout', 'POST', $status, $loggedOut);

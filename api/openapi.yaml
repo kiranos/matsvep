@@ -120,7 +120,7 @@ paths:
   "/auth/token":
     post:
       operationId: createAppToken
-      summary: "Issue member app tokens"
+      summary: "Issue app tokens for an admin or member"
       tags:
         - Auth
       requestBody:
@@ -966,7 +966,7 @@ components:
           schema:
             $ref: '#/components/schemas/ApiError'
     Forbidden:
-      description: Member access is forbidden or belongs to another household
+      description: Access is forbidden or belongs to another household
       content:
         application/json:
           schema:

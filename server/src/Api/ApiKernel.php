@@ -69,6 +69,16 @@ final class ApiKernel
         if ($authorization === null || preg_match('/^Bearer ([a-f0-9]{64})$/i', $authorization, $matches) !== 1) {
             throw new ApiError(401, 'access_token_expired');
         }
+        if ($route === '/auth/revoke' && $method === 'POST') {
+            $revokedUser = $this->auth->revokedUserForReplay($matches[1]);
+            if ($revokedUser !== null) {
+                $replayKey = $this->header($headers, 'idempotency-key');
+                if ($replayKey === null) {
+                    throw new ApiError(401, 'access_token_expired');
+                }
+                return $this->idempotency->replayOnly($revokedUser, $method . ' ' . $route, $replayKey, $rawBody);
+            }
+        }
         $actor = $this->auth->authenticate($matches[1]);
         if ($route === '/auth/logout' && $method === 'POST') {
             $this->auth->revokeDevice($actor['device_id']);
