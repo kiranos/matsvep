@@ -127,6 +127,6 @@ final class ApiResponseSchema
     {
         Assert::assertIsArray($value);
         Assert::assertTrue(array_is_list($value));
-        return array_values($value);
+        return $value;
     }
 }

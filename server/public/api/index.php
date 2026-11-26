@@ -13,19 +13,25 @@ header('Cache-Control: no-store');
 try {
     $db = DatabaseConnection::fromEnvironment(dirname(__DIR__, 2));
     $kernel = new ApiKernel($db);
-    $headers = function_exists('getallheaders') ? getallheaders() : [];
-    if (!is_array($headers)) {
-        $headers = [];
+    /** @var array<string,string> $headers */
+    $headers = [];
+    foreach (getallheaders() as $name => $value) {
+        if (is_string($name) && is_string($value)) {
+            $headers[$name] = $value;
+        }
     }
     if (is_string($_SERVER['HTTP_AUTHORIZATION'] ?? null)) {
         $headers['Authorization'] = $_SERVER['HTTP_AUTHORIZATION'];
     }
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $uri = $_SERVER['REQUEST_URI'] ?? '';
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
     [$status, $response] = $kernel->handle(
-        (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'),
-        (string) ($_SERVER['REQUEST_URI'] ?? ''),
+        is_string($method) ? $method : 'GET',
+        is_string($uri) ? $uri : '',
         file_get_contents('php://input') ?: '',
         $headers,
-        (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+        is_string($ip) ? $ip : '',
     );
 } catch (Throwable $error) {
     error_log('API bootstrap failed: ' . get_class($error));
