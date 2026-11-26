@@ -1,0 +1,10 @@
+[matsvep-api]
+user = matsvep
+group = matsvep
+listen = /run/php/php8.5-fpm-matsvep-api.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+pm = ondemand
+pm.max_children = 5
+pm.process_idle_timeout = 10s

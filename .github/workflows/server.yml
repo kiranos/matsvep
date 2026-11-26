@@ -32,7 +32,10 @@ jobs:
         working-directory: server
         run: composer install --no-interaction --prefer-dist --no-progress
       - name: Validate OpenAPI
-        run: npx --yes @redocly/cli@latest lint --extends spec api/openapi.yaml
+        run: |
+          npx --yes @redocly/cli@latest lint --extends spec api/openapi.yaml
+          mkdir -p server/var
+          npx --yes @redocly/cli@latest bundle api/openapi.yaml --ext json -o server/var/openapi.json
       - name: Validate Composer metadata
         working-directory: server
         run: composer validate --strict

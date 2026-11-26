@@ -1,6 +1,6 @@
 # Ubuntu 26.04 deployment
 
-Run these commands in a terminal on the Ubuntu 26.04 VPS itself; a local server console works and no SSH login to another machine is needed. The repository scripts do not deploy automatically. The current Apache site serves a small placeholder from `server/public/` while the phase 1 crawler runs from PHP CLI; an API entry point will be deployed when it exists.
+Run these commands in a terminal on the Ubuntu 26.04 VPS itself; a local server console works and no SSH login to another machine is needed. The repository scripts do not deploy automatically. The Apache site serves `/api/v1` from `server/public/api/index.php` over HTTPS and serves admin pages separately from `server/public/admin/`.
 
 ## First setup
 
@@ -42,6 +42,12 @@ sudo bash deploy/setup-ubuntu.sh
 ```
 
 The setup rerun reuses the stored application password, installs dependencies from `composer.lock`, applies only pending migrations through the local root socket, refreshes the root-owned Apache, PHP-FPM and systemd configuration copies from `deploy/`, reloads Apache and reschedules the backup timer. An already running crawler keeps its original deadline; restart its service after setup if you want the 20-hour window immediately. It preserves `server/config/admin-allowlist.conf`. The operator still supplies the domain, email and SSH port interactively. A previously enabled crawl timer stays enabled; setup does not enable it on a fresh VPS. Check `sudo systemctl status matsvep-crawl.timer` if crawling has been enabled.
+
+## API routing and authentication
+
+Apache redirects HTTP to HTTPS and routes `/api/v1/*` to `server/public/api/index.php`. The API has its own PHP-FPM pool running as `matsvep` so it can read `server/.env`. The Apache directory sets `CGIPassAuth On`; verify this remains in the installed site when editing the template, because bearer tokens arrive in the `Authorization` header. Setup copies the API pool and Apache site from `deploy/` into root-owned system locations and refreshes them on rerun. `/admin/` uses a different PHP-FPM pool, a cookie session and the IP allowlist; app bearer tokens cannot authorize admin pages.
+
+After deployment, `curl https://YOUR_DOMAIN/api/v1/health` should return `{"status":"ok"}`. Recipe and other protected API requests require `Authorization: Bearer <opaque-access-token>`. Never place a token in a URL or log it. Refresh and access lifetimes, login limits and idempotency retention are configured in `engine_config`.
 
 ## Crawl operations
 

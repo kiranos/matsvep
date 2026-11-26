@@ -149,6 +149,8 @@ render_install() {
 
 render_install "$project_root/deploy/php-fpm/matsvep-admin.conf.template" \
     /etc/php/8.5/fpm/pool.d/matsvep-admin.conf
+render_install "$project_root/deploy/php-fpm/matsvep-api.conf.template" \
+    /etc/php/8.5/fpm/pool.d/matsvep-api.conf
 php-fpm8.5 -t
 systemctl restart php8.5-fpm
 a2enmod ssl proxy_fcgi setenvif rewrite headers >/dev/null
