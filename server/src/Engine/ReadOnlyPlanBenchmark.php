@@ -42,7 +42,12 @@ final class ReadOnlyPlanBenchmark
                 $query = $this->db->prepare('SELECT `key`, value FROM household_setting WHERE household_id = ?');
                 $query->execute([$householdId]);
                 while (($row = $query->fetch(PDO::FETCH_ASSOC)) !== false) {
-                    $settings[(string) $row['key']] = json_decode((string) $row['value'], true, 512, JSON_THROW_ON_ERROR);
+                    $key = $row['key'] ?? null;
+                    $value = $row['value'] ?? null;
+                    if (!is_string($key) || !is_string($value)) {
+                        throw new RuntimeException('Invalid household setting.');
+                    }
+                    $settings[$key] = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
                 }
             }
             $today = new DateTimeImmutable('now', $timezone);
@@ -59,7 +64,12 @@ final class ReadOnlyPlanBenchmark
             $query->execute([$householdId ?? 0]);
             $profiles = [];
             while (($row = $query->fetch(PDO::FETCH_ASSOC)) !== false) {
-                $profiles[(int) $row['weekday']] = (string) $row['profile'];
+                $weekday = $row['weekday'] ?? null;
+                $profile = $row['profile'] ?? null;
+                if ((!is_string($weekday) && !is_int($weekday)) || !is_string($profile)) {
+                    throw new RuntimeException('Invalid day profile.');
+                }
+                $profiles[(int) $weekday] = $profile;
             }
             $days = [];
             for ($offset = 0; $offset < $dayCount; $offset++) {
