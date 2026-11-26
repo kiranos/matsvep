@@ -1,0 +1,10 @@
+[Unit]
+Description=Purge expired Matsvep API state nightly
+
+[Timer]
+OnCalendar=*-*-* 00:15:00
+Persistent=false
+Unit=matsvep-api-purge.service
+
+[Install]
+WantedBy=timers.target

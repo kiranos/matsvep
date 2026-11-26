@@ -25,6 +25,17 @@
         AllowOverride None
         Require all granted
     </Directory>
+    RewriteEngine On
+    RewriteRule ^/api/v1(?:/.*)?$ /api/index.php [END]
+    <Directory "@PROJECT_ROOT@/server/public/api">
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+        CGIPassAuth On
+        <FilesMatch "\.php$">
+            SetHandler "proxy:unix:/run/php/php8.5-fpm-matsvep-api.sock|fcgi://localhost/"
+        </FilesMatch>
+    </Directory>
     RedirectMatch 308 ^/admin$ /admin/
     Alias /admin/ "@PROJECT_ROOT@/server/public/admin/"
     <Directory "@PROJECT_ROOT@/server/public/admin">

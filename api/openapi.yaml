@@ -110,6 +110,8 @@ paths:
                 "$ref": "#/components/schemas/AuthTokens"
         "400":
           "$ref": "#/components/responses/BadRequest"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
         "409":
           "$ref": "#/components/responses/Conflict"
         "422":
@@ -120,7 +122,7 @@ paths:
   "/auth/token":
     post:
       operationId: createAppToken
-      summary: "Issue member app tokens"
+      summary: "Issue app tokens for an admin or member"
       tags:
         - Auth
       requestBody:
@@ -195,6 +197,20 @@ paths:
           "$ref": "#/components/responses/BadRequest"
         "401":
           "$ref": "#/components/responses/Unauthorized"
+  "/auth/logout":
+    post:
+      operationId: logoutAppDevice
+      summary: Revoke the authenticated app device
+      tags: [Auth]
+      responses:
+        '200':
+          description: Device logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   "/household":
     get:
       operationId: getHousehold
@@ -931,8 +947,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
-      description: Short-lived member app access token only. Admin uses an isolated HTTPS cookie session; neither auth mechanism grants the other role.
+      description: Short-lived opaque app access token for admin or member roles. Admin pages use an isolated HTTPS cookie session and IP allowlist; app tokens never grant admin-page access.
   responses:
     BadRequest:
       description: Invalid request
@@ -953,7 +968,7 @@ components:
           schema:
             $ref: '#/components/schemas/ApiError'
     Forbidden:
-      description: Member access is forbidden or belongs to another household
+      description: Access is forbidden, including closed registration or another household's data
       content:
         application/json:
           schema:
@@ -980,6 +995,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
+    InternalError:
+      description: Unexpected server failure with an internal_error code
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
   schemas:
     ApiError:
       type: object
@@ -987,7 +1008,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_request, validation_failed, invalid_credentials, access_token_expired, refresh_token_invalid, forbidden, not_found, invite_invalid, invite_expired, invite_used, idempotency_key_reused, plan_version_conflict, plan_not_ready, slot_not_open, recipe_blocked, recipe_in_cooldown, already_answered, invalid_cursor, no_candidates, rate_limited]
+          enum: [invalid_request, validation_failed, invalid_credentials, access_token_expired, refresh_token_invalid, forbidden, not_found, invite_invalid, invite_expired, invite_used, registration_closed, email_taken, internal_error, idempotency_key_reused, plan_version_conflict, plan_not_ready, slot_not_open, recipe_blocked, recipe_in_cooldown, already_answered, invalid_cursor, no_candidates, rate_limited]
         params:
           type: object
           additionalProperties: true
@@ -1073,7 +1094,10 @@ components:
           type: string
           nullable: true
         canonical_ingredient:
-          $ref: '#/components/schemas/Ingredient'
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Ingredient'
         is_main:
           type: boolean
     RecipeStep:
@@ -1110,7 +1134,10 @@ components:
           type: string
           format: uri
         dish_group:
-          $ref: '#/components/schemas/DishGroup'
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DishGroup'
         active:
           type: boolean
     Recipe:
@@ -1313,9 +1340,11 @@ components:
           type: string
           enum:
             - member
+            - admin
         household_id:
           type: integer
           format: int64
+          nullable: true
     AuthTokens:
       type: object
       required:
@@ -1341,7 +1370,10 @@ components:
         user:
           "$ref": "#/components/schemas/AppUser"
         household:
-          "$ref": "#/components/schemas/Household"
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Household'
     NewHouseholdRegistration:
       type: object
       required:
@@ -2101,7 +2133,7 @@ components:
       name: Idempotency-Key
       in: header
       required: false
-      description: "Client UUID. A repeated key for the same user and request returns the original status and body for the configured retention window; a changed request returns idempotency_key_reused."
+      description: "Client UUID, scoped to user and endpoint. A repeated key with the same request body returns the original status and body for the configured retention window; a changed body returns HTTP 422 idempotency_key_reused. Replay is checked before plan version."
       schema:
         type: string
         format: uuid

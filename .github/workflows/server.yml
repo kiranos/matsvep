@@ -20,6 +20,12 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
+      - name: Reject truncated tool output in tracked files
+        run: |
+          if git grep -n -i -E 'tokens trunca''ted|Warning: truncated out''put' -- .; then
+            echo 'Truncated tool output found in tracked files.' >&2
+            exit 1
+          fi
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
@@ -32,7 +38,10 @@ jobs:
         working-directory: server
         run: composer install --no-interaction --prefer-dist --no-progress
       - name: Validate OpenAPI
-        run: npx --yes @redocly/cli@latest lint --extends spec api/openapi.yaml
+        run: |
+          npx --yes @redocly/cli@latest lint --extends spec api/openapi.yaml
+          mkdir -p server/var
+          npx --yes @redocly/cli@latest bundle api/openapi.yaml --ext json -o server/var/openapi.json
       - name: Validate Composer metadata
         working-directory: server
         run: composer validate --strict

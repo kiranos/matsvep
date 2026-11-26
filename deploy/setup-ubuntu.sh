@@ -149,6 +149,8 @@ render_install() {
 
 render_install "$project_root/deploy/php-fpm/matsvep-admin.conf.template" \
     /etc/php/8.5/fpm/pool.d/matsvep-admin.conf
+render_install "$project_root/deploy/php-fpm/matsvep-api.conf.template" \
+    /etc/php/8.5/fpm/pool.d/matsvep-api.conf
 php-fpm8.5 -t
 systemctl restart php8.5-fpm
 a2enmod ssl proxy_fcgi setenvif rewrite headers >/dev/null
@@ -197,12 +199,18 @@ install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-crawl.serv
 install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-crawl.timer" /etc/systemd/system/
 install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-backup.service" /etc/systemd/system/
 install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-backup.timer" /etc/systemd/system/
+install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-api-purge.service" /etc/systemd/system/
+install -o root -g root -m 0644 "$project_root/deploy/systemd/matsvep-api-purge.timer" /etc/systemd/system/
 install -o root -g root -m 0750 "$project_root/deploy/backup-db.sh" /usr/local/sbin/matsvep-backup
 systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/matsvep-crawl.service \
     /etc/systemd/system/matsvep-crawl.timer \
     /etc/systemd/system/matsvep-backup.service \
-    /etc/systemd/system/matsvep-backup.timer
+    /etc/systemd/system/matsvep-backup.timer \
+    /etc/systemd/system/matsvep-api-purge.service \
+    /etc/systemd/system/matsvep-api-purge.timer
 systemctl enable --now matsvep-backup.timer
 systemctl restart matsvep-backup.timer
+systemctl enable --now matsvep-api-purge.timer
+systemctl restart matsvep-api-purge.timer
 printf 'Setup complete. Run sudo bash deploy/setup-ubuntu.sh --enable-crawl when ready.\n'
