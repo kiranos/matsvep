@@ -54,10 +54,10 @@ final class ReadOnlyPlanBenchmarkIntegrationTest extends TestCase
             self::assertSame(7, $result['planning_days']);
             self::assertSame(20, $result['active_dinner_candidates']);
             self::assertSame(20, $result['eligible_dinner_candidates_loaded']);
-            self::assertSame(0, $this->count($db, 'household'));
-            self::assertSame(0, $this->count($db, 'plan'));
-            self::assertSame(0, $this->count($db, 'plan_candidate'));
-            self::assertSame(20, $this->count($db, 'recipe'));
+            self::assertSame(0, $this->tableCount($db, 'household'));
+            self::assertSame(0, $this->tableCount($db, 'plan'));
+            self::assertSame(0, $this->tableCount($db, 'plan_candidate'));
+            self::assertSame(20, $this->tableCount($db, 'recipe'));
 
             $db->prepare('INSERT INTO household (name) VALUES (?)')->execute(['Existing household']);
             $householdId = (int) $db->lastInsertId();
@@ -68,8 +68,8 @@ final class ReadOnlyPlanBenchmarkIntegrationTest extends TestCase
             self::assertSame(5, $existing['planning_days']);
             self::assertSame(20, $existing['active_dinner_candidates']);
             self::assertSame(20, $existing['eligible_dinner_candidates_loaded']);
-            self::assertSame(0, $this->count($db, 'plan'));
-            self::assertSame(0, $this->count($db, 'plan_slot'));
+            self::assertSame(0, $this->tableCount($db, 'plan'));
+            self::assertSame(0, $this->tableCount($db, 'plan_slot'));
         } finally {
             $root->exec("DROP DATABASE `$database`");
         }
@@ -100,7 +100,7 @@ final class ReadOnlyPlanBenchmarkIntegrationTest extends TestCase
         return $settings;
     }
 
-    private function count(PDO $db, string $table): int
+    private function tableCount(PDO $db, string $table): int
     {
         $query = $db->prepare('SELECT COUNT(*) FROM ' . $table);
         $query->execute();
