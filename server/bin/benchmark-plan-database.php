@@ -120,8 +120,12 @@ if ($readonly) {
             throw new RuntimeException('Invalid database configuration.');
         }
     }
-    $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-        $settings['DB_HOST'], $settings['DB_PORT'], $settings['DB_NAME']);
+    $dsn = sprintf(
+        'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+        $settings['DB_HOST'],
+        $settings['DB_PORT'],
+        $settings['DB_NAME']
+    );
     $db = new PDO($dsn, $settings['DB_USER'], $settings['DB_PASSWORD'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_EMULATE_PREPARES => false,
