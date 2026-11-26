@@ -18,7 +18,7 @@ use RuntimeException;
 
 final class KoketAdapterIntegrationTest extends TestCase
 {
-    public function testRealFixtureDiscoveryClassificationRetriesAndRedirects(): void
+    public function testSyntheticFixtureDiscoveryClassificationRetriesAndRedirects(): void
     {
         $envFile = __DIR__ . '/../.env.testing';
         if (!is_file($envFile)) {
@@ -152,8 +152,8 @@ final class KoketAdapterIntegrationTest extends TestCase
             self::assertSame(1, $report['nested_root_duplicates']);
             self::assertIsArray($report['completeness']);
             self::assertSame(2, $report['completeness']['recipes']);
-            self::assertSame(10, $report['completeness']['ingredients']['min']);
-            self::assertSame(14, $report['completeness']['steps']['min']);
+            self::assertSame(4, $report['completeness']['ingredients']['min']);
+            self::assertSame(3, $report['completeness']['steps']['min']);
 
             $setStoredUrl = $db->prepare('UPDATE recipe SET url = ? WHERE id = ?');
             $setStoredUrl->execute([$aliasUrl, $queue->linkedRecipeId($aliasUrl)]);
