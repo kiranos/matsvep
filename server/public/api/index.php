@@ -36,7 +36,7 @@ try {
 } catch (Throwable $error) {
     error_log('API bootstrap failed: ' . get_class($error));
     $status = 500;
-    $response = ['code' => 'invalid_request', 'params' => []];
+    $response = ['code' => 'internal_error', 'params' => []];
 }
 http_response_code($status);
 echo json_encode($response, JSON_THROW_ON_ERROR);

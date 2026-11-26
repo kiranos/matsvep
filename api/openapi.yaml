@@ -110,6 +110,8 @@ paths:
                 "$ref": "#/components/schemas/AuthTokens"
         "400":
           "$ref": "#/components/responses/BadRequest"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
         "409":
           "$ref": "#/components/responses/Conflict"
         "422":
@@ -966,7 +968,7 @@ components:
           schema:
             $ref: '#/components/schemas/ApiError'
     Forbidden:
-      description: Access is forbidden or belongs to another household
+      description: Access is forbidden, including closed registration or another household's data
       content:
         application/json:
           schema:
@@ -993,6 +995,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
+    InternalError:
+      description: Unexpected server failure with an internal_error code
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
   schemas:
     ApiError:
       type: object
@@ -1000,7 +1008,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_request, validation_failed, invalid_credentials, access_token_expired, refresh_token_invalid, forbidden, not_found, invite_invalid, invite_expired, invite_used, idempotency_key_reused, plan_version_conflict, plan_not_ready, slot_not_open, recipe_blocked, recipe_in_cooldown, already_answered, invalid_cursor, no_candidates, rate_limited]
+          enum: [invalid_request, validation_failed, invalid_credentials, access_token_expired, refresh_token_invalid, forbidden, not_found, invite_invalid, invite_expired, invite_used, registration_closed, email_taken, internal_error, idempotency_key_reused, plan_version_conflict, plan_not_ready, slot_not_open, recipe_blocked, recipe_in_cooldown, already_answered, invalid_cursor, no_candidates, rate_limited]
         params:
           type: object
           additionalProperties: true

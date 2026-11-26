@@ -28,8 +28,28 @@ final class AppAuth
         if ($hasInvite === isset($input['household_name'])) {
             throw new ApiError(422, 'validation_failed');
         }
-        $this->db->beginTransaction();
+        $registrationLock = !$hasInvite && $this->config->integer('auth.open_registration') === 0;
+        if ($registrationLock) {
+            $lock = $this->db->prepare('SELECT GET_LOCK(?, ?)');
+            $lock->execute(['matsvep:household_bootstrap', $this->config->integer('auth.registration_lock_s')]);
+            if (DbValue::integer($lock->fetchColumn()) !== 1) {
+                throw new ApiError(429, 'rate_limited');
+            }
+        }
         try {
+            $this->db->beginTransaction();
+            $existing = $this->db->prepare('SELECT 1 FROM `user` WHERE email = ?');
+            $existing->execute([$email]);
+            if ($existing->fetchColumn() !== false) {
+                throw new ApiError(409, 'email_taken');
+            }
+            if ($registrationLock) {
+                $count = $this->db->prepare('SELECT COUNT(*) FROM household');
+                $count->execute();
+                if (DbValue::integer($count->fetchColumn()) > 0) {
+                    throw new ApiError(403, 'registration_closed');
+                }
+            }
             if ($hasInvite) {
                 $code = $input['invite_code'];
                 if (!is_string($code) || $code === '') {
@@ -71,11 +91,19 @@ final class AppAuth
             $this->db->commit();
             return $tokens;
         } catch (Throwable $error) {
-            $this->db->rollBack();
-            if ($error instanceof \PDOException && $error->getCode() === '23000') {
-                throw new ApiError(409, 'validation_failed');
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            if ($error instanceof \PDOException && $error->getCode() === '23000'
+                && str_contains($error->getMessage(), 'uq_user_email')) {
+                throw new ApiError(409, 'email_taken');
             }
             throw $error;
+        } finally {
+            if ($registrationLock) {
+                $release = $this->db->prepare('SELECT RELEASE_LOCK(?)');
+                $release->execute(['matsvep:household_bootstrap']);
+            }
         }
     }
 
@@ -91,18 +119,20 @@ final class AppAuth
         }
         $emailHash = hash('sha256', $email);
         $window = $this->config->integer('auth.login_window_s');
-        $limit = $this->config->integer('auth.login_max_attempts');
+        $emailLimit = $this->config->integer('auth.login_max_attempts');
+        $ipLimit = $this->config->integer('auth.login_max_attempts_ip');
         $count = $this->db->prepare('SELECT (SELECT COUNT(*) FROM app_login_attempt WHERE email_hash = ? AND attempted_at > DATE_SUB(UTC_TIMESTAMP(6), INTERVAL ? SECOND)) AS email_count, (SELECT COUNT(*) FROM app_login_attempt WHERE ip_address = ? AND attempted_at > DATE_SUB(UTC_TIMESTAMP(6), INTERVAL ? SECOND)) AS ip_count');
         $count->execute([$emailHash, $window, $ip, $window]);
         $attempts = $count->fetch(PDO::FETCH_ASSOC);
-        if (is_array($attempts) && (DbValue::integer($attempts['email_count']) >= $limit || DbValue::integer($attempts['ip_count']) >= $limit)) {
+        if (is_array($attempts) && (DbValue::integer($attempts['email_count']) >= $emailLimit
+            || DbValue::integer($attempts['ip_count']) >= $ipLimit)) {
             throw new ApiError(429, 'rate_limited');
         }
         $query = $this->db->prepare('SELECT id, password_hash FROM `user` WHERE email = ?');
         $query->execute([$email]);
         $user = $query->fetch(PDO::FETCH_ASSOC);
         if (!is_array($user)) {
-            password_verify($password, '$2y$10$R3w0wq27VzUoW4QSh0w4xOww3kyLJvQDd6XxDwfToYJ1pG5C.sNdy');
+            password_verify($password, password_hash('unknown-account-verification', PASSWORD_DEFAULT));
         }
         if (!is_array($user) || !password_verify($password, DbValue::text($user['password_hash']))) {
             $insert = $this->db->prepare('INSERT INTO app_login_attempt (email_hash, ip_address) VALUES (?, ?)');
@@ -112,8 +142,8 @@ final class AppAuth
         $this->db->beginTransaction();
         try {
             $tokens = $this->issue(DbValue::integer($user['id']), $platform);
-            $clear = $this->db->prepare('DELETE FROM app_login_attempt WHERE email_hash = ? OR ip_address = ?');
-            $clear->execute([$emailHash, $ip]);
+            $clear = $this->db->prepare('DELETE FROM app_login_attempt WHERE email_hash = ?');
+            $clear->execute([$emailHash]);
             $this->db->commit();
             return $tokens;
         } catch (Throwable $error) {
@@ -128,32 +158,37 @@ final class AppAuth
         $hash = hash('sha256', $token);
         $this->db->beginTransaction();
         try {
-            $query = $this->db->prepare('SELECT id, user_id, revoked_at, expires_at FROM device_token WHERE refresh_token_hash = ? FOR UPDATE');
+            $query = $this->db->prepare('SELECT id, user_id, refresh_token_hash, revoked_at, expires_at FROM device_token WHERE refresh_token_hash = ? FOR UPDATE');
             $query->execute([$hash]);
             $device = $query->fetch(PDO::FETCH_ASSOC);
             if (!is_array($device)) {
-                $history = $this->db->prepare('SELECT device_token_id FROM device_refresh_history WHERE token_hash = ?');
+                $history = $this->db->prepare('SELECT h.rotation_id, d.id, d.user_id, d.refresh_token_hash, d.revoked_at, d.expires_at FROM device_refresh_history h JOIN device_token d ON d.id = h.device_token_id WHERE h.token_hash = ? FOR UPDATE');
                 $history->execute([$hash]);
-                $deviceId = $history->fetchColumn();
-                if ($deviceId !== false) {
-                    $this->revokeDevice(DbValue::integer($deviceId));
+                $device = $history->fetch(PDO::FETCH_ASSOC);
+                if (!is_array($device)) {
+                    $this->db->commit();
+                    throw new ApiError(401, 'refresh_token_invalid');
                 }
-                $this->db->commit();
-                throw new ApiError(401, 'refresh_token_invalid');
+                if ($device['revoked_at'] !== null || strtotime(DbValue::text($device['expires_at']) . ' UTC') <= time()) {
+                    $this->db->commit();
+                    throw new ApiError(401, 'refresh_token_invalid');
+                }
+                $latest = $this->db->prepare('SELECT rotation_id FROM device_refresh_history WHERE device_token_id = ? ORDER BY rotation_id DESC LIMIT 1');
+                $latest->execute([$device['id']]);
+                $grace = $this->db->prepare('SELECT rotated_at >= DATE_SUB(UTC_TIMESTAMP(6), INTERVAL ? SECOND) AND rotated_at <= UTC_TIMESTAMP(6) FROM device_refresh_history WHERE token_hash = ?');
+                $grace->execute([$this->config->integer('auth.refresh_reuse_grace_s'), $hash]);
+                if (DbValue::integer($latest->fetchColumn()) !== DbValue::integer($device['rotation_id'])
+                    || DbValue::integer($grace->fetchColumn()) !== 1) {
+                    $this->revokeDevice(DbValue::integer($device['id']));
+                    $this->db->commit();
+                    throw new ApiError(401, 'refresh_token_invalid');
+                }
             }
             if ($device['revoked_at'] !== null || strtotime(DbValue::text($device['expires_at']) . ' UTC') <= time()) {
                 $this->db->commit();
                 throw new ApiError(401, 'refresh_token_invalid');
             }
-            $history = $this->db->prepare('INSERT INTO device_refresh_history (token_hash, device_token_id) VALUES (?, ?)');
-            $history->execute([$hash, $device['id']]);
-            $access = $this->randomToken();
-            $refresh = $this->randomToken();
-            $accessSeconds = $this->config->integer('auth.access_ttl_minutes') * 60;
-            $refreshSeconds = $this->config->integer('auth.refresh_ttl_days') * 86400;
-            $update = $this->db->prepare('UPDATE device_token SET refresh_token_hash = ?, access_token_hash = ?, access_expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND), expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND), last_seen_at = UTC_TIMESTAMP(6) WHERE id = ?');
-            $update->execute([hash('sha256', $refresh), hash('sha256', $access), $accessSeconds, $refreshSeconds, $device['id']]);
-            $result = $this->tokenResponse(DbValue::integer($device['user_id']), $access, $refresh, $accessSeconds);
+            $result = $this->rotateDevice($device);
             $this->db->commit();
             return $result;
         } catch (Throwable $error) {
@@ -162,6 +197,21 @@ final class AppAuth
             }
             throw $error;
         }
+    }
+
+    /** @param array<string,mixed> $device
+     *  @return array<string,mixed> */
+    private function rotateDevice(array $device): array
+    {
+        $history = $this->db->prepare('INSERT INTO device_refresh_history (token_hash, device_token_id) VALUES (?, ?)');
+        $history->execute([$device['refresh_token_hash'], $device['id']]);
+        $access = $this->randomToken();
+        $refresh = $this->randomToken();
+        $accessSeconds = $this->config->integer('auth.access_ttl_minutes') * 60;
+        $refreshSeconds = $this->config->integer('auth.refresh_ttl_days') * 86400;
+        $update = $this->db->prepare('UPDATE device_token SET refresh_token_hash = ?, access_token_hash = ?, access_expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND), expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND), last_seen_at = UTC_TIMESTAMP(6) WHERE id = ?');
+        $update->execute([hash('sha256', $refresh), hash('sha256', $access), $accessSeconds, $refreshSeconds, $device['id']]);
+        return $this->tokenResponse(DbValue::integer($device['user_id']), $access, $refresh, $accessSeconds);
     }
 
     /** @return array{user_id:int,device_id:int,role:string,household_id:?int} */

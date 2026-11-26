@@ -32,7 +32,7 @@ final class ApiKernel
             return [$error->status, ['code' => $error->errorCode, 'params' => $error->params]];
         } catch (Throwable $error) {
             error_log('API request failed: ' . get_class($error));
-            return [500, ['code' => 'invalid_request', 'params' => []]];
+            return [500, ['code' => 'internal_error', 'params' => []]];
         }
     }
 

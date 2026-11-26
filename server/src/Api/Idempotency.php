@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Matsvep\Api;
 
 use Matsvep\Engine\EngineConfig;
+use Matsvep\Database\WriteTransaction;
 use PDO;
 
 final class Idempotency
@@ -38,20 +39,15 @@ final class Idempotency
                 $response = DbValue::map(json_decode(DbValue::text($row['response_json']), true, 512, JSON_THROW_ON_ERROR));
                 return [DbValue::integer($row['response_status']), $response];
             }
-            $this->db->beginTransaction();
-            try {
+            return WriteTransaction::run($this->db, function () use ($action, $userId, $endpoint, $key, $hash): array {
                 [$status, $response] = $action();
                 $delete = $this->db->prepare('DELETE FROM api_idempotency WHERE user_id = ? AND endpoint = ? AND idempotency_key = ?');
                 $delete->execute([$userId, $endpoint, $key]);
                 $hours = $this->config->integer('api.idempotency_ttl_hours');
                 $insert = $this->db->prepare('INSERT INTO api_idempotency (user_id, endpoint, idempotency_key, request_hash, response_status, response_json, expires_at) VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? HOUR))');
                 $insert->execute([$userId, $endpoint, $key, $hash, $status, json_encode($response, JSON_THROW_ON_ERROR), $hours]);
-                $this->db->commit();
                 return [$status, $response];
-            } catch (\Throwable $error) {
-                $this->db->rollBack();
-                throw $error;
-            }
+            });
         } finally {
             $release = $this->db->prepare('SELECT RELEASE_LOCK(?)');
             $release->execute([$lock]);

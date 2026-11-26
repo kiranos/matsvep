@@ -23,4 +23,20 @@ final class ApiDeploymentTest extends TestCase
         self::assertStringContainsString('user = matsvep', $pool);
         self::assertStringContainsString('server/public/admin/', $site);
     }
+
+    public function testExpiredApiStateHasAnInstalledNightlyTimer(): void
+    {
+        $setup = file_get_contents(__DIR__ . '/../../deploy/setup-ubuntu.sh');
+        $service = file_get_contents(__DIR__ . '/../../deploy/systemd/matsvep-api-purge.service');
+        $timer = file_get_contents(__DIR__ . '/../../deploy/systemd/matsvep-api-purge.timer');
+        self::assertIsString($setup);
+        self::assertIsString($service);
+        self::assertIsString($timer);
+        self::assertStringContainsString('matsvep-api-purge.service', $setup);
+        self::assertStringContainsString('matsvep-api-purge.timer', $setup);
+        self::assertStringContainsString('systemctl enable --now matsvep-api-purge.timer', $setup);
+        self::assertStringContainsString('User=matsvep', $service);
+        self::assertStringContainsString('bin/purge-api-state.php', $service);
+        self::assertStringContainsString('OnCalendar=*-*-* 00:15:00', $timer);
+    }
 }

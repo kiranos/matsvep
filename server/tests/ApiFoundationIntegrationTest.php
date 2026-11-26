@@ -6,9 +6,11 @@ namespace Matsvep\Tests;
 
 use Matsvep\Api\ApiError;
 use Matsvep\Api\ApiKernel;
+use Matsvep\Api\ApiStatePurger;
 use Matsvep\Api\DbValue;
 use Matsvep\Api\Idempotency;
 use Matsvep\Database\MigrationRunner;
+use Matsvep\Database\WriteTransaction;
 use Matsvep\Engine\EngineConfig;
 use Matsvep\Tests\Support\ApiResponseSchema;
 use PDO;
@@ -79,6 +81,18 @@ final class ApiFoundationIntegrationTest extends TestCase
         [$status, $registered] = $api->handle('POST', '/api/v1/auth/register', json_encode(['email' => 'member@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows', 'household_name' => 'Test household'], JSON_THROW_ON_ERROR), [], '127.0.0.1');
         self::assertSame(201, $status);
         $schema->assertResponse('/auth/register', 'POST', $status, $registered);
+        $newHousehold = json_encode(['email' => 'second@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows', 'household_name' => 'Second household'], JSON_THROW_ON_ERROR);
+        [$closedStatus, $closed] = $api->handle('POST', '/api/v1/auth/register', $newHousehold, [], '127.0.0.1');
+        self::assertSame(403, $closedStatus);
+        self::assertSame('registration_closed', $closed['code']);
+        self::$db->prepare("UPDATE engine_config SET value = '1' WHERE `key` = ?")->execute(['auth.open_registration']);
+        $openApi = new ApiKernel(self::$db);
+        [$openStatus] = $openApi->handle('POST', '/api/v1/auth/register', $newHousehold, [], '127.0.0.1');
+        self::assertSame(201, $openStatus);
+        [$duplicateStatus, $duplicate] = $openApi->handle('POST', '/api/v1/auth/register', $newHousehold, [], '127.0.0.1');
+        self::assertSame(409, $duplicateStatus);
+        self::assertSame('email_taken', $duplicate['code']);
+        self::$db->prepare("UPDATE engine_config SET value = '0' WHERE `key` = ?")->execute(['auth.open_registration']);
         $bearer = ['Authorization' => 'Bearer ' . DbValue::text($registered['access_token'])];
         [$status, $recipe] = $api->handle('GET', '/api/v1/recipes/1', '', $bearer, '127.0.0.1');
         self::assertSame(200, $status);
@@ -106,7 +120,7 @@ final class ApiFoundationIntegrationTest extends TestCase
         $schema->assertResponse('/auth/logout', 'POST', $status, $loggedOut);
     }
 
-    public function testRefreshReuseRevokesTheDeviceAndAdminAppTokenCannotOpenAdminPage(): void
+    public function testRefreshGraceAndOlderReuseRevokesTheDevice(): void
     {
         $api = new ApiKernel(self::$db);
         $insert = self::$db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')");
@@ -118,13 +132,52 @@ final class ApiFoundationIntegrationTest extends TestCase
         $oldRefresh = $tokens['refresh_token'];
         [$status, $rotated] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $oldRefresh], JSON_THROW_ON_ERROR), [], '127.0.0.1');
         self::assertSame(200, $status);
+        [$status, $graceRotation] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $oldRefresh], JSON_THROW_ON_ERROR), [], '127.0.0.1');
+        self::assertSame(200, $status);
+        self::assertNotSame($rotated['refresh_token'], $graceRotation['refresh_token']);
         [$status, $error] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $oldRefresh], JSON_THROW_ON_ERROR), [], '127.0.0.1');
         self::assertSame(401, $status);
         self::assertSame('refresh_token_invalid', $error['code']);
-        [$status] = $api->handle('GET', '/api/v1/recipes/search?q=Synthetic', '', ['Authorization' => 'Bearer ' . DbValue::text($rotated['access_token'])], '127.0.0.1');
+        [$status] = $api->handle('GET', '/api/v1/recipes/search?q=Synthetic', '', ['Authorization' => 'Bearer ' . DbValue::text($graceRotation['access_token'])], '127.0.0.1');
         self::assertSame(401, $status);
         [$status] = $api->handle('GET', '/admin/', '', ['Authorization' => 'Bearer ' . DbValue::text($tokens['access_token'])], '127.0.0.1');
         self::assertSame(404, $status);
+    }
+
+    public function testRefreshGraceRejectsExpiredOrRevokedDevicesAndLateReuse(): void
+    {
+        $api = new ApiKernel(self::$db);
+        $insert = self::$db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')");
+        $insert->execute(['grace@example.test', password_hash('a-long-test-password', PASSWORD_DEFAULT)]);
+        $login = static fn (): array => $api->handle('POST', '/api/v1/auth/token', json_encode(['email' => 'grace@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows'], JSON_THROW_ON_ERROR), [], '127.0.4.1');
+        [$status, $tokens] = $login();
+        self::assertSame(200, $status);
+        $old = DbValue::text($tokens['refresh_token']);
+        [$status, $current] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $old], JSON_THROW_ON_ERROR), [], '127.0.4.1');
+        self::assertSame(200, $status);
+        self::$db->prepare('UPDATE device_token SET revoked_at = UTC_TIMESTAMP(6) WHERE refresh_token_hash = ?')->execute([hash('sha256', DbValue::text($current['refresh_token']))]);
+        [$status] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $old], JSON_THROW_ON_ERROR), [], '127.0.4.1');
+        self::assertSame(401, $status);
+
+        [$status, $tokens] = $login();
+        self::assertSame(200, $status);
+        $old = DbValue::text($tokens['refresh_token']);
+        [$status, $current] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $old], JSON_THROW_ON_ERROR), [], '127.0.4.1');
+        self::assertSame(200, $status);
+        self::$db->prepare('UPDATE device_token SET created_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 DAY), expires_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 SECOND) WHERE refresh_token_hash = ?')->execute([hash('sha256', DbValue::text($current['refresh_token']))]);
+        [$status] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $old], JSON_THROW_ON_ERROR), [], '127.0.4.1');
+        self::assertSame(401, $status);
+
+        [$status, $tokens] = $login();
+        self::assertSame(200, $status);
+        $old = DbValue::text($tokens['refresh_token']);
+        [$status, $current] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $old], JSON_THROW_ON_ERROR), [], '127.0.4.1');
+        self::assertSame(200, $status);
+        self::$db->prepare('UPDATE device_refresh_history SET rotated_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 MINUTE) WHERE token_hash = ?')->execute([hash('sha256', $old)]);
+        [$status] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $old], JSON_THROW_ON_ERROR), [], '127.0.4.1');
+        self::assertSame(401, $status);
+        [$status] = $api->handle('GET', '/api/v1/recipes/search?q=Synthetic', '', ['Authorization' => 'Bearer ' . DbValue::text($current['access_token'])], '127.0.4.1');
+        self::assertSame(401, $status);
     }
 
     public function testIdempotencyScopesKeysToEndpointAndChecksBodyBeforeMutation(): void
@@ -178,11 +231,92 @@ final class ApiFoundationIntegrationTest extends TestCase
         [$status, $result] = $badLogin('unknown@example.test', '127.0.1.99');
         self::assertSame(429, $status);
         self::assertSame('rate_limited', $result['code']);
-        for ($attempt = 0; $attempt < 5; $attempt++) {
+        for ($attempt = 0; $attempt < 20; $attempt++) {
             [$status] = $badLogin('different' . $attempt . '@example.test', '127.0.2.1');
             self::assertSame(401, $status);
         }
         [$status] = $badLogin('unseen@example.test', '127.0.2.1');
         self::assertSame(429, $status);
+
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            [$status] = $badLogin('creator@example.test', '127.0.3.1');
+            self::assertSame(401, $status);
+        }
+        [$status] = $api->handle('POST', '/api/v1/auth/token', json_encode(['email' => 'creator@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows'], JSON_THROW_ON_ERROR), [], '127.0.3.1');
+        self::assertSame(200, $status);
+        $count = self::$db->prepare('SELECT COUNT(*) FROM app_login_attempt WHERE email_hash = ?');
+        $count->execute([hash('sha256', 'creator@example.test')]);
+        self::assertSame(0, DbValue::integer($count->fetchColumn()));
+        $count = self::$db->prepare('SELECT COUNT(*) FROM app_login_attempt WHERE ip_address = ?');
+        $count->execute(['127.0.3.1']);
+        self::assertSame(2, DbValue::integer($count->fetchColumn()));
+    }
+
+    public function testWriteTransactionBeginsWhenNeededAndJoinsAnActiveTransaction(): void
+    {
+        $hash = hash('sha256', 'transaction-test');
+        $insert = self::$db->prepare('INSERT INTO app_login_attempt (email_hash, ip_address) VALUES (?, ?)');
+        WriteTransaction::run(self::$db, static function () use ($insert, $hash): void {
+            $insert->execute([$hash, '127.0.5.1']);
+        });
+        self::assertFalse(self::$db->inTransaction());
+        $count = self::$db->prepare('SELECT COUNT(*) FROM app_login_attempt WHERE email_hash = ?');
+        $count->execute([$hash]);
+        self::assertSame(1, DbValue::integer($count->fetchColumn()));
+
+        self::$db->beginTransaction();
+        WriteTransaction::run(self::$db, static function () use ($insert, $hash): void {
+            $insert->execute([$hash, '127.0.5.2']);
+        });
+        self::assertTrue(self::$db->inTransaction());
+        $count->execute([$hash]);
+        self::assertSame(2, DbValue::integer($count->fetchColumn()));
+        self::$db->rollBack();
+        $count->execute([$hash]);
+        self::assertSame(1, DbValue::integer($count->fetchColumn()));
+    }
+
+    public function testPurgeRemovesOnlyExpiredApiState(): void
+    {
+        $user = self::$db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')");
+        $user->execute(['purge@example.test', password_hash('a-long-test-password', PASSWORD_DEFAULT)]);
+        $userId = (int) self::$db->lastInsertId();
+        $expiredKey = '123e4567-e89b-42d3-a456-426614174009';
+        self::$db->prepare('INSERT INTO api_idempotency (user_id, endpoint, idempotency_key, request_hash, response_status, response_json, created_at, expires_at) VALUES (?, ?, ?, ?, 200, ?, DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 3 DAY), DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 DAY))')->execute([$userId, 'POST /purge', $expiredKey, str_repeat('a', 64), '{}']);
+        self::$db->prepare('INSERT INTO app_login_attempt (email_hash, ip_address, attempted_at) VALUES (?, ?, DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 DAY))')->execute([hash('sha256', 'purge@example.test'), '127.0.6.1']);
+        $device = self::$db->prepare('INSERT INTO device_token (user_id, platform, refresh_token_hash, created_at, expires_at, access_expires_at, revoked_at) VALUES (?, ?, ?, DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 DAY), DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 1 DAY), ?, ?)');
+        $device->execute([$userId, 'windows', hash('sha256', 'active-device'), null, null]);
+        $activeId = (int) self::$db->lastInsertId();
+        self::$db->prepare('INSERT INTO device_refresh_history (token_hash, device_token_id, rotated_at) VALUES (?, ?, DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 40 DAY))')->execute([hash('sha256', 'old-history'), $activeId]);
+        $device->execute([$userId, 'windows', hash('sha256', 'revoked-device'), date('Y-m-d H:i:s', time() - 3600), date('Y-m-d H:i:s', time() - 3600)]);
+        $revokedId = (int) self::$db->lastInsertId();
+        self::$db->prepare('INSERT INTO device_token (user_id, platform, refresh_token_hash, created_at, expires_at) VALUES (?, ?, ?, DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 DAY), DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 DAY))')->execute([$userId, 'windows', hash('sha256', 'expired-device')]);
+        $expiredId = (int) self::$db->lastInsertId();
+
+        $counts = (new ApiStatePurger(self::$db, EngineConfig::fromDatabase(self::$db)))->purge();
+        self::assertGreaterThanOrEqual(1, $counts['api_idempotency']);
+        self::assertGreaterThanOrEqual(1, $counts['app_login_attempt']);
+        self::assertGreaterThanOrEqual(1, $counts['device_refresh_history']);
+        self::assertGreaterThanOrEqual(2, $counts['device_token']);
+        $lookup = self::$db->prepare('SELECT COUNT(*) FROM device_token WHERE id = ?');
+        foreach ([$revokedId, $expiredId] as $id) {
+            $lookup->execute([$id]);
+            self::assertSame(0, DbValue::integer($lookup->fetchColumn()));
+        }
+        $lookup->execute([$activeId]);
+        self::assertSame(1, DbValue::integer($lookup->fetchColumn()));
+
+        $rollbackKey = '123e4567-e89b-42d3-a456-426614174010';
+        self::$db->prepare('INSERT INTO api_idempotency (user_id, endpoint, idempotency_key, request_hash, response_status, response_json, created_at, expires_at) VALUES (?, ?, ?, ?, 200, ?, DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 3 DAY), DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 DAY))')->execute([$userId, 'POST /rollback', $rollbackKey, str_repeat('b', 64), '{}']);
+        self::$db->beginTransaction();
+        (new ApiStatePurger(self::$db, EngineConfig::fromDatabase(self::$db)))->purge();
+        self::assertTrue(self::$db->inTransaction());
+        $lookup = self::$db->prepare('SELECT COUNT(*) FROM api_idempotency WHERE user_id = ? AND idempotency_key = ?');
+        $lookup->execute([$userId, $rollbackKey]);
+        self::assertSame(0, DbValue::integer($lookup->fetchColumn()));
+        self::$db->rollBack();
+        $lookup->execute([$userId, $rollbackKey]);
+        self::assertSame(1, DbValue::integer($lookup->fetchColumn()));
+        (new ApiStatePurger(self::$db, EngineConfig::fromDatabase(self::$db)))->purge();
     }
 }
