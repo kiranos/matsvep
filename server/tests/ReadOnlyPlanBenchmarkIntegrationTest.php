@@ -51,6 +51,7 @@ final class ReadOnlyPlanBenchmarkIntegrationTest extends TestCase
             self::assertTrue($writeRejected, 'MySQL must enforce a read-only transaction.');
             self::assertSame('existing_read_only', $result['database']);
             self::assertNull($result['household_id']);
+            self::assertSame(7, $result['planning_days']);
             self::assertSame(20, $result['active_dinner_candidates']);
             self::assertSame(20, $result['eligible_dinner_candidates_loaded']);
             self::assertSame(0, $this->count($db, 'household'));
@@ -64,6 +65,7 @@ final class ReadOnlyPlanBenchmarkIntegrationTest extends TestCase
                 ->execute([$householdId, 'plan_days', '"sunday_thursday"']);
             $existing = (new ReadOnlyPlanBenchmark($db))->run($householdId);
             self::assertSame($householdId, $existing['household_id']);
+            self::assertSame(5, $existing['planning_days']);
             self::assertSame(20, $existing['active_dinner_candidates']);
             self::assertSame(20, $existing['eligible_dinner_candidates_loaded']);
             self::assertSame(0, $this->count($db, 'plan'));
