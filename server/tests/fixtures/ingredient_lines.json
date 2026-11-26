@@ -35,7 +35,7 @@
   "seed_alias_chocolate": {"raw": "vit bakchoklad"},
   "seed_alias_cheese": {"raw": "philadelphia"},
   "seed_alias_yogurt": {"raw": "matyoghurt"},
-  "soup_first_ingredient": "blomkål",
+  "soup_first_ingredient": "morot",
   "shared_ending_split": {"raw": "rabarber- och jordgubbssylt"},
   "shared_ending_alternative": {"raw": "rabarber- eller jordgubbssylt"},
   "new_descriptor": {"raw": "små tomater", "ingredient": "tomater", "descriptor": "små"},
