@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Engine\EngineConfig;
 use Matsvep\Engine\PlanManager;
+use Matsvep\Engine\ReadOnlyPlanBenchmark;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -85,17 +86,58 @@ if (!is_array($arguments)) {
 $phaseTimes = [];
 $count = 16365;
 $rated = 100;
+$readonly = false;
+$householdId = null;
 foreach (array_slice($arguments, 1) as $argument) {
     if (!is_string($argument)) {
         throw new InvalidArgumentException('Invalid command argument.');
     }
-    if (preg_match('/^--candidates=([1-9][0-9]*)$/', $argument, $match) === 1) {
+    if ($argument === '--readonly') {
+        $readonly = true;
+    } elseif (preg_match('/^--household=([1-9][0-9]*)$/', $argument, $match) === 1) {
+        $householdId = (int) $match[1];
+    } elseif (preg_match('/^--candidates=([1-9][0-9]*)$/', $argument, $match) === 1) {
         $count = (int) $match[1];
     } elseif (preg_match('/^--rated=(0|[1-9][0-9]*)$/', $argument, $match) === 1) {
         $rated = (int) $match[1];
     } else {
-        throw new InvalidArgumentException('Use --candidates=N and optional --rated=N.');
+        throw new InvalidArgumentException('Use --readonly [--household=ID], or --candidates=N [--rated=N].');
     }
+}
+if ($readonly) {
+    foreach (array_slice($arguments, 1) as $argument) {
+        if ($argument !== '--readonly' && preg_match('/^--household=[1-9][0-9]*$/', (string) $argument) !== 1) {
+            throw new InvalidArgumentException('Read-only mode accepts only --readonly and optional --household=ID.');
+        }
+    }
+    $path = getenv('MATS_ENV_FILE') ?: dirname(__DIR__) . '/.env';
+    $settings = is_file($path) ? parse_ini_file($path, false, INI_SCANNER_RAW) : false;
+    if (!is_array($settings)) {
+        throw new RuntimeException('Read-only mode requires server/.env.');
+    }
+    foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as $key) {
+        if (!is_string($settings[$key] ?? null)) {
+            throw new RuntimeException('Invalid database configuration.');
+        }
+    }
+    $dsn = sprintf(
+        'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+        $settings['DB_HOST'],
+        $settings['DB_PORT'],
+        $settings['DB_NAME']
+    );
+    $db = new PDO($dsn, $settings['DB_USER'], $settings['DB_PASSWORD'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
+        PDO::ATTR_STATEMENT_CLASS => [PlanningBenchmarkStatement::class],
+    ]);
+    $result = (new ReadOnlyPlanBenchmark($db))->run($householdId, static fn (int $started): array => finishBenchmark($started));
+    echo json_encode($result, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . PHP_EOL;
+    exit(0);
+}
+if ($householdId !== null) {
+    throw new InvalidArgumentException('--household requires --readonly.');
 }
 if ($rated > $count) {
     throw new InvalidArgumentException('Rated count exceeds candidate count.');

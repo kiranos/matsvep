@@ -74,6 +74,17 @@ After migration 021, `processing-report.json` also contains `dinner_candidate_ch
 
 To rebuild affinities without rerunning recipe processing, run `sudo -u matsvep php bin/rebuild-affinities.php` from `/srv/matsvep/server`. The standalone command takes the same crawler lock, is idempotent for a fixed calculation time and does not add rating-history entries. No separate affinity timer is installed yet.
 
+### Measure planning on the existing catalogue
+
+After deploying the read-only benchmark, run this on the VPS as `matsvep`:
+
+```bash
+cd /srv/matsvep/server
+sudo -u matsvep php bin/benchmark-plan-database.php --readonly
+```
+
+There are no production households yet, so this uses in-memory default household settings and day profiles, with no ratings or carry-overs. It reads the existing recipes and reports `active_dinner_candidates` and `eligible_dinner_candidates_loaded` (about 16,365 on the current catalogue), the filtered shortlist size, full plan time, and one pick plus re-rank time, including database read queries. To use a household later, add `--household=ID`; its settings and ratings are used. The command starts a MySQL read-only transaction and rolls it back. It cannot insert generated recipes or plan rows, and it does not create a database. The read-only re-rank keeps its shortlist in memory, so these timings do not include the plan writes of a live `PlanManager` request. The regular `benchmark-plan-database.php` mode requires `.env.testing` and creates a throwaway database; do not use that mode with the production application account.
+
 After deploying the parser fix, previously exhausted HTTP 200 parse failures can be queued for one more fetch. Run this only after the new parser is installed; the crawler will fetch them on its next run. Inspect the affected count first:
 
 ```bash
