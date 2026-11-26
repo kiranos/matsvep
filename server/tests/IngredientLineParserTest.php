@@ -73,7 +73,7 @@ final class IngredientLineParserTest extends TestCase
         );
     }
 
-    public function testSavedKoketFixtures(): void
+    public function testSyntheticKoketFixtures(): void
     {
         $recipeParser = new KoketRecipeParser();
         $lineParser = $this->parser();

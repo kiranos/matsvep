@@ -166,7 +166,7 @@
   },
   "friday_pasta": {
     "url": "https://www.koket.se/test-friday-pasta",
-    "title": "Leilas fredagspasta",
+    "title": "Fiktiv fredagspasta",
     "time": 30,
     "ingredients": [
       "250 g linguine",
@@ -408,7 +408,7 @@
   },
   "breakfast_cereal_side": {
     "url": "https://www.koket.se/test-breakfast-cereal-side",
-    "title": "Jacobs morgonmüsli",
+    "title": "Fiktiv morgonmüsli",
     "time": 30,
     "ingredients": [
       "200 g havregryn",
@@ -808,7 +808,7 @@
   "savory_sylta": {"url":"https://www.koket.se/test-savory-sylta","title":"Fransk slarvsylta","time":30,"ingredients":["300 g fläsk"],"steps":["Koka"],"tags":[],"protein":"pork","dinner_candidate":true,"vegetarian":false,"effort":1},
   "untagged_linguine": {"url":"https://www.koket.se/test-untagged-linguine","title":"Linguine med vitlök","time":30,"ingredients":["300 g linguine"],"steps":["Koka"],"tags":[],"dinner_candidate":true,"vegetarian":true,"effort":1},
   "untagged_frittata": {"url":"https://www.koket.se/test-untagged-frittata","title":"Frittata med svamp","time":30,"ingredients":["3 st ägg","200 g champinjoner"],"steps":["Stek"],"tags":[],"protein":"vegetarian","dinner_candidate":true,"vegetarian":true,"effort":1},
-  "untagged_chicken_parm": {"url":"https://www.koket.se/test-untagged-chicken-parm","title":"Jimmys chicken parm","time":30,"ingredients":["300 g chicken"],"steps":["Stek"],"tags":[],"protein":"chicken","dinner_candidate":true,"vegetarian":false,"effort":1},
+  "untagged_chicken_parm": {"url":"https://www.koket.se/test-untagged-chicken-parm","title":"Fiktiv chicken parm","time":30,"ingredients":["300 g chicken"],"steps":["Stek"],"tags":[],"protein":"chicken","dinner_candidate":true,"vegetarian":false,"effort":1},
   "untagged_cabbage_rolls": {"url":"https://www.koket.se/test-untagged-cabbage-rolls","title":"Gröna kåldolmar","time":30,"ingredients":["300 g kål"],"steps":["Baka"],"tags":[],"dinner_candidate":true,"vegetarian":null,"effort":1},
   "sweet_foam": {"url":"https://www.koket.se/test-sweet-foam","title":"Vaniljskum","time":30,"ingredients":["300 g vispgrädde"],"steps":["Vispa"],"tags":["Huvudrätt"],"dinner_candidate":false,"vegetarian":true,"exclusion_reason":"dessert_title","effort":1},
   "fruit_jam": {"url":"https://www.koket.se/test-fruit-jam","title":"Aprikossylt","time":30,"ingredients":["300 g aprikos"],"steps":["Koka"],"tags":["Huvudrätt"],"dinner_candidate":false,"vegetarian":true,"exclusion_reason":"non_dinner_title","effort":1},

@@ -51,6 +51,8 @@ None of the big Swedish recipe sites offers a public API, so recipes are collect
 
 Under Swedish law, ingredient lists and plain method steps usually lack *verkshöjd* (originality), so they aren't covered by copyright; photos and descriptive text are ([Lawline](https://lawline.se/answers/skyddas-recept-av-upphovsratten)). Copying for private use is also allowed under the Swedish copyright act (2 kap. 12 § URL). Storing full recipes for private family use is therefore fine for all four sites, as long as photos are only linked. This is guidance, not legal advice.
 
+The repository is public. Parser and discovery tests use small synthetic pages and invented recipe URLs. Saved real source pages, database dumps and processing reports stay outside Git under ignored local paths. Source names, base URLs, robots rules and non-recipe path patterns remain documented as adapter facts.
+
 ### Ingestion pipeline
 
 Ingestion runs from a systemd timer, never on a user request.
