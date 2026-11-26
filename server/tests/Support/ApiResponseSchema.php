@@ -34,9 +34,9 @@ final class ApiResponseSchema
     {
         $value = $root;
         foreach ($keys as $key) {
-            $map = DbValue::map($value);
-            Assert::assertArrayHasKey($key, $map);
-            $value = $map[$key];
+            Assert::assertIsArray($value);
+            Assert::assertArrayHasKey($key, $value);
+            $value = $value[$key];
         }
         return $value;
     }

@@ -163,12 +163,13 @@ final class MigrationIntegrationTest extends TestCase
             self::assertInsertRejected($db, $slotSql, [$planId, $secondHousehold, '2026-11-22', 'weekday_leftovers']);
             $db->prepare($slotSql)->execute([$planId, $firstHousehold, '2026-11-22', 'weekday_leftovers']);
             $idempotencySql = 'INSERT INTO api_idempotency '
-                . '(user_id, idempotency_key, request_hash, response_status, response_json, expires_at) '
-                . 'VALUES (?, ?, ?, 200, ?, UTC_TIMESTAMP(6) + INTERVAL 48 HOUR)';
+                . '(user_id, endpoint, idempotency_key, request_hash, response_status, response_json, expires_at) '
+                . 'VALUES (?, ?, ?, ?, 200, ?, UTC_TIMESTAMP(6) + INTERVAL 48 HOUR)';
             $key = '11111111-1111-4111-8111-111111111111';
-            $db->prepare($idempotencySql)->execute([$firstMember, $key, str_repeat('c', 64), '{}']);
-            self::assertInsertRejected($db, $idempotencySql, [$firstMember, $key, str_repeat('c', 64), '{}']);
-            $db->prepare($idempotencySql)->execute([$secondMember, $key, str_repeat('c', 64), '{}']);
+            $db->prepare($idempotencySql)->execute([$firstMember, 'POST /recipes/1/rating', $key, str_repeat('c', 64), '{}']);
+            self::assertInsertRejected($db, $idempotencySql, [$firstMember, 'POST /recipes/1/rating', $key, str_repeat('c', 64), '{}']);
+            $db->prepare($idempotencySql)->execute([$firstMember, 'POST /recipes/2/rating', $key, str_repeat('c', 64), '{}']);
+            $db->prepare($idempotencySql)->execute([$secondMember, 'POST /recipes/1/rating', $key, str_repeat('c', 64), '{}']);
             $newSettings = $db->prepare('SELECT value FROM engine_config WHERE `key` = ?');
             $newSettings->execute(['household.invite_ttl_hours']);
             self::assertSame('72', $newSettings->fetchColumn());
