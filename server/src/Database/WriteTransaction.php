@@ -25,7 +25,7 @@ final class WriteTransaction
             }
             return $result;
         } catch (Throwable $error) {
-            if ($ownsTransaction && $db->inTransaction()) {
+            if ($ownsTransaction) {
                 $db->rollBack();
             }
             throw $error;
