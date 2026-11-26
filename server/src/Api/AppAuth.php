@@ -10,6 +10,8 @@ use Throwable;
 
 final class AppAuth
 {
+    private const UNKNOWN_PASSWORD_HASH = '$2y$12$4fchHGuKojlVWxvPlb1gY.SoFouRXmSrrD7z5FOuPZkxuyG9kX5iq';
+
     public function __construct(private readonly PDO $db, private readonly EngineConfig $config)
     {
     }
@@ -132,7 +134,7 @@ final class AppAuth
         $query->execute([$email]);
         $user = $query->fetch(PDO::FETCH_ASSOC);
         if (!is_array($user)) {
-            password_verify($password, password_hash('unknown-account-verification', PASSWORD_DEFAULT));
+            password_verify($password, self::UNKNOWN_PASSWORD_HASH);
         }
         if (!is_array($user) || !password_verify($password, DbValue::text($user['password_hash']))) {
             $insert = $this->db->prepare('INSERT INTO app_login_attempt (email_hash, ip_address) VALUES (?, ?)');

@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 20651)
-Total output lines: 735
-
 # Matsvep – Design Document
 
 Nov 15, 2026 · @Stefan de Vries
@@ -165,7 +162,7 @@ The model has three layers: the **recipe database**, shared by all households; *
 
 **Phase 2 storage rules.** Every user insert names its role explicitly; a member must have a `household_id`, while admins may have none. App bearer tokens are available to both roles but never authorize `/admin/`; admin cookie sessions never authorize `/api/v1`. Invite codes are single-use, expire after `household.invite_ttl_hours`, and are stored as hashes. When `auth.open_registration` is disabled, the first member may create the first household; subsequent registrations must use an invite. A registration lock makes the first-household exception atomic. Enabling the setting permits additional household creation. `day_profile_default` holds one seeded row for each Sunday–Saturday weekday, while `day_profile` stores household overrides. Weekdays use PHP `date('w')`: 0 is Sunday and 6 is Saturday. Composite foreign keys keep invite creators and consumers, plan slots, carryovers, swipes and meal logs within their household.
 
-Household `timezone` is an IANA time-zone name, defaulting to `Europe/Stockholm`. `week_start`, plan-slot dates, target weeks and cooked dates are household-local calendar dates. Database timestamps stay UTC. Planning at 07:00 and day-after prompts are scheduled using the household's time zone, including daylight-saving changes.
+Household `timezone` is an IANA time-zone name, defaulting to `Europe/Stockholm`. `week_start`, plan-slot dates, target weeks and cooked dates are household-local calendar dates. Database timestamps stay UTC: every application database connection sets its MySQL session time zone to `+00:00` before reading or writing timestamps. This keeps `CURRENT_TIMESTAMP` defaults, `UTC_TIMESTAMP()` comparisons and API timestamps suffixed with `Z` consistent. Planning at 07:00 and day-after prompts are scheduled using the household's time zone, including daylight-saving changes.
 
 **Phase 2 API contract.** `/api/v1` uses random opaque bearer access and refresh tokens for both admin and member roles. Only SHA-256 hashes are stored. Access tokens are short lived; refresh tokens rotate per device. A second request with the most recently replaced token may rotate again within `auth.refresh_reuse_grace_s` while the device is active and unexpired. An older token or reuse after grace revokes the device. App tokens never authorize `/admin`, which retains its separate cookie session and IP allowlist. Failed app logins are counted per normalized email and per client IP, with separate `auth.login_max_attempts` and `auth.login_max_attempts_ip` limits in `auth.login_window_s`. Successful login clears only that email's failures. Access lifetime, refresh lifetime, login limits and window come from `engine_config`. Errors have an English `code` and structured `params`, with no display message; duplicate email returns `email_taken`, closed registration returns `registration_closed`, and unexpected failures return `internal_error`. Reasons and events likewise contain codes and parameters; the Flutter localisation files render their text. Recipe titles and ingredient names are data, so they retain their source language. Search, wishlist, plans and decks use opaque cursors and return `next_cursor`.
 
@@ -288,7 +285,43 @@ A replaced recipe gets SkipPen = 1, fading linearly to 0 over 14 days. A recipe 
 | *w\_p* | Pref | 0.45 |
 | *w\_d* | DayFit | 0.25 |
 | *w\_r* | Due | 0.15 |
-| *w\_e* | Explore…651 tokens truncated…d]`. Reapplying onboarding synchronises only ratings whose source is still `onboarding`. It clears an omitted onboarding dish rating, recording the removal in `rating_history`, and never replaces a user rating.
+| *w\_e* | Explore | 0.10 |
+| *w\_v* | VarietyPen | 0.35 |
+| *w\_s* | SkipPen | 0.30 |
+
+Because every component uses the same 0–1 scale, each weight reads directly as how much that component matters.
+
+## Learning
+
+The engine learns from one signal: the family's star rating of a recipe. A rating sets that recipe's Pref directly and updates the family's affinity for every feature of the recipe, which spreads the lesson to recipes the family has never tried.
+
+### One rating per recipe
+
+The family rates a recipe once, the first time they cook it. Any member can answer or change a rating on the family's behalf, and no per-person attribution is stored.
+
+| Situation | Day-after prompt | Stored |
+| --- | --- | --- |
+| First time cooked, unrated | Localised cooking confirmation and star picker | `household_recipe.rating`, `rating_source = user` |
+| First time cooked, rated in onboarding | Localised cooking confirmation with onboarding stars pre-filled | Confirmed or changed rating, `rating_source = user` |
+| Cooked again | Localised cooking confirmation with a change-rating link and current stars | Recency only |
+| Rating changed from the recipe page or library | – | New rating replaces the old; old value kept in `rating_history` |
+
+Each recipe contributes to the affinities exactly once, with its current rating, so a dish cooked 20 times doesn't dominate the taste profile.
+
+### Onboarding
+
+The family answers one joint quiz in about 5 minutes:
+
+| Step | Question | Becomes |
+| --- | --- | --- |
+| 1 | Mark 30–40 common dishes, chosen from the seeded database (köttbullar, tacos, lax i ugn, carbonara, kycklinggryta…) as *Favourite* / *OK* / *Not for us* | That recipe's starting rating: 5 / 4 / 2★ (`rating_source = onboarding`); 2★ hides it |
+| 2 | Rate cuisines 1–5 (husman, italienskt, tex-mex, asiatiskt, indiskt, mellanöstern…) | Cuisine affinity seed |
+| 3 | Rate proteins 1–5 (kyckling, nöt, fläsk, fisk, skaldjur, vegetariskt, korv) | Protein affinity seed |
+| 4 | Pick ingredients nobody likes (koriander, svamp, oliver…) | Ingredient affinity seed of −0.8 |
+
+Seeds start with weight *W₀* = 2 and decay from `onboarding_answer.answered_at` with the same half-life as ratings. Thus recent ratings increasingly outweigh older quiz answers.
+
+The saved answer keys are `dish_rating`, `cuisine_rating`, `protein_rating` and `disliked_ingredients`. Dish answers contain `ratings: [{recipe_id, choice}]`, with `choice` equal to `favourite`, `ok` or `not_for_us`. Cuisine and protein answers contain `ratings: [{code, rating}]`; disliked ingredients contain `ingredient_ids: [id]`. Reapplying onboarding synchronises only ratings whose source is still `onboarding`. It clears an omitted onboarding dish rating, recording the removal in `rating_history`, and never replaces a user rating.
 
 ### Affinity update
 

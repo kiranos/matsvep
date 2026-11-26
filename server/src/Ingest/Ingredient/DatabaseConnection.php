@@ -38,10 +38,17 @@ final class DatabaseConnection
             $config['DB_PORT'],
             $config['DB_NAME'],
         );
-        return new PDO($dsn, $config['DB_USER'], $config['DB_PASSWORD'], [
+        $db = new PDO($dsn, $config['DB_USER'], $config['DB_PASSWORD'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_EMULATE_PREPARES => false,
             \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
         ]);
+        self::setUtc($db);
+        return $db;
+    }
+
+    public static function setUtc(PDO $db): void
+    {
+        $db->prepare("SET time_zone = '+00:00'")->execute();
     }
 }

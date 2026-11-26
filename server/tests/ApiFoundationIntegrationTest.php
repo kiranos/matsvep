@@ -7,11 +7,13 @@ namespace Matsvep\Tests;
 use Matsvep\Api\ApiError;
 use Matsvep\Api\ApiKernel;
 use Matsvep\Api\ApiStatePurger;
+use Matsvep\Api\AppAuth;
 use Matsvep\Api\DbValue;
 use Matsvep\Api\Idempotency;
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Database\WriteTransaction;
 use Matsvep\Engine\EngineConfig;
+use Matsvep\Ingest\Ingredient\DatabaseConnection;
 use Matsvep\Tests\Support\ApiResponseSchema;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -178,6 +180,55 @@ final class ApiFoundationIntegrationTest extends TestCase
         self::assertSame(401, $status);
         [$status] = $api->handle('GET', '/api/v1/recipes/search?q=Synthetic', '', ['Authorization' => 'Bearer ' . DbValue::text($current['access_token'])], '127.0.4.1');
         self::assertSame(401, $status);
+    }
+
+    public function testUtcSessionKeepsRefreshGraceAndLoginWindowConsistent(): void
+    {
+        self::$db->prepare("SET time_zone = '+02:00'")->execute();
+        $timeZone = self::$db->prepare('SELECT @@session.time_zone');
+        $timeZone->execute();
+        self::assertSame('+02:00', $timeZone->fetchColumn());
+        DatabaseConnection::setUtc(self::$db);
+        $timeZone->execute();
+        self::assertSame('+00:00', $timeZone->fetchColumn());
+
+        $api = new ApiKernel(self::$db);
+        self::$db->prepare("INSERT INTO `user` (email, password_hash, role) VALUES (?, ?, 'admin')")
+            ->execute(['utc@example.test', password_hash('a-long-test-password', PASSWORD_DEFAULT)]);
+        $loginBody = json_encode(['email' => 'utc@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows'], JSON_THROW_ON_ERROR);
+        [$status, $tokens] = $api->handle('POST', '/api/v1/auth/token', $loginBody, [], '127.0.7.1');
+        self::assertSame(200, $status);
+        $refreshBody = json_encode(['refresh_token' => $tokens['refresh_token']], JSON_THROW_ON_ERROR);
+        [$status] = $api->handle('POST', '/api/v1/auth/refresh', $refreshBody, [], '127.0.7.1');
+        self::assertSame(200, $status);
+        [$status] = $api->handle('POST', '/api/v1/auth/refresh', $refreshBody, [], '127.0.7.1');
+        self::assertSame(200, $status);
+
+        $config = EngineConfig::fromDatabase(self::$db);
+        $emailHash = hash('sha256', 'window@example.test');
+        $limit = $config->integer('auth.login_max_attempts');
+        $insert = self::$db->prepare('INSERT INTO app_login_attempt (email_hash, ip_address) VALUES (?, ?)');
+        for ($attempt = 0; $attempt < $limit; $attempt++) {
+            $insert->execute([$emailHash, '127.0.7.' . ($attempt + 2)]);
+        }
+        $badLogin = json_encode(['email' => 'window@example.test', 'password' => 'incorrect-password', 'platform' => 'windows'], JSON_THROW_ON_ERROR);
+        [$status] = $api->handle('POST', '/api/v1/auth/token', $badLogin, [], '127.0.7.100');
+        self::assertSame(429, $status);
+        self::$db->prepare('UPDATE app_login_attempt SET attempted_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL ? SECOND) WHERE email_hash = ?')
+            ->execute([$config->integer('auth.login_window_s') + 1, $emailHash]);
+        [$status] = $api->handle('POST', '/api/v1/auth/token', $badLogin, [], '127.0.7.100');
+        self::assertSame(401, $status);
+    }
+
+    public function testUnknownAccountHashUsesCurrentPasswordDefaultCost(): void
+    {
+        $constant = (new \ReflectionClass(AppAuth::class))->getReflectionConstant('UNKNOWN_PASSWORD_HASH');
+        self::assertInstanceOf(\ReflectionClassConstant::class, $constant);
+        $hash = $constant->getValue();
+        self::assertIsString($hash);
+        $current = password_hash('current-default-cost', PASSWORD_DEFAULT);
+        self::assertSame(password_get_info($current)['algoName'], password_get_info($hash)['algoName']);
+        self::assertSame(password_get_info($current)['options']['cost'], password_get_info($hash)['options']['cost']);
     }
 
     public function testIdempotencyScopesKeysToEndpointAndChecksBodyBeforeMutation(): void
