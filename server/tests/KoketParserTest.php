@@ -21,8 +21,14 @@ final class KoketParserTest extends TestCase
         $withoutCanonical = preg_replace('~<link[^>]*rel="canonical"[^>]*>~i', '', $soup);
         self::assertIsString($withoutCanonical);
         self::assertSame(
-            'https://www.koket.se/recipes/alias',
+            $this->canonical('recipe-soup.html'),
             $parser->canonicalUrl($withoutCanonical, 'https://www.koket.se/recipes/alias')
+        );
+        $withoutIdentity = preg_replace('~"url"\s*:\s*"[^"]+",~', '', $withoutCanonical);
+        self::assertIsString($withoutIdentity);
+        self::assertSame(
+            'https://www.koket.se/recipes/alias',
+            $parser->canonicalUrl($withoutIdentity, 'https://www.koket.se/recipes/alias')
         );
         self::assertSame(
             $this->canonical('recipe-soup.html'),
