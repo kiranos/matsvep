@@ -4,12 +4,12 @@ Run these commands in a terminal on the Ubuntu 26.04 VPS itself; a local server 
 
 ## First setup
 
-1. Create a non-root SSH account with sudo access on the VPS. Point the intended domain's DNS record at the VPS. Set up an SSH deploy key with read access to the private GitHub repository.
+1. Create a non-root SSH account with sudo access on the VPS. Point the intended domain's DNS record at the VPS. The repository is public, so an SSH deploy key is optional.
 2. Clone the merged `main` branch as that account at `/srv/matsvep`:
 
    ```bash
    sudo install -d -o "$USER" -g "$USER" -m 0755 /srv/matsvep
-   git clone git@github.com:kiranos/matsvep.git /srv/matsvep
+   git clone https://github.com/kiranos/matsvep.git /srv/matsvep
    cd /srv/matsvep
    ```
 
@@ -141,7 +141,7 @@ Inspect the report and table counts before resuming scheduled crawling. Database
 
 ## Rotate secrets
 
-Run `sudo bash deploy/setup-ubuntu.sh --rotate-db-password` from `/srv/matsvep`. It prompts for a new password, updates the local MySQL account and rewrites the restricted `server/.env`; it does not print the secret. Stop an active crawl before rotation and start it again afterward. Rotate the private repository deploy key in GitHub and on the VPS separately. Certbot manages certificate renewal; check `sudo systemctl list-timers '*certbot*'` and `sudo certbot renew --dry-run`.
+Run `sudo bash deploy/setup-ubuntu.sh --rotate-db-password` from `/srv/matsvep`. It prompts for a new password, updates the local MySQL account and rewrites the restricted `server/.env`; it does not print the secret. Stop an active crawl before rotation and start it again afterward. If you use an SSH deploy key for Git access, rotate it in GitHub and on the VPS separately. Certbot manages certificate renewal; check `sudo systemctl list-timers '*certbot*'` and `sudo certbot renew --dry-run`.
 
 The setup uses Ubuntu 26.04 PHP 8.5 packages and its MySQL 8.4 server and Certbot Apache integration. The timers use systemd calendar scheduling, and the backup uses MySQL's consistent InnoDB dump mode. See [Ubuntu 26.04 release notes](https://documentation.ubuntu.com/release-notes/26.04/), [systemd service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html), [systemd timer](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html), and [MySQL mysqldump](https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html).
 
