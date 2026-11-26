@@ -86,8 +86,14 @@ final class ReadOnlyPlanBenchmark
             }
             $seed = PlanBuilder::seed($householdId ?? 0, $weekStart, 1, 0);
             $builder = new PlanBuilder($config);
-            $initial = $builder->build($days, $shortlist, (float) $share, $seed,
-                blockVegetarian: $blockVegetarian, weekDayCount: $dayCount);
+            $initial = $builder->build(
+                $days,
+                $shortlist,
+                (float) $share,
+                $seed,
+                blockVegetarian: $blockVegetarian,
+                weekDayCount: $dayCount
+            );
             $full = $finishPhase === null ? self::elapsed($started) : $finishPhase($started);
 
             $pickDate = $days[0]['date'];
@@ -98,8 +104,15 @@ final class ReadOnlyPlanBenchmark
             $started = hrtime(true);
             $shortlistIds = array_map(static fn (PlanCandidate $candidate): int => $candidate->id, $shortlist);
             $rerankCandidates = $repository->load($householdId ?? 0, $today, $blockVegetarian, [], null, [], $shortlistIds);
-            (new PlanBuilder($config))->build($days, $rerankCandidates, (float) $share, $seed,
-                fixed: [$pickDate => $pick], blockVegetarian: $blockVegetarian, weekDayCount: $dayCount);
+            (new PlanBuilder($config))->build(
+                $days,
+                $rerankCandidates,
+                (float) $share,
+                $seed,
+                fixed: [$pickDate => $pick],
+                blockVegetarian: $blockVegetarian,
+                weekDayCount: $dayCount
+            );
             $rerank = $finishPhase === null ? self::elapsed($started) : $finishPhase($started);
 
             return [
