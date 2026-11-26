@@ -13,7 +13,7 @@ source /etc/os-release
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 [[ $project_root == /srv/matsvep ]] ||
-    fail 'Clone the private repository at /srv/matsvep before running setup.'
+    fail 'Clone the repository at /srv/matsvep before running setup.'
 if [[ ${1:-} == --enable-crawl ]]; then
     [[ $# -eq 1 ]] || fail 'Usage: sudo bash deploy/setup-ubuntu.sh --enable-crawl'
     [[ -f $project_root/server/.env && -f $project_root/server/vendor/autoload.php &&
