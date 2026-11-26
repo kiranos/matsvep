@@ -6,6 +6,7 @@ namespace Matsvep\Tests;
 
 use Matsvep\Api\ApiError;
 use Matsvep\Api\ApiKernel;
+use Matsvep\Api\DbValue;
 use Matsvep\Api\Idempotency;
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Engine\EngineConfig;
@@ -30,15 +31,21 @@ final class ApiFoundationIntegrationTest extends TestCase
         }
         $settings = parse_ini_file($file, false, INI_SCANNER_RAW);
         self::assertIsArray($settings);
+        /** @var array<string,string> $config */
+        $config = [];
         foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as $key) {
-            self::assertArrayHasKey($key, $settings);
+            $value = $settings[$key] ?? null;
+            if (!is_string($value)) {
+                throw new \RuntimeException('Invalid testing database configuration.');
+            }
+            $config[$key] = $value;
         }
-        self::assertMatchesRegularExpression('/^[A-Za-z0-9_]+$/', $settings['DB_NAME']);
-        self::$databaseName = $settings['DB_NAME'] . '_' . bin2hex(random_bytes(6));
-        $dsn = sprintf('mysql:host=%s;port=%s;charset=utf8mb4', $settings['DB_HOST'], $settings['DB_PORT']);
-        self::$admin = new PDO($dsn, $settings['DB_USER'], $settings['DB_PASSWORD'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false]);
+        self::assertMatchesRegularExpression('/^[A-Za-z0-9_]+$/', $config['DB_NAME']);
+        self::$databaseName = $config['DB_NAME'] . '_' . bin2hex(random_bytes(6));
+        $dsn = sprintf('mysql:host=%s;port=%s;charset=utf8mb4', $config['DB_HOST'], $config['DB_PORT']);
+        self::$admin = new PDO($dsn, $config['DB_USER'], $config['DB_PASSWORD'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false]);
         self::$admin->exec('CREATE DATABASE `' . self::$databaseName . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_sv_0900_ai_ci');
-        self::$db = new PDO($dsn . ';dbname=' . self::$databaseName, $settings['DB_USER'], $settings['DB_PASSWORD'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false, \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false]);
+        self::$db = new PDO($dsn . ';dbname=' . self::$databaseName, $config['DB_USER'], $config['DB_PASSWORD'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false, \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false]);
         (new MigrationRunner(self::$db, __DIR__ . '/../migrations', self::$databaseName))->run();
         $source = self::$db->prepare('INSERT INTO source (name, base_url, adapter, enabled) VALUES (?, ?, ?, TRUE)');
         $source->execute(['Synthetic test', 'https://example.test', 'fixture']);
@@ -72,7 +79,7 @@ final class ApiFoundationIntegrationTest extends TestCase
         [$status, $registered] = $api->handle('POST', '/api/v1/auth/register', json_encode(['email' => 'member@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows', 'household_name' => 'Test household'], JSON_THROW_ON_ERROR), [], '127.0.0.1');
         self::assertSame(201, $status);
         $schema->assertResponse('/auth/register', 'POST', $status, $registered);
-        $bearer = ['Authorization' => 'Bearer ' . $registered['access_token']];
+        $bearer = ['Authorization' => 'Bearer ' . DbValue::text($registered['access_token'])];
         [$status, $recipe] = $api->handle('GET', '/api/v1/recipes/1', '', $bearer, '127.0.0.1');
         self::assertSame(200, $status);
         $schema->assertResponse('/recipes/{id}', 'GET', $status, $recipe);
@@ -88,7 +95,7 @@ final class ApiFoundationIntegrationTest extends TestCase
         [$status, $revoked] = $api->handle('POST', '/api/v1/auth/revoke', json_encode(['refresh_token' => $registered['refresh_token']], JSON_THROW_ON_ERROR), $bearer, '127.0.0.1');
         self::assertSame(200, $status);
         $schema->assertResponse('/auth/revoke', 'POST', $status, $revoked);
-        [$status, $loggedOut] = $api->handle('POST', '/api/v1/auth/logout', '{}', ['Authorization' => 'Bearer ' . $refreshed['access_token']], '127.0.0.1');
+        [$status, $loggedOut] = $api->handle('POST', '/api/v1/auth/logout', '{}', ['Authorization' => 'Bearer ' . DbValue::text($refreshed['access_token'])], '127.0.0.1');
         self::assertSame(200, $status);
         $schema->assertResponse('/auth/logout', 'POST', $status, $loggedOut);
     }
@@ -100,7 +107,7 @@ final class ApiFoundationIntegrationTest extends TestCase
         $insert->execute(['admin@example.test', password_hash('a-long-test-password', PASSWORD_DEFAULT)]);
         [$status, $tokens] = $api->handle('POST', '/api/v1/auth/token', json_encode(['email' => 'admin@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows'], JSON_THROW_ON_ERROR), [], '127.0.0.1');
         self::assertSame(200, $status);
-        self::assertSame('admin', $tokens['user']['role']);
+        self::assertSame('admin', DbValue::map($tokens['user'])['role']);
         self::assertNull($tokens['household']);
         $oldRefresh = $tokens['refresh_token'];
         [$status, $rotated] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $oldRefresh], JSON_THROW_ON_ERROR), [], '127.0.0.1');
@@ -108,9 +115,9 @@ final class ApiFoundationIntegrationTest extends TestCase
         [$status, $error] = $api->handle('POST', '/api/v1/auth/refresh', json_encode(['refresh_token' => $oldRefresh], JSON_THROW_ON_ERROR), [], '127.0.0.1');
         self::assertSame(401, $status);
         self::assertSame('refresh_token_invalid', $error['code']);
-        [$status] = $api->handle('GET', '/api/v1/recipes/search?q=Synthetic', '', ['Authorization' => 'Bearer ' . $rotated['access_token']], '127.0.0.1');
+        [$status] = $api->handle('GET', '/api/v1/recipes/search?q=Synthetic', '', ['Authorization' => 'Bearer ' . DbValue::text($rotated['access_token'])], '127.0.0.1');
         self::assertSame(401, $status);
-        [$status] = $api->handle('GET', '/admin/', '', ['Authorization' => 'Bearer ' . $tokens['access_token']], '127.0.0.1');
+        [$status] = $api->handle('GET', '/admin/', '', ['Authorization' => 'Bearer ' . DbValue::text($tokens['access_token'])], '127.0.0.1');
         self::assertSame(404, $status);
     }
 
@@ -151,7 +158,7 @@ final class ApiFoundationIntegrationTest extends TestCase
         $body = json_encode(['email' => 'invitee@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows', 'invite_code' => $inviteCode], JSON_THROW_ON_ERROR);
         [$status, $result] = $api->handle('POST', '/api/v1/auth/register', $body, [], '127.0.0.2');
         self::assertSame(201, $status);
-        self::assertSame($householdId, $result['user']['household_id']);
+        self::assertSame($householdId, DbValue::map($result['user'])['household_id']);
         $body = json_encode(['email' => 'another@example.test', 'password' => 'a-long-test-password', 'platform' => 'windows', 'invite_code' => $inviteCode], JSON_THROW_ON_ERROR);
         [$status, $result] = $api->handle('POST', '/api/v1/auth/register', $body, [], '127.0.0.2');
         self::assertSame(422, $status);

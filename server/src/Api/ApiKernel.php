@@ -55,6 +55,9 @@ final class ApiKernel
                 throw new ApiError(400, 'invalid_request');
             }
             $body = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($body)) {
+                throw new ApiError(400, 'invalid_request');
+            }
         }
         if ($route === '/auth/register' && $method === 'POST') {
             return [201, $this->auth->register($body)];

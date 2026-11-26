@@ -32,14 +32,11 @@ final class Idempotency
             $row = $query->fetch(PDO::FETCH_ASSOC);
             $hash = hash('sha256', $body);
             if (is_array($row)) {
-                if (!hash_equals((string) $row['request_hash'], $hash)) {
+                if (!hash_equals(DbValue::text($row['request_hash']), $hash)) {
                     throw new ApiError(422, 'idempotency_key_reused');
                 }
-                $response = json_decode((string) $row['response_json'], true, 512, JSON_THROW_ON_ERROR);
-                if (!is_array($response)) {
-                    throw new ApiError(500, 'invalid_request');
-                }
-                return [(int) $row['response_status'], $response];
+                $response = DbValue::map(json_decode(DbValue::text($row['response_json']), true, 512, JSON_THROW_ON_ERROR));
+                return [DbValue::integer($row['response_status']), $response];
             }
             $this->db->beginTransaction();
             try {

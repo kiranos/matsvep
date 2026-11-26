@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Tests\Support;
 
+use Matsvep\Api\DbValue;
 use PHPUnit\Framework\Assert;
 
 final class ApiResponseSchema
@@ -17,77 +18,78 @@ final class ApiResponseSchema
     {
         $contents = file_get_contents($file);
         Assert::assertIsString($contents);
-        $document = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
-        Assert::assertIsArray($document);
-        return new self($document);
+        return new self(DbValue::map(json_decode($contents, true, 512, JSON_THROW_ON_ERROR)));
     }
 
     /** @param array<string,mixed> $response */
     public function assertResponse(string $path, string $method, int $status, array $response): void
     {
-        $definition = $this->document['paths'][$path][strtolower($method)]['responses'][(string) $status]['content']['application/json']['schema'] ?? null;
-        Assert::assertIsArray($definition, "Missing $method $path response $status in OpenAPI");
-        $this->assertValue($definition, $response, "$method $path");
+        $schema = $this->lookup($this->document, ['paths', $path, strtolower($method), 'responses', (string) $status, 'content', 'application/json', 'schema']);
+        $this->assertValue($schema, $response, "$method $path");
     }
 
-    /** @param array<string,mixed> $schema */
-    private function assertValue(array $schema, mixed $value, string $path): void
+    /** @param array<string,mixed> $root
+     *  @param list<string> $keys */
+    private function lookup(array $root, array $keys): mixed
     {
+        $value = $root;
+        foreach ($keys as $key) {
+            $map = DbValue::map($value);
+            Assert::assertArrayHasKey($key, $map);
+            $value = $map[$key];
+        }
+        return $value;
+    }
+
+    private function assertValue(mixed $definition, mixed $value, string $path): void
+    {
+        $schema = DbValue::map($definition);
         if ($value === null && ($schema['nullable'] ?? false) === true) {
             return;
         }
         if (isset($schema['$ref'])) {
-            $reference = $schema['$ref'];
-            Assert::assertIsString($reference);
+            $reference = DbValue::text($schema['$ref']);
             Assert::assertStringStartsWith('#/', $reference);
-            $target = $this->document;
-            foreach (explode('/', substr($reference, 2)) as $key) {
-                $key = str_replace(['~1', '~0'], ['/', '~'], $key);
-                Assert::assertIsArray($target);
-                Assert::assertArrayHasKey($key, $target);
-                $target = $target[$key];
-            }
-            Assert::assertIsArray($target);
-            $this->assertValue($target, $value, $path);
+            $keys = array_map(static fn (string $key): string => str_replace(['~1', '~0'], ['/', '~'], $key), explode('/', substr($reference, 2)));
+            $this->assertValue($this->lookup($this->document, $keys), $value, $path);
             return;
         }
-        foreach ($schema['allOf'] ?? [] as $part) {
-            Assert::assertIsArray($part);
+        foreach ($this->values($schema['allOf'] ?? []) as $part) {
             $this->assertValue($part, $value, $path);
         }
         if (isset($schema['oneOf'])) {
             $matched = 0;
-            foreach ($schema['oneOf'] as $part) {
+            foreach ($this->values($schema['oneOf']) as $part) {
                 try {
                     $this->assertValue($part, $value, $path);
                     $matched++;
                 } catch (\PHPUnit\Framework\AssertionFailedError) {
-                    // Another branch may describe the response.
+                    // Another branch may describe the value.
                 }
             }
             Assert::assertSame(1, $matched, "$path must match one schema branch");
         }
         if (isset($schema['enum'])) {
-            Assert::assertContains($value, $schema['enum'], "$path enum");
+            Assert::assertContains($value, $this->values($schema['enum']), "$path enum");
         }
         $type = $schema['type'] ?? null;
         if ($type === 'object') {
-            Assert::assertIsArray($value, $path);
-            foreach ($schema['required'] ?? [] as $name) {
-                Assert::assertArrayHasKey($name, $value, $path);
+            $object = DbValue::map($value);
+            foreach ($this->values($schema['required'] ?? []) as $name) {
+                Assert::assertIsString($name);
+                Assert::assertArrayHasKey($name, $object, $path);
             }
-            foreach ($value as $name => $item) {
-                if (isset($schema['properties'][$name])) {
-                    $this->assertValue($schema['properties'][$name], $item, "$path.$name");
+            $properties = DbValue::map($schema['properties'] ?? []);
+            foreach ($object as $name => $item) {
+                if (isset($properties[$name])) {
+                    $this->assertValue($properties[$name], $item, "$path.$name");
                 } elseif (($schema['additionalProperties'] ?? true) === false) {
                     Assert::fail("Unexpected property $path.$name");
                 }
             }
         } elseif ($type === 'array') {
-            Assert::assertIsArray($value, $path);
-            Assert::assertTrue(array_is_list($value), $path);
-            foreach ($value as $index => $item) {
-                $this->assertValue($schema['items'], $item, "$path.$index");
+            foreach ($this->values($value) as $index => $item) {
+                $this->assertValue($schema['items'] ?? [], $item, "$path.$index");
             }
         } elseif ($type === 'integer') {
             Assert::assertIsInt($value, $path);
@@ -118,5 +120,13 @@ final class ApiResponseSchema
                 Assert::assertNotFalse(strtotime($value), $path);
             }
         }
+    }
+
+    /** @return list<mixed> */
+    private function values(mixed $value): array
+    {
+        Assert::assertIsArray($value);
+        Assert::assertTrue(array_is_list($value));
+        return array_values($value);
     }
 }

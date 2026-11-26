@@ -44,10 +44,10 @@ final class AppAuth
                 if ($invite['used_at'] !== null) {
                     throw new ApiError(422, 'invite_used');
                 }
-                if (strtotime((string) $invite['expires_at'] . ' UTC') <= time()) {
+                if (strtotime(DbValue::text($invite['expires_at']) . ' UTC') <= time()) {
                     throw new ApiError(422, 'invite_expired');
                 }
-                $householdId = (int) $invite['household_id'];
+                $householdId = DbValue::integer($invite['household_id']);
             } else {
                 $name = $input['household_name'];
                 $size = $input['household_size'] ?? 1;
@@ -95,7 +95,7 @@ final class AppAuth
         $count = $this->db->prepare('SELECT (SELECT COUNT(*) FROM app_login_attempt WHERE email_hash = ? AND attempted_at > DATE_SUB(UTC_TIMESTAMP(6), INTERVAL ? SECOND)) AS email_count, (SELECT COUNT(*) FROM app_login_attempt WHERE ip_address = ? AND attempted_at > DATE_SUB(UTC_TIMESTAMP(6), INTERVAL ? SECOND)) AS ip_count');
         $count->execute([$emailHash, $window, $ip, $window]);
         $attempts = $count->fetch(PDO::FETCH_ASSOC);
-        if (is_array($attempts) && ((int) $attempts['email_count'] >= $limit || (int) $attempts['ip_count'] >= $limit)) {
+        if (is_array($attempts) && (DbValue::integer($attempts['email_count']) >= $limit || DbValue::integer($attempts['ip_count']) >= $limit)) {
             throw new ApiError(429, 'rate_limited');
         }
         $query = $this->db->prepare('SELECT id, password_hash FROM `user` WHERE email = ?');
@@ -104,14 +104,14 @@ final class AppAuth
         if (!is_array($user)) {
             password_verify($password, '$2y$10$R3w0wq27VzUoW4QSh0w4xOww3kyLJvQDd6XxDwfToYJ1pG5C.sNdy');
         }
-        if (!is_array($user) || !password_verify($password, (string) $user['password_hash'])) {
+        if (!is_array($user) || !password_verify($password, DbValue::text($user['password_hash']))) {
             $insert = $this->db->prepare('INSERT INTO app_login_attempt (email_hash, ip_address) VALUES (?, ?)');
             $insert->execute([$emailHash, $ip]);
             throw new ApiError(401, 'invalid_credentials');
         }
         $this->db->beginTransaction();
         try {
-            $tokens = $this->issue((int) $user['id'], $platform);
+            $tokens = $this->issue(DbValue::integer($user['id']), $platform);
             $clear = $this->db->prepare('DELETE FROM app_login_attempt WHERE email_hash = ? OR ip_address = ?');
             $clear->execute([$emailHash, $ip]);
             $this->db->commit();
@@ -136,12 +136,12 @@ final class AppAuth
                 $history->execute([$hash]);
                 $deviceId = $history->fetchColumn();
                 if ($deviceId !== false) {
-                    $this->revokeDevice((int) $deviceId);
+                    $this->revokeDevice(DbValue::integer($deviceId));
                 }
                 $this->db->commit();
                 throw new ApiError(401, 'refresh_token_invalid');
             }
-            if ($device['revoked_at'] !== null || strtotime((string) $device['expires_at'] . ' UTC') <= time()) {
+            if ($device['revoked_at'] !== null || strtotime(DbValue::text($device['expires_at']) . ' UTC') <= time()) {
                 $this->db->commit();
                 throw new ApiError(401, 'refresh_token_invalid');
             }
@@ -153,7 +153,7 @@ final class AppAuth
             $refreshSeconds = $this->config->integer('auth.refresh_ttl_days') * 86400;
             $update = $this->db->prepare('UPDATE device_token SET refresh_token_hash = ?, access_token_hash = ?, access_expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND), expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND), last_seen_at = UTC_TIMESTAMP(6) WHERE id = ?');
             $update->execute([hash('sha256', $refresh), hash('sha256', $access), $accessSeconds, $refreshSeconds, $device['id']]);
-            $result = $this->tokenResponse((int) $device['user_id'], $access, $refresh, $accessSeconds);
+            $result = $this->tokenResponse(DbValue::integer($device['user_id']), $access, $refresh, $accessSeconds);
             $this->db->commit();
             return $result;
         } catch (Throwable $error) {
@@ -170,10 +170,11 @@ final class AppAuth
         $query = $this->db->prepare('SELECT d.id AS device_id, d.user_id, d.access_expires_at, u.role, u.household_id FROM device_token d JOIN `user` u ON u.id = d.user_id WHERE d.access_token_hash = ? AND d.revoked_at IS NULL');
         $query->execute([hash('sha256', $token)]);
         $row = $query->fetch(PDO::FETCH_ASSOC);
-        if (!is_array($row) || strtotime((string) $row['access_expires_at'] . ' UTC') <= time()) {
+        if (!is_array($row) || $row['access_expires_at'] === null
+            || strtotime(DbValue::text($row['access_expires_at']) . ' UTC') <= time()) {
             throw new ApiError(401, 'access_token_expired');
         }
-        return ['user_id' => (int) $row['user_id'], 'device_id' => (int) $row['device_id'], 'role' => (string) $row['role'], 'household_id' => $row['household_id'] === null ? null : (int) $row['household_id']];
+        return ['user_id' => DbValue::integer($row['user_id']), 'device_id' => DbValue::integer($row['device_id']), 'role' => DbValue::text($row['role']), 'household_id' => $row['household_id'] === null ? null : DbValue::integer($row['household_id'])];
     }
 
     public function revoke(string $refreshToken, int $userId): void
@@ -184,7 +185,7 @@ final class AppAuth
         if ($id === false) {
             throw new ApiError(401, 'refresh_token_invalid');
         }
-        $this->revokeDevice((int) $id);
+        $this->revokeDevice(DbValue::integer($id));
     }
 
     public function revokeDevice(int $id): void
@@ -214,13 +215,17 @@ final class AppAuth
         if (!is_array($row)) {
             throw new ApiError(401, 'invalid_credentials');
         }
-        $household = $row['household_id'] === null ? null : ['id' => (int) $row['household_id'], 'name' => $row['name'], 'size' => (int) $row['size'], 'timezone' => $row['timezone'], 'created_at' => str_replace(' ', 'T', (string) $row['created_at']) . 'Z'];
-        return ['access_token' => $access, 'refresh_token' => $refresh, 'token_type' => 'bearer', 'expires_in_s' => $accessSeconds, 'user' => ['id' => (int) $row['id'], 'email' => $row['email'], 'role' => $row['role'], 'household_id' => $row['household_id'] === null ? null : (int) $row['household_id']], 'household' => $household];
+        $household = $row['household_id'] === null ? null : ['id' => DbValue::integer($row['household_id']), 'name' => $row['name'], 'size' => DbValue::integer($row['size']), 'timezone' => $row['timezone'], 'created_at' => str_replace(' ', 'T', DbValue::text($row['created_at'])) . 'Z'];
+        return ['access_token' => $access, 'refresh_token' => $refresh, 'token_type' => 'bearer', 'expires_in_s' => $accessSeconds, 'user' => ['id' => DbValue::integer($row['id']), 'email' => $row['email'], 'role' => $row['role'], 'household_id' => $row['household_id'] === null ? null : DbValue::integer($row['household_id'])], 'household' => $household];
     }
 
     private function randomToken(): string
     {
-        return bin2hex(random_bytes($this->config->integer('auth.token_bytes')));
+        $bytes = $this->config->integer('auth.token_bytes');
+        if ($bytes < 1) {
+            throw new \RuntimeException('Invalid token length configuration.');
+        }
+        return bin2hex(random_bytes($bytes));
     }
 
     private function email(mixed $value): string

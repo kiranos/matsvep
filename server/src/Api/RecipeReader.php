@@ -27,30 +27,30 @@ final class RecipeReader
             $recipe[$name] = $row[$name];
         }
         foreach (['servings', 'leftover_score', 'festive_score'] as $name) {
-            $recipe[$name] = $row[$name] === null ? null : (float) $row[$name];
+            $recipe[$name] = $row[$name] === null ? null : DbValue::decimal($row[$name]);
         }
         foreach (['is_dinner_candidate', 'is_vegetarian'] as $name) {
             $recipe[$name] = $row[$name] === null ? null : (bool) $row[$name];
         }
-        $recipe['effort'] = $row['effort'] === null ? null : (int) $row['effort'];
+        $recipe['effort'] = $row['effort'] === null ? null : DbValue::integer($row['effort']);
         $links = $this->db->prepare('SELECT l.url, l.is_primary, s.id, s.name, s.base_url, s.display_mode FROM recipe_source_link l JOIN source s ON s.id = l.source_id WHERE l.recipe_id = ? ORDER BY l.is_primary DESC, l.id');
         $links->execute([$id]);
         $recipe['source_links'] = [];
-        foreach ($links->fetchAll(PDO::FETCH_ASSOC) as $link) {
-            $recipe['source_links'][] = ['source' => $this->source($link), 'url' => $link['url'], 'is_primary' => (bool) $link['is_primary']];
+        foreach (DbValue::rows($links->fetchAll(PDO::FETCH_ASSOC)) as $link) {
+            $recipe['source_links'][] = ['source' => $this->source($link), 'url' => $link['url'], 'is_primary' => DbValue::integer($link['is_primary']) === 1];
         }
         $ingredients = $this->db->prepare('SELECT ri.position, ri.group_name, ri.raw_text, ri.quantity, ri.unit, ri.is_main, i.id AS ingredient_id, i.canonical_name, i.category, i.is_staple FROM recipe_ingredient ri LEFT JOIN ingredient i ON i.id = ri.ingredient_id WHERE ri.recipe_id = ? ORDER BY ri.position');
         $ingredients->execute([$id]);
         $recipe['ingredients'] = [];
-        foreach ($ingredients->fetchAll(PDO::FETCH_ASSOC) as $item) {
-            $recipe['ingredients'][] = ['position' => (int) $item['position'], 'group_name' => $item['group_name'], 'raw_text' => $item['raw_text'], 'quantity' => $item['quantity'] === null ? null : (float) $item['quantity'], 'unit' => $item['unit'], 'is_main' => (bool) $item['is_main'], 'canonical_ingredient' => $item['ingredient_id'] === null ? null : ['id' => (int) $item['ingredient_id'], 'canonical_name' => $item['canonical_name'], 'category' => $item['category'], 'is_staple' => (bool) $item['is_staple']]];
+        foreach (DbValue::rows($ingredients->fetchAll(PDO::FETCH_ASSOC)) as $item) {
+            $recipe['ingredients'][] = ['position' => DbValue::integer($item['position']), 'group_name' => $item['group_name'], 'raw_text' => $item['raw_text'], 'quantity' => $item['quantity'] === null ? null : DbValue::decimal($item['quantity']), 'unit' => $item['unit'], 'is_main' => DbValue::integer($item['is_main']) === 1, 'canonical_ingredient' => $item['ingredient_id'] === null ? null : ['id' => DbValue::integer($item['ingredient_id']), 'canonical_name' => $item['canonical_name'], 'category' => $item['category'], 'is_staple' => DbValue::integer($item['is_staple']) === 1]];
         }
         $recipe['steps'] = [];
         if ($row['s_display_mode'] === 'full') {
             $steps = $this->db->prepare('SELECT position, group_name, text FROM recipe_step WHERE recipe_id = ? ORDER BY position');
             $steps->execute([$id]);
-            foreach ($steps->fetchAll(PDO::FETCH_ASSOC) as $step) {
-                $recipe['steps'][] = ['position' => (int) $step['position'], 'group_name' => $step['group_name'], 'text' => $step['text']];
+            foreach (DbValue::rows($steps->fetchAll(PDO::FETCH_ASSOC)) as $step) {
+                $recipe['steps'][] = ['position' => DbValue::integer($step['position']), 'group_name' => $step['group_name'], 'text' => $step['text']];
             }
         }
         $tags = $this->db->prepare('SELECT tag FROM recipe_tag WHERE recipe_id = ? ORDER BY tag');
@@ -83,11 +83,12 @@ final class RecipeReader
         $query->bindValue(5, $needle);
         $query->bindValue(6, $pageSize + 1, PDO::PARAM_INT);
         $query->execute();
-        $rows = $query->fetchAll(PDO::FETCH_ASSOC);
+        $rows = DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC));
         $more = count($rows) > $pageSize;
         $rows = array_slice($rows, 0, $pageSize);
         $items = array_map($this->summary(...), $rows);
-        $next = $more && $rows !== [] ? rtrim(strtr(base64_encode((string) end($rows)['id']), '+/', '-_'), '=') : null;
+        $last = $rows === [] ? null : $rows[array_key_last($rows)];
+        $next = $more && $last !== null ? rtrim(strtr(base64_encode((string) DbValue::integer($last['id'])), '+/', '-_'), '=') : null;
         return ['items' => $items, 'next_cursor' => $next];
     }
 
@@ -95,13 +96,13 @@ final class RecipeReader
      *  @return array<string,mixed> */
     private function summary(array $row): array
     {
-        return ['id' => (int) $row['id'], 'title' => $row['title'], 'image_url' => $row['image_url'], 'total_time_min' => $row['total_time_min'] === null ? null : (int) $row['total_time_min'], 'source' => ['id' => (int) $row['s_id'], 'name' => $row['s_name'], 'base_url' => $row['s_base_url'], 'display_mode' => $row['s_display_mode']], 'source_url' => $row['url'], 'dish_group' => $row['g_id'] === null ? null : ['id' => (int) $row['g_id'], 'core_name' => $row['g_core_name'], 'main_protein' => $row['g_main_protein'], 'manual_override' => (bool) $row['g_manual_override']], 'active' => (bool) $row['active']];
+        return ['id' => DbValue::integer($row['id']), 'title' => $row['title'], 'image_url' => $row['image_url'], 'total_time_min' => $row['total_time_min'] === null ? null : DbValue::integer($row['total_time_min']), 'source' => ['id' => DbValue::integer($row['s_id']), 'name' => $row['s_name'], 'base_url' => $row['s_base_url'], 'display_mode' => $row['s_display_mode']], 'source_url' => $row['url'], 'dish_group' => $row['g_id'] === null ? null : ['id' => DbValue::integer($row['g_id']), 'core_name' => $row['g_core_name'], 'main_protein' => $row['g_main_protein'], 'manual_override' => DbValue::integer($row['g_manual_override']) === 1], 'active' => DbValue::integer($row['active']) === 1];
     }
 
     /** @param array<string,mixed> $row
      *  @return array<string,mixed> */
     private function source(array $row): array
     {
-        return ['id' => (int) $row['id'], 'name' => $row['name'], 'base_url' => $row['base_url'], 'display_mode' => $row['display_mode']];
+        return ['id' => DbValue::integer($row['id']), 'name' => $row['name'], 'base_url' => $row['base_url'], 'display_mode' => $row['display_mode']];
     }
 }
