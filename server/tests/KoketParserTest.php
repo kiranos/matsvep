@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 
 final class KoketParserTest extends TestCase
 {
-    public function testRealRecipePagesPreserveTagsAndSectionNames(): void
+    public function testSyntheticRecipePagesPreserveTagsAndSectionNames(): void
     {
         $parser = new KoketRecipeParser();
         $soup = $this->fixture('recipe-soup.html');
@@ -38,19 +38,19 @@ final class KoketParserTest extends TestCase
         self::assertTrue($parser->isRecipe($withoutJsonLd));
         $first = $parser->parse($soup);
         self::assertSame('jsonld', $first->format);
-        self::assertCount(21, $first->ingredients);
-        self::assertCount(19, $first->steps);
+        self::assertCount(4, $first->ingredients);
+        self::assertCount(3, $first->steps);
         self::assertCount(1, $first->tags);
         self::assertNotNull($first->ingredients[0]['group_name']);
         self::assertSame($first->ingredients[0]['group_name'], $first->steps[0]['group_name']);
-        self::assertNotSame($first->ingredients[0]['group_name'], $first->ingredients[20]['group_name']);
+        self::assertNotSame($first->ingredients[0]['group_name'], $first->ingredients[3]['group_name']);
 
         $second = $parser->parse($this->fixture('recipe-2.html'));
-        self::assertCount(10, $second->ingredients);
-        self::assertCount(14, $second->steps);
+        self::assertCount(4, $second->ingredients);
+        self::assertCount(3, $second->steps);
         self::assertCount(2, $second->tags);
         self::assertNotNull($second->ingredients[0]['group_name']);
-        self::assertNotSame($second->steps[0]['group_name'], $second->steps[13]['group_name']);
+        self::assertNotSame($second->steps[0]['group_name'], $second->steps[2]['group_name']);
     }
 
     public function testIncompleteJsonLdRecipeRemainsVisibleForQualityReview(): void
@@ -65,14 +65,14 @@ final class KoketParserTest extends TestCase
         self::assertNull($recipe->totalTimeMinutes);
     }
 
-    public function testRealChefAndCategoryPagesAreNotRecipes(): void
+    public function testSyntheticChefAndCategoryPagesAreNotRecipes(): void
     {
         $parser = new KoketRecipeParser();
         self::assertFalse($parser->isRecipe($this->fixture('chef-page.html')));
         self::assertFalse($parser->isRecipe($this->fixture('category.html')));
     }
 
-    public function testRealSitemapAndCategoryDiscoverRootLevelRecipesButExcludeSections(): void
+    public function testSyntheticSitemapAndCategoryDiscoverRootLevelRecipesButExcludeSections(): void
     {
         $discovery = new KoketDiscovery();
         $xml = $this->fixture('sitemap.xml');
@@ -105,6 +105,31 @@ final class KoketParserTest extends TestCase
             self::assertStringStartsWith('https://www.koket.se/', $url);
         }
         self::assertSame([], $category['pages']);
+    }
+
+    public function testOptionalLocallySavedPages(): void
+    {
+        $directory = __DIR__ . '/fixtures/koket/local/';
+        foreach (['recipe-soup.html', 'recipe-2.html', 'chef-page.html', 'category.html', 'sitemap.xml'] as $name) {
+            if (!is_file($directory . $name)) {
+                self::markTestSkipped('Local source pages are not present.');
+            }
+        }
+        $parser = new KoketRecipeParser();
+        foreach (['recipe-soup.html', 'recipe-2.html'] as $name) {
+            $html = file_get_contents($directory . $name);
+            self::assertIsString($html);
+            $recipe = $parser->parse($html);
+            self::assertNotEmpty($recipe->ingredients);
+        }
+        foreach (['chef-page.html', 'category.html'] as $name) {
+            $html = file_get_contents($directory . $name);
+            self::assertIsString($html);
+            self::assertFalse($parser->isRecipe($html));
+        }
+        $xml = file_get_contents($directory . 'sitemap.xml');
+        self::assertIsString($xml);
+        self::assertNotEmpty((new KoketDiscovery())->sitemap($xml, 'https://www.koket.se/sitemap.xml')['recipes']);
     }
 
     private function canonical(string $name): string
