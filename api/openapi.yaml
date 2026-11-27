@@ -1811,6 +1811,7 @@ components:
         - version
         - config_version
         - slots
+        - pending_carryovers
       properties:
         id:
           type: integer
@@ -1846,6 +1847,31 @@ components:
           type: array
           items:
             "$ref": "#/components/schemas/PlanSlot"
+        pending_carryovers:
+          type: array
+          description: "Carry-overs awaiting a choice in an already prepared plan."
+          items:
+            "$ref": "#/components/schemas/PendingCarryover"
+    PendingCarryover:
+      type: object
+      required:
+        - id
+        - recipe_id
+        - from_slot_id
+        - from_date
+      properties:
+        id:
+          type: integer
+          format: int64
+        recipe_id:
+          type: integer
+          format: int64
+        from_slot_id:
+          type: integer
+          format: int64
+        from_date:
+          type: string
+          format: date
     PlanPage:
       type: object
       required:
@@ -2024,12 +2050,11 @@ components:
           minimum: 1
           maximum: 5
       additionalProperties: false
-      description: "Rating is required when the recipe has never been rated; otherwise it may confirm or change the existing rating."
+      description: "A rating is required on a cooked answer until the household has a user rating for the recipe. Onboarding ratings and unconfirmed earlier dinners do not remove this requirement. Later ratings can be changed through the rating endpoint."
     NotCookedAnswerRequest:
       type: object
       required:
         - outcome
-        - not_cooked_action
       properties:
         outcome:
           type: string
@@ -2041,6 +2066,7 @@ components:
             - carryover
             - wishlist
             - remove
+      description: "Omitting not_cooked_action carries the recipe into the next planning by default."
       additionalProperties: false
     AfterDinnerRequest:
       oneOf:

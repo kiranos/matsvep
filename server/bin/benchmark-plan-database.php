@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use Matsvep\Database\MigrationRunner;
+use Matsvep\Api\ApiKernel;
+use Matsvep\Api\AppAuth;
+use Matsvep\Api\DbValue;
 use Matsvep\Engine\EngineConfig;
 use Matsvep\Engine\PlanManager;
 use Matsvep\Engine\ReadOnlyPlanBenchmark;
@@ -87,6 +90,7 @@ $phaseTimes = [];
 $count = 16365;
 $rated = 100;
 $readonly = false;
+$apiMode = false;
 $householdId = null;
 foreach (array_slice($arguments, 1) as $argument) {
     if (!is_string($argument)) {
@@ -94,6 +98,8 @@ foreach (array_slice($arguments, 1) as $argument) {
     }
     if ($argument === '--readonly') {
         $readonly = true;
+    } elseif ($argument === '--api') {
+        $apiMode = true;
     } elseif (preg_match('/^--household=([1-9][0-9]*)$/', $argument, $match) === 1) {
         $householdId = (int) $match[1];
     } elseif (preg_match('/^--candidates=([1-9][0-9]*)$/', $argument, $match) === 1) {
@@ -207,6 +213,74 @@ try {
     }
     $config = EngineConfig::fromDatabase($db);
     $db->setAttribute(PDO::ATTR_STATEMENT_CLASS, [PlanningBenchmarkStatement::class]);
+    if ($apiMode) {
+        $db->prepare("SET time_zone = '+00:00'")->execute();
+        $password = bin2hex(random_bytes(16));
+        $db->prepare("INSERT INTO `user` (email, password_hash, role, household_id) VALUES (?, ?, 'member', ?)")
+            ->execute(['benchmark@example.test', password_hash($password, PASSWORD_DEFAULT), $householdId]);
+        $auth = new AppAuth($db, $config);
+        $token = DbValue::text($auth->login(['email' => 'benchmark@example.test',
+            'password' => $password, 'platform' => 'windows'], '127.0.0.1')['access_token']);
+        PlanningBenchmarkStatement::$queries = [];
+        $api = new ApiKernel($db);
+        $week = (new DateTimeImmutable('now', new DateTimeZone('Europe/Stockholm')));
+        $week = $week->modify('-' . $week->format('w') . ' days')->format('Y-m-d');
+        $request = static function (string $method, string $path, ?array $body = null) use ($api, $token): array {
+            $headers = ['Authorization' => 'Bearer ' . $token];
+            if ($method === 'POST') {
+                $bytes = bin2hex(random_bytes(16));
+                $headers['Idempotency-Key'] = substr($bytes, 0, 8) . '-' . substr($bytes, 8, 4)
+                    . '-4' . substr($bytes, 13, 3) . '-a' . substr($bytes, 17, 3) . '-' . substr($bytes, 20, 12);
+            }
+            $response = $api->handle(
+                $method,
+                '/api/v1' . $path,
+                $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR),
+                $headers,
+                '127.0.0.1'
+            );
+            if ($response[0] < 200 || $response[0] >= 300) {
+                throw new RuntimeException('API benchmark request failed: ' . $path . ' ' . json_encode($response, JSON_THROW_ON_ERROR));
+            }
+            return $response[1];
+        };
+        $start = hrtime(true);
+        $plan = $request('POST', '/plans', ['week_start' => $week, 'part' => 1]);
+        $full = finishBenchmark($start);
+        $planId = DbValue::integer($plan['id']);
+        $slot = DbValue::rows($plan['slots'])[0];
+        $slotId = DbValue::integer($slot['id']);
+        $date = DbValue::text($slot['date']);
+        $start = hrtime(true);
+        $deck = $request('GET', '/plans/' . $planId . '/deck?date=' . $date);
+        $deckFetch = finishBenchmark($start);
+        $cards = DbValue::rows($deck['items']);
+        $first = DbValue::integer(DbValue::map($cards[0]['recipe'])['id']);
+        $second = DbValue::integer(DbValue::map($cards[1]['recipe'])['id']);
+        $start = hrtime(true);
+        $chosen = $request(
+            'POST',
+            '/plans/' . $planId . '/slots/' . $slotId . '/choose',
+            ['expected_version' => 1, 'recipe_id' => $first]
+        );
+        $choose = finishBenchmark($start);
+        $start = hrtime(true);
+        $request(
+            'POST',
+            '/plans/' . $planId . '/slots/' . $slotId . '/replace',
+            ['expected_version' => DbValue::integer($chosen['version']), 'recipe_id' => $second]
+        );
+        $replace = finishBenchmark($start);
+        echo json_encode(
+            ['candidate_count' => $count, 'rated_count' => $rated,
+            'database' => 'throwaway_mysql', 'api_full_plan' => $full, 'api_deck_fetch' => $deckFetch,
+            'api_choose' => $choose, 'api_replace' => $replace,
+            'api_target_met' => $deckFetch['total_ms'] < 100
+                && $choose['total_ms'] < 100 && $replace['total_ms'] < 100],
+            JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT
+        ) . PHP_EOL;
+        return;
+    }
     $manager = new PlanManager($db, $config, static function (string $phase, float $ms) use (&$phaseTimes): void {
         $phaseTimes[$phase] = round($ms, 2);
     });

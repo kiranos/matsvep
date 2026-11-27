@@ -60,7 +60,9 @@ final class PlanManager
             if ($state['slots'] === []) {
                 $this->writeOpenSlots(self::integer($planId), $householdId, $result, [], 'proposed');
             }
-            $this->markCarryoversPlaced($householdId, $weekStart, $part, $state['carryovers'], $result);
+            if ($state['slots'] === []) {
+                $this->markCarryoversPlaced($householdId, $weekStart, $part, $state['carryovers'], $result);
+            }
             return ['plan_id' => self::integer($planId),
                 'version' => self::intField($state['plan'], 'version')] + $result;
         });
@@ -92,6 +94,16 @@ final class PlanManager
     public function shuffle(int $planId, int $expectedVersion): array
     {
         return $this->change('shuffle', $planId, $expectedVersion);
+    }
+
+    /** @return PlanResult */
+    public function view(int $planId): array
+    {
+        return WriteTransaction::run($this->db, function () use ($planId): array {
+            $state = $this->loadState($planId);
+            return ['plan_id' => $planId, 'version' => self::intField($state['plan'], 'version')]
+                + $this->build($state);
+        });
     }
 
     /** @return PlanResult */
@@ -183,12 +195,11 @@ final class PlanManager
                 $chosenDates,
                 $replacedFrom
             );
-            $this->markCarryoversPlaced(
+            $this->markChosenCarryoversPlaced(
+                $planId,
                 self::intField($plan, 'household_id'),
                 self::stringField($plan, 'week_start'),
-                self::intField($plan, 'part'),
-                $state['carryovers'],
-                $result
+                self::intField($plan, 'part')
             );
             $update = $this->db->prepare('UPDATE plan SET version = version + 1, reshuffle_count = ?, seed = ? '
                 . 'WHERE id = ? AND version = ?');
@@ -460,6 +471,16 @@ final class PlanManager
                 $query->execute([$householdId, $weekStart, $part, $carryover['recipe_id']]);
             }
         }
+    }
+
+    private function markChosenCarryoversPlaced(int $planId, int $householdId, string $weekStart, int $part): void
+    {
+        $query = $this->db->prepare("UPDATE carryover c JOIN plan_slot s "
+            . "ON s.household_id = c.household_id AND s.recipe_id = c.recipe_id "
+            . "AND s.plan_id = ? AND s.status = 'chosen' "
+            . "SET c.status = 'placed' WHERE c.household_id = ? AND c.target_week = ? "
+            . "AND c.target_part = ? AND c.status = 'pending'");
+        $query->execute([$planId, $householdId, $weekStart, $part]);
     }
 
     private function configVersion(): int
