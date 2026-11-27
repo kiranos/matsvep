@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Matsvep\Database\MigrationRunner;
+use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -56,6 +57,7 @@ try {
         PDO::ATTR_EMULATE_PREPARES => false,
         \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
     ]);
+    DatabaseConnection::setUtc($db);
     $runner = new MigrationRunner($db, __DIR__ . '/../migrations', $config['DB_NAME']);
     foreach ($runner->run() as $line) {
         echo $line, PHP_EOL;

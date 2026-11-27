@@ -59,7 +59,7 @@ paths:
       operationId: searchRecipes
       tags: [Recipes]
       summary: Search the local recipe catalogue
-      description: Returns active recipes matching title or ingredient text. Search uses cursor pagination.
+      description: Returns active, non-blocked recipes matching title or ingredient text, with this household's rating and wishlist flag. Search uses cursor pagination.
       parameters:
         - name: q
           in: query
@@ -89,6 +89,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   "/auth/register":
     post:
       operationId: registerMember
@@ -1008,7 +1010,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_request, validation_failed, invalid_credentials, access_token_expired, refresh_token_invalid, forbidden, not_found, invite_invalid, invite_expired, invite_used, registration_closed, email_taken, internal_error, idempotency_key_reused, plan_version_conflict, plan_not_ready, slot_not_open, recipe_blocked, recipe_in_cooldown, already_answered, invalid_cursor, no_candidates, rate_limited]
+          enum: [invalid_request, validation_failed, invalid_credentials, access_token_expired, refresh_token_invalid, household_required, forbidden, not_found, invite_invalid, invite_expired, invite_used, registration_closed, email_taken, internal_error, idempotency_key_reused, plan_version_conflict, plan_not_ready, slot_not_open, recipe_blocked, recipe_in_cooldown, already_answered, invalid_cursor, no_candidates, rate_limited]
         params:
           type: object
           additionalProperties: true
@@ -1206,12 +1208,12 @@ components:
                 type: string
     RecipeSearchResults:
       type: object
-      required: [items]
+      required: [items, next_cursor]
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/RecipeSummary'
+            $ref: '#/components/schemas/HouseholdRecipeSummary'
         next_cursor:
           type: string
           nullable: true
@@ -2124,15 +2126,28 @@ components:
         items:
           type: array
           items:
-            "$ref": "#/components/schemas/RecipeSummary"
+            "$ref": "#/components/schemas/HouseholdRecipeSummary"
         next_cursor:
           type: string
           nullable: true
+    HouseholdRecipeSummary:
+      allOf:
+        - "$ref": "#/components/schemas/RecipeSummary"
+        - type: object
+          required: [rating, wishlist]
+          properties:
+            rating:
+              type: integer
+              minimum: 1
+              maximum: 5
+              nullable: true
+            wishlist:
+              type: boolean
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
-      required: false
+      required: true
       description: "Client UUID, scoped to user and endpoint. A repeated key with the same request body returns the original status and body for the configured retention window; a changed body returns HTTP 422 idempotency_key_reused. Replay is checked before plan version."
       schema:
         type: string
