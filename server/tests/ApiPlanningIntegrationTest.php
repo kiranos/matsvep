@@ -356,7 +356,9 @@ final class ApiPlanningIntegrationTest extends TestCase
 
     public function testCookedAnswerRequiresUserRatingAfterUnconfirmedDinner(): void
     {
-        $recipes = self::$db->query('SELECT id FROM recipe ORDER BY id LIMIT 2')->fetchAll(PDO::FETCH_COLUMN);
+        $recipeQuery = self::$db->prepare('SELECT id FROM recipe ORDER BY id LIMIT 2');
+        $recipeQuery->execute();
+        $recipes = $recipeQuery->fetchAll(PDO::FETCH_COLUMN);
         self::assertCount(2, $recipes);
         $plan = self::$db->prepare("INSERT INTO plan (household_id, week_start, part, days, seed, config_version, status) VALUES (?, ?, 1, ?, ?, 1, 'ready')");
         $slot = self::$db->prepare("INSERT INTO plan_slot (plan_id, household_id, date, day_profile, recipe_id, status) VALUES (?, ?, ?, 'weekday_leftovers', ?, 'chosen')");
