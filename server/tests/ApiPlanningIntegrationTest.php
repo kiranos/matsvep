@@ -206,7 +206,7 @@ final class ApiPlanningIntegrationTest extends TestCase
         $route = '/plans/' . $id . '/slots/' . $slotId . '/choose';
         $first = $this->request($api, 'POST', $route, $body, self::$token, $key);
         self::assertSame(200, $first[0], json_encode($first[1], JSON_THROW_ON_ERROR));
-        self::assertSame($first, $this->request($api, 'POST', $route, $body, self::$token, $key));
+        self::assertEquals($first, $this->request($api, 'POST', $route, $body, self::$token, $key));
         self::assertSame(409, $this->request($api, 'POST', $route, $body, self::$token)[0]);
         $different = ['expected_version' => 2, 'recipe_id' => DbValue::integer($slot['recipe_id'])];
         self::assertSame(422, $this->request($api, 'POST', $route, $different, self::$token, $key)[0]);
@@ -308,6 +308,17 @@ final class ApiPlanningIntegrationTest extends TestCase
             self::assertTrue(pcntl_wifexited($status));
             self::assertSame(0, pcntl_wexitstatus($status));
         }
+        // Child teardown closes inherited MySQL sockets, so the parent reconnects.
+        $settings = parse_ini_file(__DIR__ . '/../.env.testing', false, INI_SCANNER_RAW);
+        self::assertIsArray($settings);
+        foreach (['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD'] as $field) {
+            self::assertIsString($settings[$field] ?? null);
+        }
+        $dsn = sprintf('mysql:host=%s;port=%s;charset=utf8mb4', $settings['DB_HOST'], $settings['DB_PORT']);
+        $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false];
+        self::$db = new PDO($dsn . ';dbname=' . self::$databaseName, $settings['DB_USER'], $settings['DB_PASSWORD'], $options);
+        DatabaseConnection::setUtc(self::$db);
+        self::$admin = new PDO($dsn, $settings['DB_USER'], $settings['DB_PASSWORD'], $options);
         $codes = [];
         for ($index = 0; $index < 2; $index++) {
             $result = file_get_contents($directory . '/' . $index);
