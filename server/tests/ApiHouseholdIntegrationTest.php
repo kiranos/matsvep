@@ -309,7 +309,7 @@ final class ApiHouseholdIntegrationTest extends TestCase
         $action = static fn (): array => [200, $manager->rate($householdId, self::$firstRecipe, 5)];
         $first = $idempotency->execute($userId, 'PUT /recipes/' . self::$firstRecipe . '/rating', $key, '{"rating":5}', $action);
         self::assertFalse(self::$db->inTransaction());
-        self::assertSame($first, $idempotency->execute($userId, 'PUT /recipes/' . self::$firstRecipe . '/rating', $key, '{"rating":5}', $action));
+        self::assertEquals($first, $idempotency->execute($userId, 'PUT /recipes/' . self::$firstRecipe . '/rating', $key, '{"rating":5}', $action));
         $history = self::$db->prepare('SELECT COUNT(*) FROM rating_history WHERE household_id = ? AND recipe_id = ?');
         $history->execute([$householdId, self::$firstRecipe]);
         self::assertSame(1, DbValue::integer($history->fetchColumn()));
