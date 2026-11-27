@@ -7,6 +7,7 @@ use Matsvep\Ingest\Adapter\KoketCrawlRunner;
 use Matsvep\Ingest\Adapter\KoketPilotReport;
 use Matsvep\Ingest\Http\PoliteFetcher;
 use Matsvep\Ingest\Http\StreamHttpClient;
+use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -65,6 +66,7 @@ try {
         PDO::ATTR_EMULATE_PREPARES => false,
         \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
     ]);
+    DatabaseConnection::setUtc($db);
 
     $sourceQuery = $db->prepare(
         "SELECT id, base_url, crawl_delay_s FROM source WHERE adapter = 'koket' AND enabled = TRUE"

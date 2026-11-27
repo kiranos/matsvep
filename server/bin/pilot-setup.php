@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Matsvep\Database\MigrationRunner;
+use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -37,12 +38,14 @@ try {
         \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
     ];
     $admin = new PDO($dsn, $config['DB_USER'], $config['DB_PASSWORD'], $options);
+    DatabaseConnection::setUtc($admin);
     $databaseName = $config['DB_NAME'];
     $create = $admin->prepare(
         "CREATE DATABASE IF NOT EXISTS `$databaseName` CHARACTER SET utf8mb4 COLLATE utf8mb4_sv_0900_ai_ci"
     );
     $create->execute();
     $db = new PDO($dsn . ';dbname=' . $databaseName, $config['DB_USER'], $config['DB_PASSWORD'], $options);
+    DatabaseConnection::setUtc($db);
     $migrations = (new MigrationRunner($db, __DIR__ . '/../migrations', $databaseName))->run();
     $enable = $db->prepare("UPDATE source SET enabled = TRUE WHERE adapter = 'koket' AND base_url = ?");
     $enable->execute(['https://www.koket.se']);

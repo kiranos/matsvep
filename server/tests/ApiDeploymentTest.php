@@ -39,4 +39,13 @@ final class ApiDeploymentTest extends TestCase
         self::assertStringContainsString('bin/purge-api-state.php', $service);
         self::assertStringContainsString('OnCalendar=*-*-* 00:15:00', $timer);
     }
+
+    public function testCliDatabaseConnectionsUseUtc(): void
+    {
+        foreach (['crawl-koket.php' => 1, 'migrate.php' => 1, 'pilot-setup.php' => 2] as $script => $expected) {
+            $contents = file_get_contents(__DIR__ . '/../bin/' . $script);
+            self::assertIsString($contents);
+            self::assertSame($expected, substr_count($contents, 'DatabaseConnection::setUtc('), $script);
+        }
+    }
 }

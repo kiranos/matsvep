@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Matsvep\Engine;
 
+use Matsvep\Database\WriteTransaction;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
 use PDO;
 use RuntimeException;
-use Throwable;
 
 final class Learner
 {
@@ -391,21 +391,6 @@ final class Learner
      */
     private function transaction(callable $operation): mixed
     {
-        $owned = !$this->db->inTransaction();
-        if ($owned) {
-            $this->db->beginTransaction();
-        }
-        try {
-            $result = $operation();
-            if ($owned) {
-                $this->db->commit();
-            }
-            return $result;
-        } catch (Throwable $error) {
-            if ($owned) {
-                $this->db->rollBack();
-            }
-            throw $error;
-        }
+        return WriteTransaction::run($this->db, $operation);
     }
 }

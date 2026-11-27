@@ -60,36 +60,69 @@ final class RecipeReader
     }
 
     /** @return array{items:list<array<string,mixed>>,next_cursor:?string} */
-    public function search(string $text, ?int $sourceId, ?string $cursor): array
+    public function search(int $householdId, string $text, ?int $sourceId, ?string $cursor): array
     {
         if (trim($text) === '') {
             throw new ApiError(400, 'invalid_request');
         }
-        $after = 0;
-        if ($cursor !== null) {
-            $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
-            if ($decoded === false || preg_match('/^[1-9][0-9]*$/', $decoded) !== 1) {
-                throw new ApiError(400, 'invalid_cursor');
-            }
-            $after = (int) $decoded;
-        }
+        $after = $this->cursor($cursor);
         $pageSize = $this->config->integer('api.search_page_size');
-        $query = $this->db->prepare('SELECT r.*, s.id AS s_id, s.name AS s_name, s.base_url AS s_base_url, s.display_mode AS s_display_mode, g.id AS g_id, g.core_name AS g_core_name, g.main_protein AS g_main_protein, g.manual_override AS g_manual_override FROM recipe r JOIN source s ON s.id = r.source_id LEFT JOIN dish_group g ON g.id = r.dish_group_id WHERE r.active = TRUE AND r.id > ? AND (? IS NULL OR r.source_id = ?) AND (r.title LIKE ? OR EXISTS (SELECT 1 FROM recipe_ingredient ri WHERE ri.recipe_id = r.id AND ri.raw_text LIKE ?)) ORDER BY r.id LIMIT ?');
+        $query = $this->db->prepare('SELECT r.*, s.id AS s_id, s.name AS s_name, s.base_url AS s_base_url, s.display_mode AS s_display_mode, g.id AS g_id, g.core_name AS g_core_name, g.main_protein AS g_main_protein, g.manual_override AS g_manual_override, h.rating AS household_rating, h.wishlist AS household_wishlist FROM recipe r JOIN source s ON s.id = r.source_id LEFT JOIN dish_group g ON g.id = r.dish_group_id LEFT JOIN household_recipe h ON h.household_id = ? AND h.recipe_id = r.id WHERE r.active = TRUE AND (h.status IS NULL OR h.status <> \'blocked\') AND r.id > ? AND (? IS NULL OR r.source_id = ?) AND (r.title LIKE ? OR EXISTS (SELECT 1 FROM recipe_ingredient ri WHERE ri.recipe_id = r.id AND ri.raw_text LIKE ?)) ORDER BY r.id LIMIT ?');
         $needle = '%' . addcslashes($text, '%_\\') . '%';
-        $query->bindValue(1, $after, PDO::PARAM_INT);
-        $query->bindValue(2, $sourceId, $sourceId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $query->bindValue(1, $householdId, PDO::PARAM_INT);
+        $query->bindValue(2, $after, PDO::PARAM_INT);
         $query->bindValue(3, $sourceId, $sourceId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
-        $query->bindValue(4, $needle);
+        $query->bindValue(4, $sourceId, $sourceId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
         $query->bindValue(5, $needle);
-        $query->bindValue(6, $pageSize + 1, PDO::PARAM_INT);
+        $query->bindValue(6, $needle);
+        $query->bindValue(7, $pageSize + 1, PDO::PARAM_INT);
         $query->execute();
-        $rows = DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC));
+        return $this->page(DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC)), $pageSize);
+    }
+
+    /** @return array{items:list<array<string,mixed>>,next_cursor:?string} */
+    public function wishlist(int $householdId, ?string $cursor): array
+    {
+        $after = $this->cursor($cursor);
+        $pageSize = $this->config->integer('api.search_page_size');
+        $query = $this->db->prepare('SELECT r.*, s.id AS s_id, s.name AS s_name, s.base_url AS s_base_url, s.display_mode AS s_display_mode, g.id AS g_id, g.core_name AS g_core_name, g.main_protein AS g_main_protein, g.manual_override AS g_manual_override, h.rating AS household_rating, h.wishlist AS household_wishlist FROM household_recipe h JOIN recipe r ON r.id = h.recipe_id JOIN source s ON s.id = r.source_id LEFT JOIN dish_group g ON g.id = r.dish_group_id WHERE h.household_id = ? AND h.wishlist = TRUE AND h.status <> \'blocked\' AND r.active = TRUE AND r.id > ? ORDER BY r.id LIMIT ?');
+        $query->bindValue(1, $householdId, PDO::PARAM_INT);
+        $query->bindValue(2, $after, PDO::PARAM_INT);
+        $query->bindValue(3, $pageSize + 1, PDO::PARAM_INT);
+        $query->execute();
+        return $this->page(DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC)), $pageSize);
+    }
+
+    /** @param list<array<string,mixed>> $rows
+     *  @return array{items:list<array<string,mixed>>,next_cursor:?string} */
+    private function page(array $rows, int $pageSize): array
+    {
         $more = count($rows) > $pageSize;
         $rows = array_slice($rows, 0, $pageSize);
-        $items = array_map($this->summary(...), $rows);
+        $items = array_map($this->householdSummary(...), $rows);
         $last = $rows === [] ? null : $rows[array_key_last($rows)];
         $next = $more && $last !== null ? rtrim(strtr(base64_encode((string) DbValue::integer($last['id'])), '+/', '-_'), '=') : null;
         return ['items' => $items, 'next_cursor' => $next];
+    }
+
+    private function cursor(?string $cursor): int
+    {
+        if ($cursor === null) {
+            return 0;
+        }
+        $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
+        if ($decoded === false || preg_match('/^[1-9][0-9]*$/', $decoded) !== 1) {
+            throw new ApiError(400, 'invalid_cursor');
+        }
+        return (int) $decoded;
+    }
+
+    /** @param array<string,mixed> $row
+     *  @return array<string,mixed> */
+    private function householdSummary(array $row): array
+    {
+        return $this->summary($row) + ['rating' => $row['household_rating'] === null ? null : DbValue::integer($row['household_rating']),
+            'wishlist' => $row['household_wishlist'] !== null && DbValue::integer($row['household_wishlist']) === 1];
     }
 
     /** @param array<string,mixed> $row
