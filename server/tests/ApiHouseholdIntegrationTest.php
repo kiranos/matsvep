@@ -136,10 +136,15 @@ final class ApiHouseholdIntegrationTest extends TestCase
         $this->assertContract($api, $schema, 'PATCH', '/devices/current', ['push_token' => 'synthetic-push-token']);
         $this->assertContract($api, $schema, 'GET', '/onboarding/questions', null);
         $this->assertContract($api, $schema, 'GET', '/onboarding/answers', null);
-        $this->assertContract($api, $schema, 'PUT', '/onboarding/answers/dish_rating',
+        $this->assertContract(
+            $api,
+            $schema,
+            'PUT',
+            '/onboarding/answers/dish_rating',
             ['answer' => ['ratings' => [['recipe_id' => self::$firstRecipe, 'choice' => 'favourite']]]],
-            '/onboarding/answers/{question_id}');
-        $this->assertContract($api, $schema, 'POST', '/onboarding/complete', []);
+            '/onboarding/answers/{question_id}'
+        );
+        $this->assertContract($api, $schema, 'POST', '/onboarding/complete', null);
         $this->assertContract($api, $schema, 'PUT', '/recipes/' . self::$firstRecipe . '/rating', ['rating' => 4], '/recipes/{id}/rating');
         $this->assertContract($api, $schema, 'PUT', '/recipes/' . self::$firstRecipe . '/wishlist', ['wishlist' => true], '/recipes/{id}/wishlist');
         $this->assertContract($api, $schema, 'PUT', '/recipes/' . self::$firstRecipe . '/library-status', ['status' => 'library'], '/recipes/{id}/library-status');
@@ -329,11 +334,16 @@ final class ApiHouseholdIntegrationTest extends TestCase
     private function request(ApiKernel $api, string $method, string $route, ?array $body, string $token, bool $withKey = true): array
     {
         $headers = ['Authorization' => 'Bearer ' . $token];
-        if ($withKey && $body !== null) {
+        if ($withKey && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
             $headers['Idempotency-Key'] = sprintf('123e4567-e89b-42d3-a456-%012d', random_int(1, 999999999999));
         }
-        return $api->handle($method, '/api/v1' . $route,
-            $body === null ? '' : ($body === [] ? '{}' : json_encode($body, JSON_THROW_ON_ERROR)), $headers, '127.0.8.10');
+        return $api->handle(
+            $method,
+            '/api/v1' . $route,
+            $body === null ? '' : ($body === [] ? '{}' : json_encode($body, JSON_THROW_ON_ERROR)),
+            $headers,
+            '127.0.8.10'
+        );
     }
 
     /** @param array<string,mixed>|null $body */

@@ -60,7 +60,8 @@ final class ApiKernel
             return [200, ['status' => 'ok']];
         }
         $body = [];
-        if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+        if (in_array($method, ['POST', 'PUT', 'PATCH'], true)
+            && !($rawBody === '' && in_array($route, ['/auth/logout', '/onboarding/complete'], true))) {
             $decoded = json_decode($rawBody);
             if (!$decoded instanceof \stdClass) {
                 throw new ApiError(400, 'invalid_request');
@@ -111,34 +112,64 @@ final class ApiKernel
         }
         if ($route === '/household' && $method === 'PATCH') {
             $householdId = $this->householdId($actor);
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [200, $this->households->update($householdId, $body)]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [200, $this->households->update($householdId, $body)]
+            );
         }
         if ($route === '/household/invites' && $method === 'POST') {
             $householdId = $this->householdId($actor);
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [201, $this->households->createInvite($householdId, $actor['user_id'])]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [201, $this->households->createInvite($householdId, $actor['user_id'])]
+            );
         }
         if ($route === '/household/settings' && $method === 'GET') {
             return [200, $this->households->settings($this->householdId($actor))];
         }
         if ($route === '/household/settings' && $method === 'PATCH') {
             $householdId = $this->householdId($actor);
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [200, $this->households->updateSettings($householdId, $body)]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [200, $this->households->updateSettings($householdId, $body)]
+            );
         }
         if ($route === '/household/day-profiles' && $method === 'GET') {
             return [200, $this->households->dayProfiles($this->householdId($actor))];
         }
         if ($route === '/household/day-profiles' && $method === 'PUT') {
             $householdId = $this->householdId($actor);
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [200, $this->households->setDayProfiles($householdId, $body)]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [200, $this->households->setDayProfiles($householdId, $body)]
+            );
         }
         if ($route === '/devices/current' && $method === 'PATCH') {
             $householdId = $this->householdId($actor);
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [200, $this->households->updateDevice($householdId, $actor['user_id'], $actor['device_id'], $body)]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [200, $this->households->updateDevice($householdId, $actor['user_id'], $actor['device_id'], $body)]
+            );
         }
         if ($route === '/onboarding/questions' && $method === 'GET') {
             $this->householdId($actor);
@@ -149,43 +180,73 @@ final class ApiKernel
         }
         if (preg_match('#^/onboarding/answers/([a-z_]+)$#', $route, $matches) === 1 && $method === 'PUT') {
             $householdId = $this->householdId($actor);
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [200, $this->onboarding->saveAnswer($householdId, $matches[1], $body)]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [200, $this->onboarding->saveAnswer($householdId, $matches[1], $body)]
+            );
         }
         if ($route === '/onboarding/complete' && $method === 'POST') {
             $householdId = $this->householdId($actor);
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [200, $this->onboarding->complete($householdId)]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [200, $this->onboarding->complete($householdId)]
+            );
         }
         if (preg_match('#^/recipes/([1-9][0-9]*)/rating$#', $route, $matches) === 1 && $method === 'PUT') {
             $householdId = $this->householdId($actor);
             $recipeId = (int) $matches[1];
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
                 function () use ($householdId, $recipeId, $body): array {
                     $rating = $body['rating'] ?? null;
                     if (!is_int($rating) || $rating < 1 || $rating > 5) {
                         throw new ApiError(422, 'validation_failed');
                     }
                     return [200, $this->householdRecipes->rate($householdId, $recipeId, $rating)];
-                });
+                }
+            );
         }
         if (preg_match('#^/recipes/([1-9][0-9]*)/wishlist$#', $route, $matches) === 1 && $method === 'PUT') {
             $householdId = $this->householdId($actor);
             $recipeId = (int) $matches[1];
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
                 function () use ($householdId, $recipeId, $body): array {
                     $wishlisted = $body['wishlist'] ?? null;
                     if (!is_bool($wishlisted)) {
                         throw new ApiError(422, 'validation_failed');
                     }
                     return [200, $this->householdRecipes->wishlist($householdId, $recipeId, $wishlisted)];
-                });
+                }
+            );
         }
         if (preg_match('#^/recipes/([1-9][0-9]*)/library-status$#', $route, $matches) === 1 && $method === 'PUT') {
             $householdId = $this->householdId($actor);
             $recipeId = (int) $matches[1];
-            return $this->memberWrite($actor, $method, $route, $rawBody, $headers,
-                fn (): array => [200, $this->householdRecipes->libraryStatus($householdId, $recipeId, $this->requiredString($body, 'status'))]);
+            return $this->memberWrite(
+                $actor,
+                $method,
+                $route,
+                $rawBody,
+                $headers,
+                fn (): array => [200, $this->householdRecipes->libraryStatus($householdId, $recipeId, $this->requiredString($body, 'status'))]
+            );
         }
         if ($route === '/wishlist' && $method === 'GET') {
             parse_str((string) parse_url($uri, PHP_URL_QUERY), $query);
