@@ -75,7 +75,11 @@ final class OnboardingManager
         }
         $answer = $input['answer'] ?? null;
         if (array_keys($input) !== ['answer'] || !is_array($answer) || array_is_list($answer)
-            || !$this->validAnswer($questionId, $answer)) {
+            || array_filter(array_keys($answer), 'is_string') !== array_keys($answer)) {
+            throw new ApiError(422, 'validation_failed');
+        }
+        /** @var array<string,mixed> $answer */
+        if (!$this->validAnswer($questionId, $answer)) {
             throw new ApiError(422, 'validation_failed');
         }
         $this->requireReferences($questionId, $answer);
@@ -146,7 +150,7 @@ final class OnboardingManager
     {
         if ($questionId === 'dish_rating') {
             $query = $this->db->prepare('SELECT 1 FROM recipe WHERE id = ? AND active = TRUE AND is_dinner_candidate = TRUE');
-            foreach ($answer['ratings'] as $item) {
+            foreach (DbValue::rows($answer['ratings']) as $item) {
                 $query->execute([$item['recipe_id']]);
                 if ($query->fetchColumn() === false) {
                     throw new ApiError(422, 'validation_failed');
@@ -155,7 +159,9 @@ final class OnboardingManager
         }
         if ($questionId === 'disliked_ingredients') {
             $query = $this->db->prepare('SELECT 1 FROM ingredient WHERE id = ?');
-            foreach ($answer['ingredient_ids'] as $id) {
+            /** @var list<int> $ids */
+            $ids = $answer['ingredient_ids'];
+            foreach ($ids as $id) {
                 $query->execute([$id]);
                 if ($query->fetchColumn() === false) {
                     throw new ApiError(422, 'validation_failed');

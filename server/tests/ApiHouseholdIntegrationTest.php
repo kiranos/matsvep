@@ -183,6 +183,7 @@ final class ApiHouseholdIntegrationTest extends TestCase
         self::assertCount(1, DbValue::rows($firstSearch[1]['items']));
         $secondSearch = $this->request($api, 'GET', '/recipes/search?q=Synthetic', null, self::$secondToken);
         self::assertCount(2, DbValue::rows($secondSearch[1]['items']));
+        self::assertNotContains(self::$inactiveRecipe, array_column(DbValue::rows($secondSearch[1]['items']), 'id'));
         $firstWishlist = $this->request($api, 'GET', '/wishlist', null, self::$firstToken);
         self::assertSame([], $firstWishlist[1]['items']);
     }

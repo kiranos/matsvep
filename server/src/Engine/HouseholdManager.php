@@ -54,7 +54,11 @@ final class HouseholdManager
     public function createInvite(int $householdId, int $userId): array
     {
         return WriteTransaction::run($this->db, function () use ($householdId, $userId): array {
-            $code = bin2hex(random_bytes($this->config->integer('auth.token_bytes')));
+            $tokenBytes = $this->config->integer('auth.token_bytes');
+            if ($tokenBytes < 1) {
+                throw new \RuntimeException('Invalid token byte count.');
+            }
+            $code = bin2hex(random_bytes($tokenBytes));
             $hours = $this->config->integer('household.invite_ttl_hours');
             $insert = $this->db->prepare('INSERT INTO household_invite (household_id, created_by, code_hash, expires_at) VALUES (?, ?, ?, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? HOUR))');
             $insert->execute([$householdId, $userId, hash('sha256', $code), $hours]);
