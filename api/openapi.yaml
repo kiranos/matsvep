@@ -2024,12 +2024,11 @@ components:
           minimum: 1
           maximum: 5
       additionalProperties: false
-      description: "Rating is required when the recipe has never been rated; otherwise it may confirm or change the existing rating."
+      description: "A rating is required on the recipe's first cook. Later cooks do not ask for another rating; ratings can be changed through the rating endpoint."
     NotCookedAnswerRequest:
       type: object
       required:
         - outcome
-        - not_cooked_action
       properties:
         outcome:
           type: string
@@ -2041,6 +2040,7 @@ components:
             - carryover
             - wishlist
             - remove
+      description: "Omitting not_cooked_action carries the recipe into the next planning by default."
       additionalProperties: false
     AfterDinnerRequest:
       oneOf:

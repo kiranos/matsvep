@@ -59,6 +59,28 @@ final class RecipeReader
         return $recipe;
     }
 
+    /** @param list<int> $ids
+     *  @return array<int,array<string,mixed>> */
+    public function summaries(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $query = $this->db->prepare('SELECT r.*, s.id AS s_id, s.name AS s_name, '
+            . 's.base_url AS s_base_url, s.display_mode AS s_display_mode, '
+            . 'g.id AS g_id, g.core_name AS g_core_name, g.main_protein AS g_main_protein, '
+            . 'g.manual_override AS g_manual_override FROM recipe r '
+            . 'JOIN source s ON s.id = r.source_id LEFT JOIN dish_group g ON g.id = r.dish_group_id '
+            . 'WHERE r.id IN (' . $placeholders . ') AND r.active = TRUE');
+        $query->execute($ids);
+        $summaries = [];
+        foreach (DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC)) as $row) {
+            $summaries[DbValue::integer($row['id'])] = $this->summary($row);
+        }
+        return $summaries;
+    }
+
     /** @return array{items:list<array<string,mixed>>,next_cursor:?string} */
     public function search(int $householdId, string $text, ?int $sourceId, ?string $cursor): array
     {

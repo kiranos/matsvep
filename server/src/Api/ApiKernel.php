@@ -9,6 +9,7 @@ use Matsvep\Engine\HouseholdManager;
 use Matsvep\Engine\HouseholdRecipeManager;
 use Matsvep\Engine\Learner;
 use Matsvep\Engine\OnboardingManager;
+use Matsvep\Engine\PlanningService;
 use PDO;
 use Throwable;
 
@@ -20,6 +21,7 @@ final class ApiKernel
     private HouseholdManager $households;
     private HouseholdRecipeManager $householdRecipes;
     private OnboardingManager $onboarding;
+    private PlanningService $planning;
 
     public function __construct(PDO $db)
     {
@@ -31,6 +33,7 @@ final class ApiKernel
         $this->households = new HouseholdManager($db, $config);
         $this->householdRecipes = new HouseholdRecipeManager($db, $learner);
         $this->onboarding = new OnboardingManager($db, $learner);
+        $this->planning = new PlanningService($db, $config, $this->recipes, $this->householdRecipes);
     }
 
     /** @param array<string,string> $headers
@@ -128,6 +131,16 @@ final class ApiKernel
             ['PUT', '#^/recipes/([1-9][0-9]*)/library-status$#', 'library_update', true, true, true],
             ['GET', '#^/wishlist$#', 'wishlist_get', true, true, false],
             ['GET', '#^/recipes/search$#', 'search', true, true, false],
+            ['GET', '#^/plans$#', 'plans_list', true, true, false],
+            ['POST', '#^/plans$#', 'plan_create', true, true, true],
+            ['GET', '#^/plans/([1-9][0-9]*)$#', 'plan_get', true, true, false],
+            ['GET', '#^/plans/([1-9][0-9]*)/deck$#', 'deck_get', true, true, false],
+            ['POST', '#^/plans/([1-9][0-9]*)/slots/([1-9][0-9]*)/choose$#', 'plan_choose', true, true, true],
+            ['POST', '#^/plans/([1-9][0-9]*)/slots/([1-9][0-9]*)/replace$#', 'plan_replace', true, true, true],
+            ['POST', '#^/plans/([1-9][0-9]*)/autofill$#', 'plan_autofill', true, true, true],
+            ['POST', '#^/plans/([1-9][0-9]*)/shuffle$#', 'plan_shuffle', true, true, true],
+            ['POST', '#^/plans/([1-9][0-9]*)/swipes$#', 'plan_swipe', true, true, true],
+            ['POST', '#^/plans/([1-9][0-9]*)/slots/([1-9][0-9]*)/answer$#', 'plan_answer', true, true, true],
             ['GET', '#^/recipes/([1-9][0-9]*)$#', 'recipe_get', true, false, false],
         ];
     }
@@ -188,6 +201,16 @@ final class ApiKernel
             'library_update' => [200, $this->householdRecipes->libraryStatus($householdId, (int) $pathParams[1], $this->requiredString($body, 'status'))],
             'wishlist_get' => $this->getWishlist($householdId, $uri),
             'search' => $this->search($householdId, $uri),
+            'plans_list' => [200, $this->planning->list($householdId, $this->queryString($uri, 'cursor'))],
+            'plan_create' => [201, $this->planning->create($householdId, $body)],
+            'plan_get' => [200, $this->planning->get($householdId, (int) $pathParams[1])],
+            'deck_get' => $this->getDeck($householdId, (int) $pathParams[1], $uri),
+            'plan_choose' => [200, $this->planning->change($householdId, (int) $pathParams[1], (int) $pathParams[2], 'choose', $body)],
+            'plan_replace' => [200, $this->planning->change($householdId, (int) $pathParams[1], (int) $pathParams[2], 'replace', $body)],
+            'plan_autofill' => [200, $this->planning->change($householdId, (int) $pathParams[1], null, 'autofill', $body)],
+            'plan_shuffle' => [200, $this->planning->change($householdId, (int) $pathParams[1], null, 'shuffle', $body)],
+            'plan_swipe' => [201, $this->planning->swipe($householdId, (int) $pathParams[1], $body)],
+            'plan_answer' => [200, $this->planning->answer($householdId, (int) $pathParams[1], (int) $pathParams[2], $body)],
             'recipe_get' => [200, $this->recipes->get((int) $pathParams[1])],
             default => throw new \LogicException('Unknown authenticated API route.'),
         };
@@ -252,6 +275,26 @@ final class ApiKernel
             throw new ApiError(400, 'invalid_request');
         }
         return [200, $this->recipes->search($householdId, $q, $source === null ? null : (int) $source, $cursor)];
+    }
+
+    /** @return array{0:int,1:array<string,mixed>} */
+    private function getDeck(int $householdId, int $planId, string $uri): array
+    {
+        $date = $this->queryString($uri, 'date');
+        if ($date === null) {
+            throw new ApiError(400, 'invalid_request');
+        }
+        return [200, $this->planning->deck($householdId, $planId, $date, $this->queryString($uri, 'cursor'))];
+    }
+
+    private function queryString(string $uri, string $key): ?string
+    {
+        parse_str((string) parse_url($uri, PHP_URL_QUERY), $query);
+        $value = $query[$key] ?? null;
+        if ($value !== null && !is_string($value)) {
+            throw new ApiError(400, 'invalid_request');
+        }
+        return $value;
     }
 
     /** @param array{user_id:int,device_id:int,role:string,household_id:?int} $actor */

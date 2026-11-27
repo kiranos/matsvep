@@ -95,6 +95,16 @@ final class PlanManager
     }
 
     /** @return PlanResult */
+    public function view(int $planId): array
+    {
+        return WriteTransaction::run($this->db, function () use ($planId): array {
+            $state = $this->loadState($planId);
+            return ['plan_id' => $planId, 'version' => self::intField($state['plan'], 'version')]
+                + $this->build($state);
+        });
+    }
+
+    /** @return PlanResult */
     private function change(string $action, int $planId, int $expectedVersion, ?string $date = null, ?int $recipeId = null): array
     {
         $writeStarted = 0;

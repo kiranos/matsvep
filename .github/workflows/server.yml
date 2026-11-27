@@ -62,3 +62,6 @@ jobs:
       - name: Database-backed planning benchmark
         working-directory: server
         run: php bin/benchmark-plan-database.php --candidates=16365 --rated=100
+      - name: API planning benchmark
+        working-directory: server
+        run: php bin/benchmark-plan-database.php --api --candidates=16365 --rated=100
