@@ -2050,7 +2050,7 @@ components:
           minimum: 1
           maximum: 5
       additionalProperties: false
-      description: "A rating is required on the recipe's first cook. Later cooks do not ask for another rating; ratings can be changed through the rating endpoint."
+      description: "A rating is required on a cooked answer until the household has a user rating for the recipe. Onboarding ratings and unconfirmed earlier dinners do not remove this requirement. Later ratings can be changed through the rating endpoint."
     NotCookedAnswerRequest:
       type: object
       required:
