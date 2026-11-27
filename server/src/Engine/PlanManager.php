@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Engine;
 
+use Matsvep\Database\WriteTransaction;
 use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -11,7 +12,6 @@ use InvalidArgumentException;
 use PDO;
 use PDOStatement;
 use RuntimeException;
-use Throwable;
 
 /** @phpstan-type PlanCard array{recipe_id: int, kind: string, score: float, explanation: array<string, mixed>}
  *  @phpstan-type PlanResult array{plan_id: int, version: int, slots: array<string, PlanCard>, decks: array<string, list<PlanCard>>}
@@ -36,8 +36,8 @@ final class PlanManager
         if ($part < 1 || $part > 2 || $dates === [] || count(array_unique($dates)) !== count($dates)) {
             throw new InvalidArgumentException('Invalid planning days.');
         }
-        $this->db->beginTransaction();
-        try {
+        $writeStarted = 0;
+        $plan = WriteTransaction::run($this->db, function () use ($householdId, $weekStart, $part, $dates, &$writeStarted): array {
             $query = $this->db->prepare('SELECT id FROM plan WHERE household_id = ? AND week_start = ? AND part = ? FOR UPDATE');
             $query->execute([$householdId, $weekStart, $part]);
             $planId = $query->fetchColumn();
@@ -56,19 +56,18 @@ final class PlanManager
             $started = hrtime(true);
             $result = $this->build($state);
             $this->observe('build', $started);
-            $started = hrtime(true);
+            $writeStarted = (int) hrtime(true);
             if ($state['slots'] === []) {
                 $this->writeOpenSlots(self::integer($planId), $householdId, $result, [], 'proposed');
             }
             $this->markCarryoversPlaced($householdId, $weekStart, $part, $state['carryovers'], $result);
-            $this->db->commit();
-            $this->observe('write_and_commit', $started);
             return ['plan_id' => self::integer($planId),
                 'version' => self::intField($state['plan'], 'version')] + $result;
-        } catch (Throwable $error) {
-            $this->db->rollBack();
-            throw $error;
+        });
+        if ($writeStarted > 0) {
+            $this->observe('write_and_commit', $writeStarted);
         }
+        return $plan;
     }
 
     /** @return PlanResult */
@@ -98,8 +97,8 @@ final class PlanManager
     /** @return PlanResult */
     private function change(string $action, int $planId, int $expectedVersion, ?string $date = null, ?int $recipeId = null): array
     {
-        $this->db->beginTransaction();
-        try {
+        $writeStarted = 0;
+        $changed = WriteTransaction::run($this->db, function () use ($action, $planId, $expectedVersion, $date, $recipeId, &$writeStarted): array {
             $started = hrtime(true);
             $state = $this->loadState($planId, ($action === 'choose' || $action === 'replace') ? $recipeId : null);
             $this->observe('load_state', $started);
@@ -164,7 +163,7 @@ final class PlanManager
             $started = hrtime(true);
             $result = $this->build($state);
             $this->observe('build', $started);
-            $started = hrtime(true);
+            $writeStarted = (int) hrtime(true);
             $chosenDates = [];
             if (($action === 'choose' || $action === 'replace') && $date !== null) {
                 $chosenDates[$date] = 'family';
@@ -198,13 +197,12 @@ final class PlanManager
             if ($update->rowCount() !== 1) {
                 throw new PlanVersionConflict();
             }
-            $this->db->commit();
-            $this->observe('write_and_commit', $started);
             return ['plan_id' => $planId, 'version' => $expectedVersion + 1] + $result;
-        } catch (Throwable $error) {
-            $this->db->rollBack();
-            throw $error;
+        });
+        if ($writeStarted > 0) {
+            $this->observe('write_and_commit', $writeStarted);
         }
+        return $changed;
     }
 
     /** @return array{plan: array<string, int|float|string|null>, dates: list<string>, days: list<array{date: string, profile: string}>, slots: array<string, array<string, int|float|string|null>>, fixed: array<string, int>, recipes: list<PlanCandidate>, carryovers: list<array{recipe_id: int, from_date: string}>, earlier: list<array{date: string, recipe_id: int, kind: string}>, history: list<array{date: string, recipe_id: int}>, share: float, block_vegetarian: bool, seed: string} */
