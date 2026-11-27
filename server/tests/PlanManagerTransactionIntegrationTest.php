@@ -91,7 +91,12 @@ final class PlanManagerTransactionIntegrationTest extends TestCase
         $prepare = fn (): array => [201, $manager->prepare(self::$householdId, '2026-11-29', 1, $dates)];
         $first = $idempotency->execute(self::$userId, 'POST /plans', $prepareKey, '{"week_start":"2026-11-29"}', $prepare);
         self::assertFalse(self::$db->inTransaction());
-        self::assertEquals($first, $idempotency->execute(self::$userId, 'POST /plans', $prepareKey, '{"week_start":"2026-11-29"}', $prepare));
+        $unexpectedWrite = static function (): array {
+            throw new \LogicException('A replay must not execute the plan write.');
+        };
+        $replayedPrepare = $idempotency->execute(self::$userId, 'POST /plans', $prepareKey, '{"week_start":"2026-11-29"}', $unexpectedWrite);
+        self::assertSame(201, $replayedPrepare[0]);
+        self::assertSame($first[1]['plan_id'], $replayedPrepare[1]['plan_id']);
         $plan = $first[1];
         $date = $dates[0];
         $decks = DbValue::map($plan['decks']);
@@ -104,7 +109,9 @@ final class PlanManagerTransactionIntegrationTest extends TestCase
         $picked = $idempotency->execute(self::$userId, 'POST /plans/choose', $chooseKey, '{"expected_version":1}', $choose);
         self::assertFalse(self::$db->inTransaction());
         self::assertSame(2, $picked[1]['version']);
-        self::assertEquals($picked, $idempotency->execute(self::$userId, 'POST /plans/choose', $chooseKey, '{"expected_version":1}', $choose));
+        $replayedChoose = $idempotency->execute(self::$userId, 'POST /plans/choose', $chooseKey, '{"expected_version":1}', $unexpectedWrite);
+        self::assertSame(200, $replayedChoose[0]);
+        self::assertSame(2, DbValue::integer($replayedChoose[1]['version']));
         $query = self::$db->prepare('SELECT version FROM plan WHERE id = ?');
         $query->execute([$planId]);
         self::assertSame(2, (int) $query->fetchColumn());
