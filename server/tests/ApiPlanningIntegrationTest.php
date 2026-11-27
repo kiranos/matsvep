@@ -354,6 +354,44 @@ final class ApiPlanningIntegrationTest extends TestCase
         self::assertSame(1, DbValue::integer($state->fetchColumn()));
     }
 
+    public function testCookedAnswerRequiresUserRatingAfterUnconfirmedDinner(): void
+    {
+        $recipes = self::$db->query('SELECT id FROM recipe ORDER BY id LIMIT 2')->fetchAll(PDO::FETCH_COLUMN);
+        self::assertCount(2, $recipes);
+        $plan = self::$db->prepare("INSERT INTO plan (household_id, week_start, part, days, seed, config_version, status) VALUES (?, ?, 1, ?, ?, 1, 'ready')");
+        $slot = self::$db->prepare("INSERT INTO plan_slot (plan_id, household_id, date, day_profile, recipe_id, status) VALUES (?, ?, ?, 'weekday_leftovers', ?, 'chosen')");
+        $plan->execute([self::$householdId, '2026-11-01', '["2026-11-01","2026-11-02"]', str_repeat('a', 64)]);
+        $firstPlanId = (int) self::$db->lastInsertId();
+        foreach ($recipes as $index => $recipeId) {
+            $slot->execute([$firstPlanId, self::$householdId, '2026-11-0' . ($index + 1), $recipeId]);
+        }
+        self::$db->prepare("INSERT INTO household_recipe (household_id, recipe_id, rating, rating_source, rated_at) VALUES (?, ?, 4, 'onboarding', UTC_TIMESTAMP())")
+            ->execute([self::$householdId, $recipes[1]]);
+        $maintenance = new PlanningMaintenance(
+            self::$db,
+            EngineConfig::fromDatabase(self::$db),
+            new \DateTimeImmutable('2026-11-15 00:00:00 Europe/Stockholm')
+        );
+        self::assertSame(2, $maintenance->run()['unconfirmed']);
+
+        $plan->execute([self::$householdId, '2026-11-15', '["2026-11-15","2026-11-16"]', str_repeat('b', 64)]);
+        $secondPlanId = (int) self::$db->lastInsertId();
+        $api = new ApiKernel(self::$db, new \DateTimeImmutable('2026-11-17 12:00:00 Europe/Stockholm'));
+        foreach ($recipes as $index => $recipeId) {
+            $slot->execute([$secondPlanId, self::$householdId, '2026-11-' . (15 + $index), $recipeId]);
+            $slotId = (int) self::$db->lastInsertId();
+            $route = '/plans/' . $secondPlanId . '/slots/' . $slotId . '/answer';
+            self::assertSame(422, $this->request($api, 'POST', $route, ['outcome' => 'cooked'])[0]);
+            self::assertSame(200, $this->request($api, 'POST', $route, ['outcome' => 'cooked', 'rating' => 5])[0]);
+            $state = self::$db->prepare('SELECT rating, rating_source, times_cooked FROM household_recipe WHERE household_id = ? AND recipe_id = ?');
+            $state->execute([self::$householdId, $recipeId]);
+            $row = DbValue::map($state->fetch(PDO::FETCH_ASSOC));
+            self::assertSame(5, DbValue::integer($row['rating']));
+            self::assertSame('user', $row['rating_source']);
+            self::assertSame(2, DbValue::integer($row['times_cooked']));
+        }
+    }
+
     public function testUndoDoesNotCountAsARejectedSession(): void
     {
         $api = new ApiKernel(self::$db);

@@ -274,14 +274,14 @@ final class PlanningService
         $recipeId = DbValue::integer($slot['recipe_id']);
         if ($outcome === 'cooked') {
             $rating = $input['rating'] ?? null;
-            $query = $this->db->prepare('SELECT rating, times_cooked FROM household_recipe WHERE household_id = ? AND recipe_id = ?');
+            $query = $this->db->prepare('SELECT rating_source FROM household_recipe WHERE household_id = ? AND recipe_id = ?');
             $query->execute([$householdId, $recipeId]);
             $state = $query->fetch(PDO::FETCH_ASSOC);
-            $firstCook = !is_array($state) || DbValue::integer($state['times_cooked']) === 0;
+            $needsRating = !is_array($state) || $state['rating_source'] !== 'user';
             if ($rating !== null && (!is_int($rating) || $rating < 1 || $rating > 5)) {
                 throw new ApiError(422, 'validation_failed');
             }
-            if (($firstCook && $rating === null) || (!$firstCook && $rating !== null)) {
+            if (($needsRating && $rating === null) || (!$needsRating && $rating !== null)) {
                 throw new ApiError(422, 'validation_failed');
             }
             $insert = $this->db->prepare('INSERT INTO meal_log (household_id, recipe_id, cooked_on, plan_slot_id) VALUES (?, ?, ?, ?)');
