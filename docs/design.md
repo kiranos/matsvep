@@ -417,7 +417,8 @@ The day after each chosen dinner, the app renders a localised cooking confirmati
 | No → remove | not\_cooked | Status *removed*: out of all pools, still searchable | None | Excluded |
 | No answer within 2 days | unconfirmed | Counted as eaten: cooldown starts, counts for variety | None | Excluded |
 
-- **Carry-over:** the next planning is Wednesday's half in split mode, otherwise next week. If its days are already chosen, the app offers to swap the dinner in on the best-fitting day. A carry-over lasts one week; if it still isn't cooked, it moves to the wishlist.
+- **Carry-over:** the next planning is Wednesday's half in split mode, otherwise next week. If its plan already exists, its response lists pending carry-overs so the app can offer a swap; choosing one through replace marks it placed. A pending carry-over lasts `carryover.expire_weeks` from the target week start; nightly maintenance expires it and moves the recipe to the wishlist.
+- Nightly planning maintenance changes chosen slots to `unconfirmed` after `after_dinner.unconfirmed_days` whole household-local days have elapsed without an answer. It records one `meal_log` entry and updates cooked recency so the meal counts for cooldown and variety, without assigning or changing a rating. It is repeatable.
 - The API accepts an omitted `not_cooked_action` as carry-over. A cooked answer records one meal, increments the cooked count, and asks for a rating on the first cook only, including when an onboarding rating exists. Later cooks do not change a rating; the rating endpoint remains available for deliberate changes.
 - **Wishlist:** wishlisted recipes get the 0.10 bonus until cooked, so they come back within a few weeks without being forced.
 - **Removed vs blocked:** *removed* means "not for us right now" and can be undone from search; *blocked* means "never show again".
@@ -506,7 +507,7 @@ Every engine number is a row in `engine_config`, so tuning is an admin-page chan
 | Variety | `variety.bonus.fish` / `.bonus.vegetarian` / `variety.target_days_left` / `variety.history_days` | 0.3 / 0.2 / 2 / 7 | Target bonuses, final days and recent meal window |
 | Skips | `skip.replace_days` | 14 | SkipPen after replacement |
 | Skips | `swipe.reject_sessions` / `swipe.reject_days` | 5 / 30 | Repeated left swipes before a SkipPen, and its length |
-| After dinner | `confirm.auto_days` | 2 | Days without an answer before a dinner counts as eaten |
+| After dinner | `after_dinner.unconfirmed_days` | 2 | Whole days after dinner before an unanswered choice counts as eaten |
 | After dinner | `carryover.expire_weeks` | 1 | How long a carry-over stays pinned |
 | After dinner | `wishlist.bonus` | 0.10 | Score bonus for wishlisted recipes |
 | After dinner | `flag.count` / `flag.days` | 3 / 60 | Uncooked or replaced this often → admin flag |

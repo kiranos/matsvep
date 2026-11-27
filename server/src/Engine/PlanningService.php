@@ -23,7 +23,7 @@ final class PlanningService
         private readonly EngineConfig $config,
         private readonly RecipeReader $recipes,
         private readonly HouseholdRecipeManager $householdRecipes,
-        ?DateTimeImmutable $now = null
+        private readonly ?DateTimeImmutable $now = null
     ) {
         $this->manager = new PlanManager($db, $config);
         $this->window = new PlanningWindow($now);
@@ -79,10 +79,21 @@ final class PlanningService
         foreach (DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC)) as $row) {
             $slots[] = $this->slot($row);
         }
+        $carryovers = $this->db->prepare('SELECT c.id, c.recipe_id, c.from_slot_id, s.date AS from_date '
+            . 'FROM carryover c JOIN plan_slot s ON s.id = c.from_slot_id AND s.household_id = c.household_id '
+            . "WHERE c.household_id = ? AND c.target_week = ? AND c.target_part = ? AND c.status = 'pending' "
+            . 'ORDER BY c.id');
+        $carryovers->execute([$householdId, $plan['week_start'], $plan['part']]);
+        $pending = [];
+        foreach (DbValue::rows($carryovers->fetchAll(PDO::FETCH_ASSOC)) as $row) {
+            $pending[] = ['id' => DbValue::integer($row['id']), 'recipe_id' => DbValue::integer($row['recipe_id']),
+                'from_slot_id' => DbValue::integer($row['from_slot_id']), 'from_date' => DbValue::text($row['from_date'])];
+        }
         return ['id' => $planId, 'week_start' => $plan['week_start'], 'part' => DbValue::integer($plan['part']),
             'days' => json_decode(DbValue::text($plan['days']), true, 512, JSON_THROW_ON_ERROR),
             'status' => $plan['status'], 'version' => DbValue::integer($plan['version']),
-            'config_version' => DbValue::integer($plan['config_version']), 'slots' => $slots];
+            'config_version' => DbValue::integer($plan['config_version']), 'slots' => $slots,
+            'pending_carryovers' => $pending];
     }
 
     /** @return array<string,mixed> */
@@ -208,17 +219,24 @@ final class PlanningService
             if (!is_array($previous) || $previous['action'] !== 'next'
                 || DbValue::integer($previous['recipe_id']) !== $recipeId
                 || DbValue::integer($previous['position']) !== $input['position']) {
-                throw new ApiError(409, 'validation_failed');
+                throw new ApiError(422, 'validation_failed');
             }
         }
         $id = $this->insertSwipe($householdId, $planId, $date, $recipeId, $input, $action);
-        if ($action === 'next') {
-            $count = $this->db->prepare("SELECT COUNT(DISTINCT session_id) FROM swipe_event WHERE household_id = ? AND recipe_id = ? AND action = 'next'");
-            $count->execute([$householdId, $recipeId]);
-            if (DbValue::integer($count->fetchColumn()) >= $this->config->integer('swipe.reject_sessions')) {
+        $count = $this->db->prepare('SELECT COUNT(*) FROM ('
+            . 'SELECT session_id, MAX(id) AS last_id FROM swipe_event '
+            . "WHERE household_id = ? AND recipe_id = ? AND action IN ('next', 'undo') GROUP BY session_id"
+            . ") recent JOIN swipe_event e ON e.id = recent.last_id WHERE e.action = 'next'");
+        $count->execute([$householdId, $recipeId]);
+        $activeSessions = DbValue::integer($count->fetchColumn());
+        if ($activeSessions >= $this->config->integer('swipe.reject_sessions')) {
+            if ($action === 'next') {
                 $skip = $this->db->prepare("INSERT INTO slot_skip (household_id, recipe_id, reason, expires_at) SELECT ?, ?, 'swipe_rejects', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY) WHERE NOT EXISTS (SELECT 1 FROM slot_skip WHERE household_id = ? AND recipe_id = ? AND reason = 'swipe_rejects' AND expires_at > UTC_TIMESTAMP())");
                 $skip->execute([$householdId, $recipeId, $this->config->integer('swipe.reject_days'), $householdId, $recipeId]);
             }
+        } elseif ($action === 'undo') {
+            $delete = $this->db->prepare("DELETE FROM slot_skip WHERE household_id = ? AND recipe_id = ? AND reason = 'swipe_rejects' AND expires_at > UTC_TIMESTAMP()");
+            $delete->execute([$householdId, $recipeId]);
         }
         return ['id' => $id, 'event' => self::event('swipe_recorded')];
     }
@@ -240,7 +258,12 @@ final class PlanningService
     private function answerInTransaction(int $householdId, int $planId, int $slotId, array $input): array
     {
         $this->requirePlan($householdId, $planId);
-        $slot = $this->requireSlot($householdId, $planId, $slotId);
+        $slot = $this->requireSlot($householdId, $planId, $slotId, true);
+        $today = ($this->now ?? new DateTimeImmutable('now'))
+            ->setTimezone(new DateTimeZone($this->context($householdId)['timezone']))->format('Y-m-d');
+        if (DbValue::text($slot['date']) > $today) {
+            throw new ApiError(409, 'slot_not_open');
+        }
         if ($slot['status'] !== 'chosen') {
             throw new ApiError(409, 'already_answered');
         }
@@ -340,9 +363,10 @@ final class PlanningService
     }
 
     /** @return array<string,mixed> */
-    private function requireSlot(int $householdId, int $planId, int $slotId): array
+    private function requireSlot(int $householdId, int $planId, int $slotId, bool $forUpdate = false): array
     {
-        $query = $this->db->prepare('SELECT * FROM plan_slot WHERE id = ? AND plan_id = ? AND household_id = ?');
+        $query = $this->db->prepare('SELECT * FROM plan_slot WHERE id = ? AND plan_id = ? AND household_id = ?'
+            . ($forUpdate ? ' FOR UPDATE' : ''));
         $query->execute([$slotId, $planId, $householdId]);
         $slot = $query->fetch(PDO::FETCH_ASSOC);
         if (!is_array($slot)) {

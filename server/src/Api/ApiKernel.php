@@ -10,6 +10,7 @@ use Matsvep\Engine\HouseholdRecipeManager;
 use Matsvep\Engine\Learner;
 use Matsvep\Engine\OnboardingManager;
 use Matsvep\Engine\PlanningService;
+use DateTimeImmutable;
 use PDO;
 use Throwable;
 
@@ -23,7 +24,7 @@ final class ApiKernel
     private OnboardingManager $onboarding;
     private PlanningService $planning;
 
-    public function __construct(PDO $db)
+    public function __construct(PDO $db, ?DateTimeImmutable $now = null)
     {
         $config = EngineConfig::fromDatabase($db);
         $this->auth = new AppAuth($db, $config);
@@ -33,7 +34,7 @@ final class ApiKernel
         $this->households = new HouseholdManager($db, $config);
         $this->householdRecipes = new HouseholdRecipeManager($db, $learner);
         $this->onboarding = new OnboardingManager($db, $learner);
-        $this->planning = new PlanningService($db, $config, $this->recipes, $this->householdRecipes);
+        $this->planning = new PlanningService($db, $config, $this->recipes, $this->householdRecipes, $now);
     }
 
     /** @param array<string,string> $headers

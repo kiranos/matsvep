@@ -51,6 +51,8 @@ After deployment, `curl https://YOUR_DOMAIN/api/v1/health` should return `{"stat
 
 `auth.open_registration` defaults to `0`: the first member may create the first household, then later members need a one-time invite. Set it to `1` only if you intentionally want more households to register without invites. The timer `matsvep-api-purge.timer` runs daily at 00:15 and removes expired API state; it does not touch recipes, ratings or plans. Check it with `sudo systemctl status matsvep-api-purge.timer` and `sudo journalctl -u matsvep-api-purge.service -n 50 --no-pager`. To run it manually, use `cd /srv/matsvep/server && sudo -u matsvep php bin/purge-api-state.php`.
 
+The `matsvep-plan-maintenance.timer` runs daily at 00:30. It marks unanswered chosen dinners as eaten after the configured household-local interval, expires old pending carry-overs and adds those recipes to the wishlist. The command is idempotent. Check `sudo systemctl status matsvep-plan-maintenance.timer` and `sudo journalctl -u matsvep-plan-maintenance.service -n 50 --no-pager`. To run it manually, use `cd /srv/matsvep/server && sudo -u matsvep php bin/maintain-plans.php`.
+
 ## Crawl operations
 
 ### Check crawl progress

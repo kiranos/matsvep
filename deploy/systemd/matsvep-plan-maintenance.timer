@@ -1,0 +1,10 @@
+[Unit]
+Description=Maintain Matsvep planning state nightly
+
+[Timer]
+OnCalendar=*-*-* 00:30:00
+Persistent=false
+Unit=matsvep-plan-maintenance.service
+
+[Install]
+WantedBy=timers.target

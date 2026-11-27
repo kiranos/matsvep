@@ -9,6 +9,8 @@ use Matsvep\Api\AppAuth;
 use Matsvep\Api\DbValue;
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Engine\EngineConfig;
+use Matsvep\Engine\PlanManager;
+use Matsvep\Engine\PlanningMaintenance;
 use Matsvep\Ingest\Ingredient\DatabaseConnection;
 use Matsvep\Tests\Support\ApiResponseSchema;
 use PDO;
@@ -247,6 +249,157 @@ final class ApiPlanningIntegrationTest extends TestCase
         $count = self::$db->prepare('SELECT COUNT(*) FROM meal_log WHERE household_id = ? AND plan_slot_id = ?');
         $count->execute([self::$householdId, $slotId]);
         self::assertSame(1, DbValue::integer($count->fetchColumn()));
+    }
+
+    public function testExistingTargetPlanExposesPendingCarryoverUntilReplacement(): void
+    {
+        $api = new ApiKernel(self::$db);
+        $week = self::currentSunday();
+        $source = $this->request($api, 'POST', '/plans', ['week_start' => $week, 'part' => 1])[1];
+        $sourceSlot = DbValue::rows($source['slots'])[0];
+        $sourceId = DbValue::integer($source['id']);
+        $sourceSlotId = DbValue::integer($sourceSlot['id']);
+        $recipeId = DbValue::integer($sourceSlot['recipe_id']);
+        $targetWeek = (new \DateTimeImmutable($week))->modify('+7 days')->format('Y-m-d');
+        $targetDates = [];
+        for ($day = 0; $day < 7; $day++) {
+            $targetDates[] = (new \DateTimeImmutable($targetWeek))->modify('+' . $day . ' days')->format('Y-m-d');
+        }
+        $manager = new PlanManager(self::$db, EngineConfig::fromDatabase(self::$db));
+        $target = $manager->prepare(self::$householdId, $targetWeek, 1, $targetDates);
+        $targetId = $target['plan_id'];
+        $targetRecipe = null;
+        foreach ($target['decks'][$targetDates[0]] as $card) {
+            if ($card['recipe_id'] !== $recipeId) {
+                $targetRecipe = $card['recipe_id'];
+                break;
+            }
+        }
+        self::assertIsInt($targetRecipe);
+        $manager->choose($targetId, 1, $targetDates[0], $targetRecipe);
+        self::assertSame(200, $this->request(
+            $api,
+            'POST',
+            '/plans/' . $sourceId . '/slots/' . $sourceSlotId . '/choose',
+            ['expected_version' => 1, 'recipe_id' => $recipeId]
+        )[0]);
+        $future = new ApiKernel(self::$db, (new \DateTimeImmutable($week . ' 12:00:00 Europe/Stockholm'))
+            ->modify('-1 day'));
+        $answerRoute = '/plans/' . $sourceId . '/slots/' . $sourceSlotId . '/answer';
+        [$futureStatus, $futureError] = $this->request($future, 'POST', $answerRoute, ['outcome' => 'not_cooked']);
+        self::assertSame(409, $futureStatus);
+        self::assertSame('slot_not_open', $futureError['code']);
+        self::assertSame(200, $this->request($api, 'POST', $answerRoute, ['outcome' => 'not_cooked'])[0]);
+        $pending = $this->request($api, 'GET', '/plans/' . $targetId, null)[1]['pending_carryovers'];
+        self::assertCount(1, DbValue::rows($pending));
+        self::assertSame($recipeId, DbValue::integer(DbValue::rows($pending)[0]['recipe_id']));
+        $targetPlan = $this->request($api, 'GET', '/plans/' . $targetId, null)[1];
+        $targetSlot = DbValue::rows($targetPlan['slots'])[0];
+        $targetApi = new ApiKernel(
+            self::$db,
+            new \DateTimeImmutable($targetWeek . ' 00:00:00 Europe/Stockholm')
+        );
+        [$status, $replaced] = $this->request(
+            $targetApi,
+            'POST',
+            '/plans/' . $targetId . '/slots/' . DbValue::integer($targetSlot['id']) . '/replace',
+            ['expected_version' => 2, 'recipe_id' => $recipeId]
+        );
+        self::assertSame(200, $status, json_encode($replaced, JSON_THROW_ON_ERROR));
+        self::assertSame([], $this->request($api, 'GET', '/plans/' . $targetId, null)[1]['pending_carryovers']);
+        $statusQuery = self::$db->prepare('SELECT status FROM carryover WHERE from_slot_id = ?');
+        $statusQuery->execute([$sourceSlotId]);
+        self::assertSame('placed', $statusQuery->fetchColumn());
+    }
+
+    public function testNightlyMaintenanceCountsUnansweredMealsAndExpiresCarryoversOnce(): void
+    {
+        $config = EngineConfig::fromDatabase(self::$db);
+        self::assertSame(2, $config->integer('after_dinner.unconfirmed_days'));
+        $recipeQuery = self::$db->prepare('SELECT id FROM recipe ORDER BY id LIMIT 2');
+        $recipeQuery->execute();
+        $recipes = $recipeQuery->fetchAll(PDO::FETCH_COLUMN);
+        self::assertCount(2, $recipes);
+        $plan = self::$db->prepare("INSERT INTO plan (household_id, week_start, part, days, seed, config_version, status) VALUES (?, '2026-11-01', 1, ?, ?, 1, 'ready')");
+        $plan->execute([self::$householdId, '["2026-11-01","2026-11-02"]', str_repeat('a', 64)]);
+        $planId = (int) self::$db->lastInsertId();
+        $slot = self::$db->prepare('INSERT INTO plan_slot (plan_id, household_id, date, day_profile, recipe_id, status) VALUES (?, ?, ?, ?, ?, ?)');
+        $slot->execute([$planId, self::$householdId, '2026-11-01', 'weekday_leftovers', $recipes[0], 'chosen']);
+        $chosenId = (int) self::$db->lastInsertId();
+        $slot->execute([$planId, self::$householdId, '2026-11-02', 'weekday_leftovers', $recipes[1], 'not_cooked']);
+        $notCookedId = (int) self::$db->lastInsertId();
+        self::$db->prepare("INSERT INTO carryover (household_id, recipe_id, from_slot_id, target_week, target_part) VALUES (?, ?, ?, '2026-11-08', 1)")
+            ->execute([self::$householdId, $recipes[1], $notCookedId]);
+        $maintenance = new PlanningMaintenance(
+            self::$db,
+            $config,
+            new \DateTimeImmutable('2026-11-15 00:00:00 Europe/Stockholm')
+        );
+        self::assertSame(['unconfirmed' => 1, 'expired_carryovers' => 1], $maintenance->run());
+        self::assertSame(['unconfirmed' => 0, 'expired_carryovers' => 0], $maintenance->run());
+        $row = self::$db->prepare('SELECT status FROM plan_slot WHERE id = ?');
+        $row->execute([$chosenId]);
+        self::assertSame('unconfirmed', $row->fetchColumn());
+        $meal = self::$db->prepare('SELECT COUNT(*) FROM meal_log WHERE plan_slot_id = ?');
+        $meal->execute([$chosenId]);
+        self::assertSame(1, DbValue::integer($meal->fetchColumn()));
+        $state = self::$db->prepare('SELECT times_cooked, last_cooked_at, rating FROM household_recipe WHERE household_id = ? AND recipe_id = ?');
+        $state->execute([self::$householdId, $recipes[0]]);
+        $cooked = DbValue::map($state->fetch(PDO::FETCH_ASSOC));
+        self::assertSame(1, DbValue::integer($cooked['times_cooked']));
+        self::assertSame('2026-11-01', $cooked['last_cooked_at']);
+        self::assertNull($cooked['rating']);
+        $state = self::$db->prepare('SELECT wishlist FROM household_recipe WHERE household_id = ? AND recipe_id = ?');
+        $state->execute([self::$householdId, $recipes[1]]);
+        self::assertSame(1, DbValue::integer($state->fetchColumn()));
+    }
+
+    public function testUndoDoesNotCountAsARejectedSession(): void
+    {
+        $api = new ApiKernel(self::$db);
+        $plan = $this->request(
+            $api,
+            'POST',
+            '/plans',
+            ['week_start' => self::currentSunday(), 'part' => 1]
+        )[1];
+        $planId = DbValue::integer($plan['id']);
+        $slot = DbValue::rows($plan['slots'])[0];
+        $date = DbValue::text($slot['date']);
+        $recipeId = DbValue::integer($slot['recipe_id']);
+        $route = '/plans/' . $planId . '/swipes';
+        for ($index = 1; $index <= 5; $index++) {
+            $session = sprintf('123e4567-e89b-42d3-a456-%012d', $index);
+            self::assertSame(201, $this->request(
+                $api,
+                'POST',
+                $route,
+                ['date' => $date, 'recipe_id' => $recipeId, 'position' => 0,
+                    'action' => 'next', 'session_id' => $session]
+            )[0]);
+        }
+        $skip = self::$db->prepare("SELECT COUNT(*) FROM slot_skip WHERE household_id = ? AND recipe_id = ? AND reason = 'swipe_rejects'");
+        $skip->execute([self::$householdId, $recipeId]);
+        self::assertSame(1, DbValue::integer($skip->fetchColumn()));
+        $session = sprintf('123e4567-e89b-42d3-a456-%012d', 5);
+        [$status, $error] = $this->request(
+            $api,
+            'POST',
+            $route,
+            ['date' => $date, 'recipe_id' => $recipeId, 'position' => 1,
+                'action' => 'undo', 'session_id' => $session]
+        );
+        self::assertSame(422, $status);
+        self::assertSame('validation_failed', $error['code']);
+        self::assertSame(201, $this->request(
+            $api,
+            'POST',
+            $route,
+            ['date' => $date, 'recipe_id' => $recipeId, 'position' => 0,
+                'action' => 'undo', 'session_id' => $session]
+        )[0]);
+        $skip->execute([self::$householdId, $recipeId]);
+        self::assertSame(0, DbValue::integer($skip->fetchColumn()));
     }
 
     public function testConcurrentChoicesReturnOneVersionConflict(): void
