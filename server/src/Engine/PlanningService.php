@@ -188,12 +188,28 @@ final class PlanningService
         $date = $input['date'] ?? null;
         $recipeId = $input['recipe_id'] ?? null;
         $action = $input['action'] ?? null;
-        if (!is_string($date) || !is_int($recipeId) || !in_array($action, ['next', 'undo'], true)) {
+        if (!is_string($date) || !is_int($recipeId) || !in_array($action, ['next', 'undo'], true)
+            || !is_string($input['session_id'] ?? null) || !is_int($input['position'] ?? null)) {
             throw new ApiError(422, 'validation_failed');
         }
         $plan = $this->requirePlan($householdId, $planId);
         if (!in_array($date, $this->planDays($plan), true)) {
             throw new ApiError(404, 'not_found');
+        }
+        $candidate = $this->db->prepare('SELECT 1 FROM plan_candidate WHERE plan_id = ? AND recipe_id = ?');
+        $candidate->execute([$planId, $recipeId]);
+        if ($candidate->fetchColumn() === false) {
+            throw new ApiError(404, 'not_found');
+        }
+        if ($action === 'undo') {
+            $latest = $this->db->prepare('SELECT recipe_id, position, action FROM swipe_event WHERE household_id = ? AND plan_id = ? AND date = ? AND session_id = ? ORDER BY id DESC LIMIT 1');
+            $latest->execute([$householdId, $planId, $date, $input['session_id']]);
+            $previous = $latest->fetch(PDO::FETCH_ASSOC);
+            if (!is_array($previous) || $previous['action'] !== 'next'
+                || DbValue::integer($previous['recipe_id']) !== $recipeId
+                || DbValue::integer($previous['position']) !== $input['position']) {
+                throw new ApiError(409, 'validation_failed');
+            }
         }
         $id = $this->insertSwipe($householdId, $planId, $date, $recipeId, $input, $action);
         if ($action === 'next') {

@@ -140,6 +140,15 @@ final class ApiPlanningIntegrationTest extends TestCase
             $swipe,
             '/plans/{plan_id}/swipes'
         );
+        $this->contract(
+            $api,
+            $schema,
+            'POST',
+            '/plans/' . $planId . '/swipes',
+            ['date' => $date, 'recipe_id' => $first, 'position' => 0, 'action' => 'undo',
+                'session_id' => $swipe['session_id']],
+            '/plans/{plan_id}/swipes'
+        );
         $chosen = $this->contract(
             $api,
             $schema,
