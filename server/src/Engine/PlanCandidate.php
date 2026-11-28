@@ -35,6 +35,7 @@ final class PlanCandidate
         public readonly ?int $daysSinceRejected = null,
         public readonly ?int $similarRatedStars = null,
         public readonly ?string $mealType = null,
+        public readonly bool $eligible = true,
     ) {
     }
 
@@ -64,7 +65,8 @@ final class PlanCandidate
             $this->rejectedSessions,
             $this->daysSinceRejected,
             $stars,
-            $this->mealType
+            $this->mealType,
+            $this->eligible
         );
     }
 
@@ -94,7 +96,8 @@ final class PlanCandidate
             $this->rejectedSessions,
             $this->daysSinceRejected,
             $this->similarRatedStars,
-            $this->mealType
+            $this->mealType,
+            $this->eligible
         );
     }
 

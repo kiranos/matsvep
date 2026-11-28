@@ -93,6 +93,9 @@ final class PersonaSimulationIntegrationTest extends TestCase
                     self::assertArrayHasKey('hidden_utility_4_plus_share', $policy);
                     self::assertArrayHasKey('hit_rate', $policy);
                     self::assertArrayHasKey('mae', $policy);
+                    self::assertSame(0, $policy['hard_filter_breaches']);
+                    self::assertGreaterThan(0, $policy['distinct_recipes_cooked']);
+                    self::assertGreaterThan(0, $policy['distinct_dish_groups_cooked']);
                     self::assertGreaterThan(0, $policy['cooked']);
                     self::assertGreaterThanOrEqual(1, $policy['mean_hidden_utility']);
                     self::assertLessThanOrEqual(5, $policy['mean_hidden_utility']);

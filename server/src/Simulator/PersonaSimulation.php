@@ -112,6 +112,7 @@ final class PersonaSimulation
             'cooked' => 0, 'hit' => 0, 'discovery_rated' => 0, 'discovery_hit' => 0,
             'rating_errors' => 0.0, 'first_ratings' => 0, 'empty_decks' => 0,
             'baseline_fallbacks' => 0, 'baseline_outside_shortlist_picks' => 0, 'unconfirmed' => 0,
+            'hard_filter_breaches' => 0,
             'hidden_utility_sum' => 0.0, 'hidden_utility_4_plus' => 0];
         /** @var array<string,array<string,mixed>> $pending */
         $pending = [];
@@ -292,6 +293,7 @@ final class PersonaSimulation
                     $candidate->execute([$planId, $recipeId]);
                     $outsideShortlist = $candidate->fetchColumn() === false;
                 }
+                $cooldownBlocked = $this->cooldownBlockedAtChoice($householdId, $planId, $recipeId, $now);
                 $choice = ['expected_version' => $version, 'recipe_id' => $recipeId];
                 if ($policy === 'engine') {
                     $choice['swipe'] = ['position' => $position, 'session_id' => $session];
@@ -303,6 +305,7 @@ final class PersonaSimulation
                 }
                 $chosen = $this->expect(200, [$status, $response]);
                 $metrics['picks']++;
+                $metrics['hard_filter_breaches'] += (int) $cooldownBlocked;
                 $metrics['baseline_outside_shortlist_picks'] += (int) $outsideShortlist;
                 $metrics['swipes']++;
                 $metrics['top_three'] += (int) ($position < 3);
@@ -360,6 +363,40 @@ final class PersonaSimulation
         $query->execute($args);
         $ids = array_values(array_map(DbValue::integer(...), $query->fetchAll(PDO::FETCH_COLUMN)));
         return array_slice($random->shuffled($ids), 0, $this->config->integer('simulator.random_sample_size'));
+    }
+
+    private function cooldownBlockedAtChoice(
+        int $householdId,
+        int $planId,
+        int $recipeId,
+        DateTimeImmutable $now
+    ): bool {
+        $query = $this->db->prepare('SELECT 1 FROM carryover c JOIN plan p '
+            . 'ON p.household_id = c.household_id AND p.week_start = c.target_week '
+            . 'AND p.part = c.target_part WHERE p.id = ? AND c.recipe_id = ? '
+            . "AND c.status IN ('pending', 'placed') LIMIT 1");
+        $query->execute([$planId, $recipeId]);
+        if ($query->fetchColumn() !== false) {
+            return false;
+        }
+        $query = $this->db->prepare('SELECT hr.rating, MAX(CASE WHEN cooked_recipe.id IS NOT NULL '
+            . 'THEN m.cooked_on END) AS last_cooked FROM recipe r '
+            . 'LEFT JOIN household_recipe hr ON hr.household_id = ? AND hr.recipe_id = r.id '
+            . 'LEFT JOIN meal_log m ON m.household_id = ? AND m.cooked_on <= ? '
+            . 'LEFT JOIN recipe cooked_recipe ON cooked_recipe.id = m.recipe_id '
+            . 'AND (cooked_recipe.id = r.id OR (r.dish_group_id IS NOT NULL '
+            . 'AND cooked_recipe.dish_group_id = r.dish_group_id)) '
+            . 'WHERE r.id = ? GROUP BY hr.rating');
+        $query->execute([$householdId, $householdId, $now->format('Y-m-d'), $recipeId]);
+        $row = $query->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row) || $row['last_cooked'] === null) {
+            return false;
+        }
+        $rating = $row['rating'] === null ? 4 : DbValue::integer($row['rating']);
+        $rating = in_array($rating, [3, 5], true) ? $rating : 4;
+        $days = (new DateTimeImmutable(DbValue::text($row['last_cooked'])))
+            ->diff(new DateTimeImmutable($now->format('Y-m-d')))->days;
+        return $days < $this->config->integer('cooldown.days.' . $rating);
     }
 
     /** @param array<string,mixed> $choice
@@ -424,25 +461,16 @@ final class PersonaSimulation
             . 'WHERE s.household_id = ? AND s.status <> ? ORDER BY s.date, s.id');
         $slots->execute([$householdId, 'proposed']);
         $seenRecipes = [];
-        $seenGroups = [];
         $weeklyProteins = [];
         $repeats = 0;
-        $cooldownViolations = 0;
         $varietyViolations = 0;
         $favourites = 0;
         $discoveries = 0;
         foreach (DbValue::rows($slots->fetchAll(PDO::FETCH_ASSOC)) as $row) {
             $recipeId = DbValue::integer($row['recipe_id']);
             $date = DbValue::text($row['date']);
-            $group = $row['dish_group_id'] === null ? -$recipeId : DbValue::integer($row['dish_group_id']);
             $repeats += (int) isset($seenRecipes[$recipeId]);
             $seenRecipes[$recipeId] = true;
-            $distance = isset($seenGroups[$group]) ? (new DateTimeImmutable($seenGroups[$group]))
-                ->diff(new DateTimeImmutable($date))->days : null;
-            if ($distance !== null && $distance < $this->config->integer('cooldown.days.4')) {
-                $cooldownViolations++;
-            }
-            $seenGroups[$group] = $date;
             if ($row['main_protein'] !== null) {
                 $dateValue = new DateTimeImmutable($date);
                 $week = $dateValue->modify('-' . $dateValue->format('w') . ' days')->format('Y-m-d');
@@ -454,6 +482,27 @@ final class PersonaSimulation
             $favourites += (int) ($row['kind'] === 'favourite');
             $discoveries += (int) ($row['kind'] === 'discovery');
         }
+        $query = $this->db->prepare('SELECT m.cooked_on, m.recipe_id, '
+            . 'COALESCE(r.dish_group_id, -r.id) AS group_id, hr.rating, '
+            . 'EXISTS (SELECT 1 FROM carryover c JOIN plan p '
+            . 'ON p.household_id = c.household_id AND p.week_start = c.target_week '
+            . 'AND p.part = c.target_part WHERE p.id = s.plan_id AND c.recipe_id = m.recipe_id '
+            . "AND c.status = 'placed') AS placed_carryover "
+            . 'FROM meal_log m JOIN plan_slot s ON s.id = m.plan_slot_id '
+            . 'JOIN recipe r ON r.id = m.recipe_id '
+            . 'LEFT JOIN household_recipe hr ON hr.household_id = m.household_id '
+            . 'AND hr.recipe_id = m.recipe_id WHERE m.household_id = ? '
+            . "AND s.status IN ('cooked', 'unconfirmed') ORDER BY m.cooked_on, m.id");
+        $query->execute([$householdId]);
+        $meals = [];
+        foreach (DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC)) as $row) {
+            $meals[] = ['date' => DbValue::text($row['cooked_on']),
+                'recipe_id' => DbValue::integer($row['recipe_id']),
+                'group_id' => DbValue::integer($row['group_id']),
+                'rating' => $row['rating'] === null ? null : DbValue::integer($row['rating']),
+                'placed_carryover' => DbValue::integer($row['placed_carryover']) === 1];
+        }
+        $cooldown = (new CooldownReport($this->config))->summarize($meals);
         $picks = (int) $metrics['picks'];
         $ratings = (int) $metrics['first_ratings'];
         return ['picks' => $picks, 'cooked' => (int) $metrics['cooked'],
@@ -468,7 +517,11 @@ final class PersonaSimulation
             'replace_rate' => $picks === 0 ? null : round($metrics['replacements'] / $picks, 4),
             'swipes_to_pick' => $picks === 0 ? null : round($metrics['swipes'] / $picks, 4),
             'top_3_picks' => $picks === 0 ? null : round($metrics['top_three'] / $picks, 4),
-            'variety_violations' => $varietyViolations, 'cooldown_violations' => $cooldownViolations,
+            'variety_violations' => $varietyViolations,
+            'cooldown_violations' => $cooldown['cooldown_violations'],
+            'hard_filter_breaches' => (int) $metrics['hard_filter_breaches'],
+            'distinct_recipes_cooked' => $cooldown['distinct_recipes_cooked'],
+            'distinct_dish_groups_cooked' => $cooldown['distinct_dish_groups_cooked'],
             'repeat_rate' => $picks === 0 ? null : round($repeats / $picks, 4),
             'favourite_share' => $picks === 0 ? null : round($favourites / $picks, 4),
             'discovery_share' => $picks === 0 ? null : round($discoveries / $picks, 4),

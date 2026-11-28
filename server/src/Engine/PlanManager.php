@@ -140,7 +140,9 @@ final class PlanManager
                 foreach ($state['recipes'] as $candidate) {
                     $available[$candidate->id] = $candidate;
                 }
-                if (!isset($available[$recipeId])) {
+                $carryoverIds = array_column($state['carryovers'], 'recipe_id');
+                if (!isset($available[$recipeId])
+                    || (!$available[$recipeId]->eligible && !in_array($recipeId, $carryoverIds, true))) {
                     throw new InvalidArgumentException('Recipe does not pass planning filters.');
                 }
                 foreach ($fixed as $fixedId) {
