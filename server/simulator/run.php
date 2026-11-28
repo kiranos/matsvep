@@ -22,7 +22,9 @@ $createdDatabase = false;
 $exitCode = 0;
 try {
     $options = ['persona' => 'all', 'weeks' => '52', 'seed' => null];
-    foreach (array_slice($argv, 1) as $argument) {
+    /** @var list<string> $arguments */
+    $arguments = $_SERVER['argv'] ?? [];
+    foreach (array_slice($arguments, 1) as $argument) {
         if (preg_match('/^--(persona|weeks|seed)=(.+)$/', $argument, $parts) !== 1
             || !array_key_exists($parts[1], $options)) {
             throw new RuntimeException('Usage: php simulator/run.php --persona=all --weeks=52 --seed=N');
@@ -30,7 +32,7 @@ try {
         $options[$parts[1]] = $parts[2];
     }
     if (!is_string($options['seed']) || preg_match('/^[0-9]+$/', $options['seed']) !== 1
-        || !is_string($options['weeks']) || preg_match('/^[1-9][0-9]*$/', $options['weeks']) !== 1) {
+        || preg_match('/^[1-9][0-9]*$/', $options['weeks']) !== 1) {
         throw new RuntimeException('A positive --weeks and numeric --seed are required.');
     }
     $envFile = getenv('MATS_SIM_ENV_FILE') ?: __DIR__ . '/../.env.simulator';
@@ -44,6 +46,7 @@ try {
             throw new RuntimeException('Missing simulator configuration key: ' . $key);
         }
     }
+    /** @var array<string,string> $settings */
     foreach (['SOURCE_HOST', 'SOURCE_DB', 'SOURCE_USER', 'TARGET_HOST', 'TARGET_USER'] as $key) {
         if ($settings[$key] === '') {
             throw new RuntimeException('Empty simulator configuration key: ' . $key);
@@ -74,7 +77,11 @@ try {
     }
     $selected = [];
     foreach ($profiles as $profile) {
-        if (is_array($profile) && ($options['persona'] === 'all' || ($profile['code'] ?? null) === $options['persona'])) {
+        if (!is_array($profile)) {
+            throw new RuntimeException('Invalid simulator persona data.');
+        }
+        /** @var array<string,mixed> $profile */
+        if ($options['persona'] === 'all' || ($profile['code'] ?? null) === $options['persona']) {
             $selected[] = $profile;
         }
     }
