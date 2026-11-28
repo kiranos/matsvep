@@ -33,11 +33,12 @@ final class PlanManagerIntegrationTest extends TestCase
             $householdId = (int) $db->lastInsertId();
             $source = $this->value($db, "SELECT id FROM source WHERE adapter = 'koket'");
             $recipe = $db->prepare('INSERT INTO recipe (source_id, url, title, is_dinner_candidate, '
-                . 'main_protein, leftover_score, festive_score, effort, active) '
-                . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                . 'main_protein, leftover_score, festive_score, effort, active, is_vegetarian) '
+                . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             for ($id = 1; $id <= 20; $id++) {
                 $recipe->execute([$source, 'https://example.com/plan-' . $id, 'Plan ' . $id,
-                    $id !== 15 ? 1 : 0, $id % 3 === 0 ? 'fish' : 'vegetarian', 0.7, 0.5, 2, $id !== 16 ? 1 : 0]);
+                    $id !== 15 ? 1 : 0, $id % 3 === 0 ? 'fish' : 'vegetarian', 0.7, 0.5, 2,
+                    $id !== 16 ? 1 : 0, $id % 3 === 0 ? 0 : 1]);
             }
             $householdRecipe = $db->prepare('INSERT INTO household_recipe '
                 . '(household_id, recipe_id, status, rating, rating_source, rated_at) '
