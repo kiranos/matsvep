@@ -99,10 +99,9 @@ final class PersonaSimulationIntegrationTest extends TestCase
                     self::assertGreaterThanOrEqual(0, $policy['hidden_utility_4_plus_share']);
                     self::assertLessThanOrEqual(1, $policy['hidden_utility_4_plus_share']);
                 }
-                self::assertGreaterThan(
-                    0,
-                    $report['personas']['husman_family']['random']['baseline_outside_shortlist_picks']
-                );
+                $randomPolicy = $report['personas']['husman_family']['random'];
+                self::assertIsArray($randomPolicy);
+                self::assertGreaterThan(0, $randomPolicy['baseline_outside_shortlist_picks']);
                 $baselineSwipes = $target->prepare('SELECT COUNT(*) FROM swipe_event e '
                     . 'JOIN household h ON h.id = e.household_id '
                     . 'WHERE h.name IN (?, ?)');
@@ -124,7 +123,7 @@ final class PersonaSimulationIntegrationTest extends TestCase
         }
     }
 
-    /** @param array<string,mixed> $settings */
+    /** @param array<array-key,mixed> $settings */
     private function assertFailedRunDropsDatabase(
         PDO $admin,
         PDO $source,
