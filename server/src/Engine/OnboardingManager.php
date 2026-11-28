@@ -26,14 +26,26 @@ final class OnboardingManager
     public function questions(): array
     {
         $dishOptions = [];
-        $seen = [];
-        $dish = $this->db->prepare('SELECT id FROM recipe WHERE active = TRUE AND is_dinner_candidate = TRUE AND title LIKE ? ORDER BY id LIMIT 1');
-        foreach ($this->seedLines('onboarding_dishes.csv') as $keyword) {
-            $dish->execute(['%' . addcslashes($keyword, '%_\\') . '%']);
-            $id = $dish->fetchColumn();
-            if ($id !== false && !isset($seen[(string) $id])) {
-                $seen[(string) $id] = true;
+        $curated = $this->db->prepare('SELECT r.id FROM onboarding_dish d '
+            . 'JOIN recipe r ON r.id = d.recipe_id '
+            . 'WHERE d.active = TRUE AND r.active = TRUE AND r.is_dinner_candidate = TRUE '
+            . 'ORDER BY d.position, d.recipe_id');
+        $curated->execute();
+        $ids = $curated->fetchAll(PDO::FETCH_COLUMN);
+        if ($ids !== []) {
+            foreach ($ids as $id) {
                 $dishOptions[] = ['recipe_id' => DbValue::integer($id)];
+            }
+        } else {
+            $seen = [];
+            $dish = $this->db->prepare('SELECT id FROM recipe WHERE active = TRUE AND is_dinner_candidate = TRUE AND title LIKE ? ORDER BY id LIMIT 1');
+            foreach ($this->seedLines('onboarding_dishes.csv') as $keyword) {
+                $dish->execute(['%' . addcslashes($keyword, '%_\\') . '%']);
+                $id = $dish->fetchColumn();
+                if ($id !== false && !isset($seen[(string) $id])) {
+                    $seen[(string) $id] = true;
+                    $dishOptions[] = ['recipe_id' => DbValue::integer($id)];
+                }
             }
         }
         $cuisines = $this->db->prepare('SELECT DISTINCT cuisine FROM recipe WHERE active = TRUE AND cuisine IS NOT NULL ORDER BY cuisine');

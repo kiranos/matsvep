@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Tests;
 
+use Matsvep\Admin\OnboardingDishService;
 use Matsvep\Api\ApiError;
 use Matsvep\Api\ApiKernel;
 use Matsvep\Api\AppAuth;
@@ -328,6 +329,57 @@ final class ApiHouseholdIntegrationTest extends TestCase
             self::assertStringContainsString($code, $contract);
             self::assertStringContainsString('builder.plan_days.' . $code, $design);
         }
+    }
+
+    public function testCuratedOnboardingDishesAreOrderedAuditedAndSkipIneligibleRecipes(): void
+    {
+        $api = new ApiKernel(self::$db);
+        $service = new OnboardingDishService(self::$db);
+        $actorQuery = self::$db->prepare('SELECT id FROM `user` WHERE email = ?');
+        $actorQuery->execute(['admin-household@example.test']);
+        $actor = DbValue::integer($actorQuery->fetchColumn());
+        $fallback = $this->request($api, 'GET', '/onboarding/questions', null, self::$firstToken);
+
+        $service->add($actor, self::$firstRecipe);
+        $service->add($actor, self::$secondRecipe);
+        $service->move($actor, self::$secondRecipe, 'up');
+        $curated = $this->request($api, 'GET', '/onboarding/questions', null, self::$firstToken);
+        self::assertSame(200, $curated[0]);
+        self::assertSame([
+            ['recipe_id' => self::$secondRecipe],
+            ['recipe_id' => self::$firstRecipe],
+        ], $curated[1]['items'][0]['options']);
+        self::assertSame(2, $service->countStatus()['count']);
+        self::assertSame(30, $service->countStatus()['minimum']);
+        self::assertSame(40, $service->countStatus()['maximum']);
+        self::assertCount(3, $service->search('Synthetic supper'));
+
+        $service->remove($actor, self::$secondRecipe);
+        $onlyFirst = $this->request($api, 'GET', '/onboarding/questions', null, self::$firstToken);
+        self::assertSame([['recipe_id' => self::$firstRecipe]], $onlyFirst[1]['items'][0]['options']);
+        try {
+            $service->add($actor, self::$inactiveRecipe);
+            self::fail('An inactive recipe was accepted.');
+        } catch (\RuntimeException $expected) {
+            self::assertSame('Select an active dinner candidate.', $expected->getMessage());
+        }
+        $notDinner = self::$db->prepare('UPDATE recipe SET is_dinner_candidate = FALSE WHERE id = ?');
+        $notDinner->execute([self::$firstRecipe]);
+        try {
+            $service->add($actor, self::$firstRecipe);
+            self::fail('A non-dinner recipe was accepted.');
+        } catch (\RuntimeException $expected) {
+            self::assertSame('Select an active dinner candidate.', $expected->getMessage());
+        }
+        $skipped = $this->request($api, 'GET', '/onboarding/questions', null, self::$firstToken);
+        self::assertSame($fallback[1]['items'][0]['options'], $skipped[1]['items'][0]['options']);
+        self::assertSame(0, $service->countStatus()['count']);
+
+        $actions = self::$db->prepare("SELECT action FROM admin_audit WHERE target_type = 'onboarding_dish' ORDER BY id");
+        $actions->execute();
+        self::assertSame([
+            'onboarding_dish.add', 'onboarding_dish.add', 'onboarding_dish.move', 'onboarding_dish.remove',
+        ], $actions->fetchAll(PDO::FETCH_COLUMN));
     }
 
     /** @param array<string,mixed>|null $body

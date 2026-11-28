@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Matsvep\Admin\AdminAuth;
 use Matsvep\Admin\AdminIpAllowlist;
 use Matsvep\Admin\AdminService;
+use Matsvep\Admin\OnboardingDishService;
 use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
@@ -78,6 +79,7 @@ $db = DatabaseConnection::fromEnvironment($server);
 $auth = new AdminAuth($db);
 $auth->startSession();
 $service = new AdminService($db, $server . '/seeds');
+$onboardingDishes = new OnboardingDishService($db);
 $error = null;
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
@@ -136,6 +138,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 case 'group_merge':
                     $service->mergeGroups($actor, idFrom($_POST['source_id'] ?? null), idFrom($_POST['target_id'] ?? null));
                     break;
+                case 'onboarding_dish_add':
+                    $onboardingDishes->add($actor, idFrom($_POST['recipe_id'] ?? null));
+                    break;
+                case 'onboarding_dish_remove':
+                    $onboardingDishes->remove($actor, idFrom($_POST['recipe_id'] ?? null));
+                    break;
+                case 'onboarding_dish_up':
+                case 'onboarding_dish_down':
+                    $onboardingDishes->move($actor, idFrom($_POST['recipe_id'] ?? null), substr($action, 16));
+                    break;
                 default:
                     throw new RuntimeException('Unknown admin action.');
             }
@@ -167,7 +179,8 @@ if ($actor === null) {
 }
 echo '<nav><a href="/admin/">Overview</a><a href="?page=unknowns">Unknown ingredients</a>';
 echo '<a href="?page=duplicates">Duplicates</a><a href="?page=recipes">Recipes</a>';
-echo '<a href="?page=groups">Dish groups</a>' . actionForm('logout', $csrf, '<button>Log out</button>') . '</nav>';
+echo '<a href="?page=groups">Dish groups</a><a href="?page=onboarding">Onboarding dishes</a>' .
+    actionForm('logout', $csrf, '<button>Log out</button>') . '</nav>';
 try {
     switch ($page) {
         case 'overview':
@@ -267,6 +280,61 @@ try {
                 if ($options !== '') {
                     echo actionForm('group_merge', $csrf, hidden('source_id', $group['id']) .
                         hidden('return_page', 'groups') . '<select name="target_id">' . $options . '</select><button>Merge into group</button>');
+                }
+                echo '</div>';
+            }
+            break;
+        case 'onboarding':
+            echo '<h2>Onboarding dishes</h2>';
+            $status = $onboardingDishes->countStatus();
+            echo '<p>Eligible active dishes: ' . h($status['count']) . '</p>';
+            if ($status['count'] < $status['minimum']) {
+                echo '<p class="error">Below the recommended minimum of ' . h($status['minimum']) . ' dishes.</p>';
+            } elseif ($status['count'] > $status['maximum']) {
+                echo '<p class="error">Above the recommended maximum of ' . h($status['maximum']) . ' dishes.</p>';
+            }
+            echo '<ol>';
+            foreach ($onboardingDishes->list() as $entry) {
+                echo '<li>' . h($entry['title']) . ' — ' . h($entry['source_name']) .
+                    ' (dinner candidate: ' . ((int) $entry['is_dinner_candidate'] === 1 ? 'yes' : 'no') .
+                    ', recipe active: ' . ((int) $entry['recipe_active'] === 1 ? 'yes' : 'no') .
+                    ', selected: ' . ((int) $entry['active'] === 1 ? 'yes' : 'no') . ') ';
+                if ((int) $entry['active'] === 1) {
+                    foreach (['up' => 'Move up', 'down' => 'Move down', 'remove' => 'Remove'] as $operation => $label) {
+                        echo actionForm(
+                            'onboarding_dish_' . $operation,
+                            $csrf,
+                            hidden('recipe_id', $entry['recipe_id']) . hidden('return_page', 'onboarding') .
+                            '<button>' . h($label) . '</button>'
+                        );
+                    }
+                } elseif ((int) $entry['recipe_active'] === 1 && (int) $entry['is_dinner_candidate'] === 1) {
+                    echo actionForm(
+                        'onboarding_dish_add',
+                        $csrf,
+                        hidden('recipe_id', $entry['recipe_id']) . hidden('return_page', 'onboarding') .
+                        '<button>Restore</button>'
+                    );
+                }
+                echo '</li>';
+            }
+            echo '</ol>';
+            $query = stringInput($_GET['q'] ?? '');
+            echo '<h3>Add a dinner candidate</h3><form method="get">' . hidden('page', 'onboarding') .
+                field('q', $query) . '<button>Search</button></form>';
+            foreach ($onboardingDishes->search($query) as $recipe) {
+                echo '<div class="card"><strong>' . h($recipe['title']) . '</strong> — ' . h($recipe['source_name']) .
+                    ' <a href="' . h(safeSourceUrl($recipe['url'])) . '">Source</a>' .
+                    '<p>Dinner candidate: ' . ((int) $recipe['is_dinner_candidate'] === 1 ? 'yes' : 'no') .
+                    '; active: ' . ((int) $recipe['active'] === 1 ? 'yes' : 'no') . '</p>';
+                if ((int) $recipe['active'] === 1 && (int) $recipe['is_dinner_candidate'] === 1
+                    && (int) $recipe['selected'] !== 1) {
+                    echo actionForm(
+                        'onboarding_dish_add',
+                        $csrf,
+                        hidden('recipe_id', $recipe['id']) . hidden('return_page', 'onboarding') .
+                        '<button>Add</button>'
+                    );
                 }
                 echo '</div>';
             }
