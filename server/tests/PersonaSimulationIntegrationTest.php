@@ -76,6 +76,8 @@ final class PersonaSimulationIntegrationTest extends TestCase
                 self::assertSame(40, $counts['recipe']);
                 self::assertGreaterThan(0, $copyMs);
                 $simulatorSettings->seed($target);
+                $smallShortlist = $target->prepare('UPDATE engine_config SET value = ? WHERE `key` = ?');
+                $smallShortlist->execute(['8', 'builder.discovery_prefilter']);
                 $report = (new PersonaSimulation($target))->run([$firstPersona], 2, 42);
                 self::assertSame(42, $report['seed']);
                 self::assertSame(2, $report['weeks']);
@@ -97,10 +99,21 @@ final class PersonaSimulationIntegrationTest extends TestCase
                     self::assertGreaterThanOrEqual(0, $policy['hidden_utility_4_plus_share']);
                     self::assertLessThanOrEqual(1, $policy['hidden_utility_4_plus_share']);
                 }
+                self::assertGreaterThan(
+                    0,
+                    $report['personas']['husman_family']['random']['baseline_outside_shortlist_picks']
+                );
+                $baselineSwipes = $target->prepare('SELECT COUNT(*) FROM swipe_event e '
+                    . 'JOIN household h ON h.id = e.household_id '
+                    . 'WHERE h.name IN (?, ?)');
+                $baselineSwipes->execute(['Simulator husman_family random',
+                    'Simulator husman_family favourites_only']);
+                self::assertSame(0, (int) $baselineSwipes->fetchColumn());
                 unset($report['timings_ms']);
                 $reports[] = $report;
             }
             self::assertSame($reports[0], $reports[1]);
+            $this->assertFailedRunDropsDatabase($admin, $source, $settings, $names[0], $prefix);
             $count = $source->prepare('SELECT COUNT(*) FROM household');
             $count->execute();
             self::assertSame(0, (int) $count->fetchColumn());
@@ -108,6 +121,65 @@ final class PersonaSimulationIntegrationTest extends TestCase
             foreach (array_reverse($names) as $name) {
                 $admin->prepare("DROP DATABASE IF EXISTS `$name`")->execute();
             }
+        }
+    }
+
+    /** @param array<string,mixed> $settings */
+    private function assertFailedRunDropsDatabase(
+        PDO $admin,
+        PDO $source,
+        array $settings,
+        string $sourceName,
+        string $prefix
+    ): void {
+        $invalidate = $source->prepare('UPDATE engine_config SET value = ? WHERE `key` = ?');
+        $invalidate->execute(['0', 'builder.default_plan_days']);
+        $file = tempnam(sys_get_temp_dir(), 'matsvep-sim-');
+        self::assertIsString($file);
+        $targetPrefix = $prefix . '_failure';
+        $values = [
+            'SOURCE_HOST' => $settings['DB_HOST'], 'SOURCE_PORT' => $settings['DB_PORT'],
+            'SOURCE_DB' => $sourceName, 'SOURCE_USER' => $settings['DB_USER'],
+            'SOURCE_PASSWORD' => $settings['DB_PASSWORD'], 'TARGET_HOST' => $settings['DB_HOST'],
+            'TARGET_PORT' => $settings['DB_PORT'], 'TARGET_USER' => $settings['DB_USER'],
+            'TARGET_PASSWORD' => $settings['DB_PASSWORD'], 'TARGET_DB_PREFIX' => $targetPrefix,
+        ];
+        $lines = [];
+        foreach ($values as $key => $value) {
+            self::assertIsString($value);
+            $lines[] = $key . '="' . str_replace(['\\', '"'], ['\\\\', '\\"'], $value) . '"';
+        }
+        self::assertNotFalse(file_put_contents($file, implode("\n", $lines) . "\n"));
+        $previous = getenv('MATS_SIM_ENV_FILE');
+        putenv('MATS_SIM_ENV_FILE=' . $file);
+        try {
+            $process = proc_open(
+                [PHP_BINARY, __DIR__ . '/../simulator/run.php',
+                '--persona=husman_family', '--weeks=1', '--seed=42'],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $pipes,
+                __DIR__ . '/..'
+            );
+            self::assertIsResource($process);
+            $stdout = stream_get_contents($pipes[1]);
+            $stderr = stream_get_contents($pipes[2]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            self::assertSame(1, proc_close($process));
+            self::assertIsString($stdout);
+            self::assertIsString($stderr);
+            self::assertStringContainsString('POST /api/v1/plans (policy engine)', $stderr);
+            $databases = $admin->query('SHOW DATABASES');
+            self::assertInstanceOf(\PDOStatement::class, $databases);
+            $remaining = array_values(array_filter(
+                $databases->fetchAll(PDO::FETCH_COLUMN),
+                static fn (mixed $name): bool => is_string($name)
+                    && str_starts_with($name, $targetPrefix . '_')
+            ));
+            self::assertSame([], $remaining);
+        } finally {
+            putenv($previous === false ? 'MATS_SIM_ENV_FILE' : 'MATS_SIM_ENV_FILE=' . $previous);
+            unlink($file);
         }
     }
 

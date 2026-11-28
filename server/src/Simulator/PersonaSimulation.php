@@ -22,6 +22,12 @@ final class PersonaSimulation
 
     private int $requestNumber = 0;
 
+    private string $currentPolicy = 'unknown';
+
+    private string $lastRequestMethod = 'unknown';
+
+    private string $lastRequestRoute = 'unknown';
+
     public function __construct(private readonly PDO $db)
     {
         $this->config = EngineConfig::fromDatabase($db);
@@ -72,6 +78,7 @@ final class PersonaSimulation
         int $weeks,
         SeededRandom $random
     ): array {
+        $this->currentPolicy = $policy;
         $code = DbValue::text($persona['code']);
         $behavior = DbValue::text($persona['behavior']);
         $taste = new PersonaTaste($this->db, $this->config, $persona);
@@ -104,7 +111,7 @@ final class PersonaSimulation
         $metrics = ['picks' => 0, 'swipes' => 0, 'top_three' => 0, 'replacements' => 0,
             'cooked' => 0, 'hit' => 0, 'discovery_rated' => 0, 'discovery_hit' => 0,
             'rating_errors' => 0.0, 'first_ratings' => 0, 'empty_decks' => 0,
-            'baseline_fallbacks' => 0, 'unconfirmed' => 0,
+            'baseline_fallbacks' => 0, 'baseline_outside_shortlist_picks' => 0, 'unconfirmed' => 0,
             'hidden_utility_sum' => 0.0, 'hidden_utility_4_plus' => 0];
         /** @var array<string,array<string,mixed>> $pending */
         $pending = [];
@@ -265,27 +272,38 @@ final class PersonaSimulation
             foreach ($ids as $position => $recipeId) {
                 $last = $position === count($ids) - 1;
                 if ($taste->utility($recipeId, $week, $random) < $threshold && !$last) {
-                    $this->expect(201, $this->call(
-                        $now,
-                        'POST',
-                        '/plans/' . $planId . '/swipes',
-                        ['date' => $date, 'recipe_id' => $recipeId, 'position' => $position,
-                            'action' => 'next', 'session_id' => $session],
-                        $token,
-                        'swipe'
-                    ));
+                    if ($policy === 'engine') {
+                        $this->expect(201, $this->call(
+                            $now,
+                            'POST',
+                            '/plans/' . $planId . '/swipes',
+                            ['date' => $date, 'recipe_id' => $recipeId, 'position' => $position,
+                                'action' => 'next', 'session_id' => $session],
+                            $token,
+                            'swipe'
+                        ));
+                    }
                     $metrics['swipes']++;
                     continue;
                 }
+                $outsideShortlist = false;
+                if ($policy !== 'engine') {
+                    $candidate = $this->db->prepare('SELECT 1 FROM plan_candidate WHERE plan_id = ? AND recipe_id = ?');
+                    $candidate->execute([$planId, $recipeId]);
+                    $outsideShortlist = $candidate->fetchColumn() === false;
+                }
+                $choice = ['expected_version' => $version, 'recipe_id' => $recipeId];
+                if ($policy === 'engine') {
+                    $choice['swipe'] = ['position' => $position, 'session_id' => $session];
+                }
                 [$status, $response] = $this->call($now, 'POST', '/plans/' . $planId
-                    . '/slots/' . $slotId . '/choose', ['expected_version' => $version,
-                        'recipe_id' => $recipeId, 'swipe' => ['position' => $position,
-                            'session_id' => $session]], $token, 'choose');
+                    . '/slots/' . $slotId . '/choose', $choice, $token, 'choose');
                 if ($status === 422) {
                     continue;
                 }
                 $chosen = $this->expect(200, [$status, $response]);
                 $metrics['picks']++;
+                $metrics['baseline_outside_shortlist_picks'] += (int) $outsideShortlist;
                 $metrics['swipes']++;
                 $metrics['top_three'] += (int) ($position < 3);
                 break;
@@ -456,6 +474,7 @@ final class PersonaSimulation
             'discovery_share' => $picks === 0 ? null : round($discoveries / $picks, 4),
             'empty_decks' => (int) $metrics['empty_decks'],
             'unconfirmed' => (int) $metrics['unconfirmed'],
+            'baseline_outside_shortlist_picks' => (int) $metrics['baseline_outside_shortlist_picks'],
             'baseline_fallbacks' => (int) $metrics['baseline_fallbacks']];
     }
 
@@ -469,6 +488,8 @@ final class PersonaSimulation
         ?string $token,
         string $timing
     ): array {
+        $this->lastRequestMethod = $method;
+        $this->lastRequestRoute = '/api/v1' . $route;
         $headers = $token === null ? [] : ['Authorization' => 'Bearer ' . $token];
         if (in_array($method, ['POST', 'PUT', 'PATCH'], true) && $token !== null) {
             $headers['Idempotency-Key'] = $this->uuid();
@@ -492,7 +513,9 @@ final class PersonaSimulation
         if ($result[0] !== $status) {
             $code = $result[1]['code'] ?? 'unknown';
             throw new RuntimeException('Simulation API request failed with status ' . $result[0]
-                . ' and code ' . (is_string($code) ? $code : 'unknown') . '.');
+                . ' and code ' . (is_string($code) ? $code : 'unknown') . ' for '
+                . $this->lastRequestMethod . ' ' . $this->lastRequestRoute
+                . ' (policy ' . $this->currentPolicy . ').');
         }
         return $result[1];
     }
