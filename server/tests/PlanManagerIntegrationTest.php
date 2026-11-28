@@ -64,10 +64,13 @@ final class PlanManagerIntegrationTest extends TestCase
                 self::assertNotContains($excluded, $candidateIds);
             }
             $phases = [];
-            $manager = new PlanManager($db, $engineConfig,
+            $manager = new PlanManager(
+                $db,
+                $engineConfig,
                 static function (string $phase, float $milliseconds) use (&$phases): void {
                     $phases[] = $phase;
-                });
+                }
+            );
             $dates = [];
             for ($day = 0; $day < 7; $day++) {
                 $dates[] = (new \DateTimeImmutable('2026-11-22'))->modify('+' . $day . ' days')->format('Y-m-d');
@@ -103,8 +106,10 @@ final class PlanManagerIntegrationTest extends TestCase
             $shortlisted = (new PlanCandidateRepository($db, $engineConfig))->load(
                 $householdId, new \DateTimeImmutable('2026-11-22'), false, [], $planId
             );
-            $firstCandidate = array_values(array_filter($shortlisted,
-                static fn ($candidate): bool => $candidate->id === 1));
+            $firstCandidate = array_values(array_filter(
+                $shortlisted,
+                static fn ($candidate): bool => $candidate->id === 1
+            ));
             self::assertCount(1, $firstCandidate);
             self::assertSame(3, $firstCandidate[0]->rating);
 
