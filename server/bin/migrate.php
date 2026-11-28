@@ -59,8 +59,12 @@ try {
     ]);
     DatabaseConnection::setUtc($db);
     $runner = new MigrationRunner($db, __DIR__ . '/../migrations', $config['DB_NAME']);
-    foreach ($runner->run() as $line) {
+    $result = $runner->run();
+    foreach ($result as $line) {
         echo $line, PHP_EOL;
+    }
+    if (count(array_filter($result, static fn (string $line): bool => str_starts_with($line, 'APPLIED '))) === 0) {
+        echo 'Up to date.', PHP_EOL;
     }
 } catch (Throwable $error) {
     fwrite(STDERR, 'Migration failed: ' . $error->getMessage() . PHP_EOL);
