@@ -22,6 +22,16 @@ final class PersonaTaste
 
     public function utility(int $recipeId, int $week, SeededRandom $random): float
     {
+        return $this->score($recipeId, $week, $random);
+    }
+
+    public function noiseFreeUtility(int $recipeId, int $week): float
+    {
+        return $this->score($recipeId, $week, null);
+    }
+
+    private function score(int $recipeId, int $week, ?SeededRandom $random): float
+    {
         $recipe = $this->recipe($recipeId);
         $title = mb_strtolower($recipe['title']);
         $ingredients = implode(' ', $recipe['ingredients']);
@@ -58,7 +68,9 @@ final class PersonaTaste
         $phase = hexdec(substr(hash('sha256', $code . ':' . $recipeId), 0, 8)) / 4294967296;
         $period = $this->config->integer('simulator.taste.drift_weeks');
         $score += sin(2 * M_PI * ($week / $period + $phase)) * $this->config->decimal('simulator.taste.drift');
-        $score += ($random->fraction() * 2 - 1) * $this->config->decimal('simulator.taste.noise');
+        if ($random !== null) {
+            $score += ($random->fraction() * 2 - 1) * $this->config->decimal('simulator.taste.noise');
+        }
         return max(1.0, min(5.0, $score));
     }
 

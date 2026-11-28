@@ -8,6 +8,7 @@ use Matsvep\Database\MigrationRunner;
 use Matsvep\Ingest\Ingredient\DatabaseConnection;
 use Matsvep\Simulator\CatalogueClone;
 use Matsvep\Simulator\PersonaSimulation;
+use Matsvep\Simulator\SimulatorSettings;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -54,19 +55,27 @@ final class PersonaSimulationIntegrationTest extends TestCase
             self::assertIsArray($personas[0]);
             /** @var array<string,mixed> $firstPersona */
             $firstPersona = $personas[0];
+            $simulatorSettings = new SimulatorSettings(__DIR__ . '/../seeds/simulator_config.json');
+            $sourceConfig = $source->prepare("SELECT COUNT(*) FROM engine_config WHERE `key` LIKE 'simulator.%'");
+            $sourceConfig->execute();
+            self::assertSame(0, (int) $sourceConfig->fetchColumn());
             $reports = [];
             foreach (array_slice($names, 1) as $name) {
                 $target = new PDO($dsn . ';dbname=' . $name, $settings['DB_USER'], $settings['DB_PASSWORD'], $options);
                 DatabaseConnection::setUtc($target);
                 (new MigrationRunner($target, __DIR__ . '/../migrations', $name))->run();
-                $clone = new CatalogueClone($source, $target);
+                $clone = new CatalogueClone($source, $target, 7);
                 $clone->acquireCrawlerLock();
                 try {
+                    $copyStarted = hrtime(true);
                     $counts = $clone->copy();
+                    $copyMs = (hrtime(true) - $copyStarted) / 1_000_000;
                 } finally {
                     $clone->releaseCrawlerLock();
                 }
                 self::assertSame(40, $counts['recipe']);
+                self::assertGreaterThan(0, $copyMs);
+                $simulatorSettings->seed($target);
                 $report = (new PersonaSimulation($target))->run([$firstPersona], 2, 42);
                 self::assertSame(42, $report['seed']);
                 self::assertSame(2, $report['weeks']);
@@ -76,6 +85,17 @@ final class PersonaSimulationIntegrationTest extends TestCase
                     ['engine', 'random', 'favourites_only'],
                     array_keys($report['personas']['husman_family'])
                 );
+                foreach ($report['personas']['husman_family'] as $policy) {
+                    self::assertArrayHasKey('mean_hidden_utility', $policy);
+                    self::assertArrayHasKey('hidden_utility_4_plus_share', $policy);
+                    self::assertArrayHasKey('hit_rate', $policy);
+                    self::assertArrayHasKey('mae', $policy);
+                    self::assertGreaterThan(0, $policy['cooked']);
+                    self::assertGreaterThanOrEqual(1, $policy['mean_hidden_utility']);
+                    self::assertLessThanOrEqual(5, $policy['mean_hidden_utility']);
+                    self::assertGreaterThanOrEqual(0, $policy['hidden_utility_4_plus_share']);
+                    self::assertLessThanOrEqual(1, $policy['hidden_utility_4_plus_share']);
+                }
                 unset($report['timings_ms']);
                 $reports[] = $report;
             }
@@ -114,7 +134,7 @@ final class PersonaSimulationIntegrationTest extends TestCase
         try {
             $this->expectException(RuntimeException::class);
             $this->expectExceptionMessage('crawler lock is held');
-            (new CatalogueClone($second, $second))->acquireCrawlerLock();
+            (new CatalogueClone($second, $second, 7))->acquireCrawlerLock();
         } finally {
             $release = $first->prepare('SELECT RELEASE_LOCK(?)');
             $release->execute(['matsvep:crawl:koket']);

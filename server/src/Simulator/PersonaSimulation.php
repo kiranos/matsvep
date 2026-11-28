@@ -104,7 +104,8 @@ final class PersonaSimulation
         $metrics = ['picks' => 0, 'swipes' => 0, 'top_three' => 0, 'replacements' => 0,
             'cooked' => 0, 'hit' => 0, 'discovery_rated' => 0, 'discovery_hit' => 0,
             'rating_errors' => 0.0, 'first_ratings' => 0, 'empty_decks' => 0,
-            'baseline_fallbacks' => 0, 'unconfirmed' => 0];
+            'baseline_fallbacks' => 0, 'unconfirmed' => 0,
+            'hidden_utility_sum' => 0.0, 'hidden_utility_4_plus' => 0];
         /** @var array<string,array<string,mixed>> $pending */
         $pending = [];
         for ($day = 0; $day < $weeks * 7; $day++) {
@@ -380,6 +381,9 @@ final class PersonaSimulation
         }
         $this->expect(200, $this->call($now, 'POST', $route, $body, $token, 'answer'));
         $metrics['cooked']++;
+        $hiddenUtility = $taste->noiseFreeUtility($recipeId, $week);
+        $metrics['hidden_utility_sum'] += $hiddenUtility;
+        $metrics['hidden_utility_4_plus'] += (int) ($hiddenUtility >= 4.0);
         if (!$rated) {
             $metrics['first_ratings']++;
             $metrics['hit'] += (int) ($rating >= 4);
@@ -437,6 +441,10 @@ final class PersonaSimulation
         return ['picks' => $picks, 'cooked' => (int) $metrics['cooked'],
             'mae' => $ratings === 0 ? null : round($metrics['rating_errors'] / $ratings, 4),
             'hit_rate' => $ratings === 0 ? null : round($metrics['hit'] / $ratings, 4),
+            'mean_hidden_utility' => $metrics['cooked'] === 0 ? null
+                : round($metrics['hidden_utility_sum'] / $metrics['cooked'], 4),
+            'hidden_utility_4_plus_share' => $metrics['cooked'] === 0 ? null
+                : round($metrics['hidden_utility_4_plus'] / $metrics['cooked'], 4),
             'discovery_success' => $metrics['discovery_rated'] === 0 ? null
                 : round($metrics['discovery_hit'] / $metrics['discovery_rated'], 4),
             'replace_rate' => $picks === 0 ? null : round($metrics['replacements'] / $picks, 4),

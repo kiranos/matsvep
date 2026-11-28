@@ -6,6 +6,7 @@ use Matsvep\Database\MigrationRunner;
 use Matsvep\Ingest\Ingredient\DatabaseConnection;
 use Matsvep\Simulator\CatalogueClone;
 use Matsvep\Simulator\PersonaSimulation;
+use Matsvep\Simulator\SimulatorSettings;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -113,7 +114,9 @@ try {
             throw new RuntimeException('The simulator must not use the matsvep_app account.');
         }
     }
-    $guard = new CatalogueClone($source, $admin);
+    $simulatorSettings = new SimulatorSettings(__DIR__ . '/../seeds/simulator_config.json');
+    $batchRows = $simulatorSettings->integer('simulator.clone_batch_rows');
+    $guard = new CatalogueClone($source, $admin, $batchRows);
     $guard->acquireCrawlerLock();
     $database = $settings['TARGET_DB_PREFIX'] . '_' . bin2hex(random_bytes(6));
     if (strlen($database) > 64) {
@@ -131,11 +134,15 @@ try {
     );
     DatabaseConnection::setUtc($target);
     (new MigrationRunner($target, __DIR__ . '/../migrations', $database))->run();
-    $counts = (new CatalogueClone($source, $target))->copy();
+    $copyStarted = hrtime(true);
+    $counts = (new CatalogueClone($source, $target, $batchRows))->copy();
+    $copyMs = round((hrtime(true) - $copyStarted) / 1_000_000, 3);
     $guard->releaseCrawlerLock();
     $guard = null;
+    $simulatorSettings->seed($target);
     $simulation = (new PersonaSimulation($target))->run($selected, (int) $options['weeks'], (int) $options['seed']);
     $simulation['catalogue_counts'] = $counts;
+    $simulation['catalogue_copy_ms'] = $copyMs;
     $reportDirectory = __DIR__ . '/../var';
     if (!is_dir($reportDirectory) && !mkdir($reportDirectory, 0750, true)) {
         throw new RuntimeException('Cannot create simulator report directory.');

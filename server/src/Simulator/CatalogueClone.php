@@ -15,8 +15,14 @@ final class CatalogueClone
         'recipe_source_link', 'engine_config',
     ];
 
-    public function __construct(private readonly PDO $source, private readonly PDO $target)
-    {
+    public function __construct(
+        private readonly PDO $source,
+        private readonly PDO $target,
+        private readonly int $batchRows
+    ) {
+        if ($batchRows < 1) {
+            throw new RuntimeException('Catalogue copy batch size must be positive.');
+        }
     }
 
     public function acquireCrawlerLock(): void
@@ -44,12 +50,19 @@ final class CatalogueClone
         $this->source->beginTransaction();
         $this->target->prepare('SET FOREIGN_KEY_CHECKS = 0')->execute();
         try {
+            $this->target->beginTransaction();
             $this->target->prepare('DELETE FROM source')->execute();
             $counts = [];
             foreach (self::TABLES as $table) {
                 $counts[$table] = $this->copyTable($table);
             }
+            $this->target->commit();
             return $counts;
+        } catch (\Throwable $error) {
+            if ($this->target->inTransaction()) {
+                $this->target->rollBack();
+            }
+            throw $error;
         } finally {
             $this->target->prepare('SET FOREIGN_KEY_CHECKS = 1')->execute();
             $this->source->rollBack();
@@ -71,18 +84,37 @@ final class CatalogueClone
             }
         }
         $names = implode(', ', array_map(static fn (string $name): string => '`' . $name . '`', $columns));
-        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
         $read = $this->source->prepare('SELECT ' . $names . ' FROM `' . $table . '`');
         $read->execute();
-        $write = $this->target->prepare('INSERT INTO `' . $table . '` (' . $names . ') VALUES (' . $placeholders . ')'
-            . ($table === 'engine_config' ? ' ON DUPLICATE KEY UPDATE '
-                . '`value` = VALUES(`value`), `type` = VALUES(`type`), '
-                . '`description` = VALUES(`description`), `version` = VALUES(`version`)' : ''));
         $count = 0;
+        $batch = [];
         while (($row = $read->fetch(PDO::FETCH_NUM)) !== false) {
-            $write->execute($row);
+            $batch[] = $row;
             $count++;
+            if (count($batch) >= $this->batchRows) {
+                $this->insertBatch($table, $names, count($columns), $batch);
+                $batch = [];
+            }
+        }
+        if ($batch !== []) {
+            $this->insertBatch($table, $names, count($columns), $batch);
         }
         return $count;
+    }
+
+    /** @param list<list<mixed>> $rows */
+    private function insertBatch(string $table, string $names, int $columnCount, array $rows): void
+    {
+        $oneRow = '(' . implode(', ', array_fill(0, $columnCount, '?')) . ')';
+        $placeholders = implode(', ', array_fill(0, count($rows), $oneRow));
+        $sql = 'INSERT INTO `' . $table . '` (' . $names . ') VALUES ' . $placeholders
+            . ($table === 'engine_config' ? ' ON DUPLICATE KEY UPDATE '
+                . '`value` = VALUES(`value`), `type` = VALUES(`type`), '
+                . '`description` = VALUES(`description`), `version` = VALUES(`version`)' : '');
+        $arguments = [];
+        foreach ($rows as $row) {
+            array_push($arguments, ...$row);
+        }
+        $this->target->prepare($sql)->execute($arguments);
     }
 }
