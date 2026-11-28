@@ -240,11 +240,11 @@ final class PersonaSimulation
             $deck = $this->expect(200, $this->call($now, 'GET', '/plans/' . $planId
                 . '/deck?date=' . $date, null, $token, 'deck'));
             $cards = DbValue::rows($deck['items']);
-            if ($cards === []) {
+            if ($cards === [] && $policy === 'engine') {
                 $metrics['empty_decks']++;
                 continue;
             }
-            $ids = $this->candidateIds($planId, $householdId, $policy, $random);
+            $ids = $this->candidateIds($householdId, $policy, $random);
             if ($ids === [] && $policy !== 'engine') {
                 $ids = array_map(static fn (array $card): int => DbValue::integer(
                     DbValue::map($card['recipe'])['id']
@@ -323,19 +323,18 @@ final class PersonaSimulation
     }
 
     /** @return list<int> */
-    private function candidateIds(int $planId, int $householdId, string $policy, SeededRandom $random): array
+    private function candidateIds(int $householdId, string $policy, SeededRandom $random): array
     {
         if ($policy === 'engine') {
             return [];
         }
-        $query = $this->db->prepare('SELECT pc.recipe_id FROM plan_candidate pc '
-            . 'JOIN recipe r ON r.id = pc.recipe_id '
-            . 'LEFT JOIN household_recipe hr ON hr.household_id = ? AND hr.recipe_id = pc.recipe_id '
-            . 'WHERE pc.plan_id = ? AND r.active = TRUE AND r.is_dinner_candidate = TRUE '
-            . 'AND (hr.status IS NULL OR hr.status = ? ) AND (hr.rating IS NULL OR hr.rating > ?) '
+        $query = $this->db->prepare('SELECT r.id FROM recipe r '
+            . 'LEFT JOIN household_recipe hr ON hr.household_id = ? AND hr.recipe_id = r.id '
+            . 'WHERE r.active = TRUE AND r.is_dinner_candidate = TRUE '
+            . 'AND (hr.status IS NULL OR hr.status = ?) AND (hr.rating IS NULL OR hr.rating > ?) '
             . ($policy === 'favourites_only' ? 'AND hr.rating >= ? ' : '')
-            . 'ORDER BY pc.recipe_id');
-        $args = [$householdId, $planId, 'library', $this->config->integer('filter.hide_at_or_below')];
+            . 'ORDER BY r.id');
+        $args = [$householdId, 'library', $this->config->integer('filter.hide_at_or_below')];
         if ($policy === 'favourites_only') {
             $args[] = $this->config->integer('simulator.favourite_min_rating');
         }
