@@ -28,7 +28,7 @@ final class CooldownReport
             $rating = in_array($meal['rating'], [3, 5], true) ? $meal['rating'] : 4;
             if (!$meal['placed_carryover'] && isset($lastCooked[$group])) {
                 $days = $lastCooked[$group]->diff($date)->days;
-                if ($days !== false && $days < $this->config->integer('cooldown.days.' . $rating)) {
+                if ($days < $this->config->integer('cooldown.days.' . $rating)) {
                     $violations++;
                 }
             }

@@ -396,7 +396,7 @@ final class PersonaSimulation
         $rating = in_array($rating, [3, 5], true) ? $rating : 4;
         $days = (new DateTimeImmutable(DbValue::text($row['last_cooked'])))
             ->diff(new DateTimeImmutable($now->format('Y-m-d')))->days;
-        return $days !== false && $days < $this->config->integer('cooldown.days.' . $rating);
+        return $days < $this->config->integer('cooldown.days.' . $rating);
     }
 
     /** @param array<string,mixed> $choice
