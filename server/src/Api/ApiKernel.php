@@ -30,10 +30,10 @@ final class ApiKernel
         $this->auth = new AppAuth($db, $config);
         $this->recipes = new RecipeReader($db, $config);
         $this->idempotency = new Idempotency($db, $config);
-        $learner = new Learner($db, $config);
+        $learner = new Learner($db, $config, $now);
         $this->households = new HouseholdManager($db, $config);
         $this->householdRecipes = new HouseholdRecipeManager($db, $learner);
-        $this->onboarding = new OnboardingManager($db, $learner);
+        $this->onboarding = new OnboardingManager($db, $learner, $now);
         $this->planning = new PlanningService($db, $config, $this->recipes, $this->householdRecipes, $now);
     }
 

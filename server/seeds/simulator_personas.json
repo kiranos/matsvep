@@ -1,0 +1,8 @@
+[
+  {"code":"husman_family","liked_dishes":["köttbullar","pytt i panna","fläskpannkaka"],"disliked_dishes":["wok"],"liked_ingredients":["potatis","fläsk","grädde"],"disliked_ingredients":["koriander"],"liked_pairs":[["potatis","fläsk"]],"behavior":"default","split_week":false,"block_vegetarian":false},
+  {"code":"tex_mex_fans","liked_dishes":["tacos","chili"],"disliked_dishes":["sill"],"liked_ingredients":["bönor","chili","majs"],"disliked_ingredients":["fisk"],"liked_pairs":[["chili","bönor"]],"behavior":"default","split_week":false,"block_vegetarian":false},
+  {"code":"picky_kids","liked_dishes":["pasta","pizza"],"disliked_dishes":["gryta","soppa"],"liked_ingredients":["pasta","ost"],"disliked_ingredients":["svamp","oliver","lök"],"liked_pairs":[["pasta","ost"]],"behavior":"picky","split_week":false,"block_vegetarian":false},
+  {"code":"adventurous_foodies","liked_dishes":["curry","wok"],"disliked_dishes":[],"liked_ingredients":["tofu","koriander","citrongräs"],"disliked_ingredients":[],"liked_pairs":[["tofu","koriander"]],"behavior":"adventurous","split_week":false,"block_vegetarian":false},
+  {"code":"meat_only","liked_dishes":["biff","stek"],"disliked_dishes":["sallad"],"liked_ingredients":["nötkött","fläsk","kyckling"],"disliked_ingredients":["tofu","bönor"],"liked_pairs":[["fläsk","potatis"]],"behavior":"default","split_week":false,"block_vegetarian":true},
+  {"code":"chaotic_week","liked_dishes":["pizza","tacos"],"disliked_dishes":["långkok"],"liked_ingredients":["ost","potatis"],"disliked_ingredients":["svamp"],"liked_pairs":[["ost","potatis"]],"behavior":"chaotic","split_week":true,"block_vegetarian":false}
+]

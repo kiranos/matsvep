@@ -15,8 +15,11 @@ final class Learner
 {
     private readonly AffinityCalculator $calculator;
 
-    public function __construct(private readonly PDO $db, private readonly EngineConfig $config)
-    {
+    public function __construct(
+        private readonly PDO $db,
+        private readonly EngineConfig $config,
+        private readonly ?DateTimeImmutable $now = null
+    ) {
         $this->calculator = new AffinityCalculator($config);
     }
 
@@ -381,7 +384,7 @@ final class Learner
 
     private function utc(?DateTimeImmutable $asOf): DateTimeImmutable
     {
-        return ($asOf ?? new DateTimeImmutable('now', new DateTimeZone('UTC')))
+        return ($asOf ?? $this->now ?? new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->setTimezone(new DateTimeZone('UTC'));
     }
 

@@ -25,7 +25,7 @@ final class PlanningService
         private readonly HouseholdRecipeManager $householdRecipes,
         private readonly ?DateTimeImmutable $now = null
     ) {
-        $this->manager = new PlanManager($db, $config);
+        $this->manager = new PlanManager($db, $config, null, $now);
         $this->window = new PlanningWindow($now);
     }
 
