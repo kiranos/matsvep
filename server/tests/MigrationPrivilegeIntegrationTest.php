@@ -104,7 +104,7 @@ final class MigrationPrivilegeIntegrationTest extends TestCase
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
             dirname(__DIR__),
-            array_merge($_ENV, $env)
+            $env
         );
         if (!is_resource($process)) {
             throw new RuntimeException('Cannot start migration command.');
