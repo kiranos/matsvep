@@ -44,8 +44,12 @@ final class PersonaSimulationIntegrationTest extends TestCase
             DatabaseConnection::setUtc($source);
             (new MigrationRunner($source, __DIR__ . '/../migrations', $names[0]))->run();
             $this->seedSyntheticCatalogue($source);
-            $personas = json_decode((string) file_get_contents(__DIR__ . '/../seeds/simulator_personas.json'),
-                true, 512, JSON_THROW_ON_ERROR);
+            $personas = json_decode(
+                (string) file_get_contents(__DIR__ . '/../seeds/simulator_personas.json'),
+                true,
+                512,
+                JSON_THROW_ON_ERROR
+            );
             self::assertIsArray($personas);
             self::assertIsArray($personas[0]);
             $reports = [];
@@ -64,8 +68,10 @@ final class PersonaSimulationIntegrationTest extends TestCase
                 $report = (new PersonaSimulation($target))->run([$personas[0]], 2, 42);
                 self::assertSame(42, $report['seed']);
                 self::assertSame(2, $report['weeks']);
-                self::assertSame(['engine', 'random', 'favourites_only'],
-                    array_keys($report['personas']['husman_family']));
+                self::assertSame(
+                    ['engine', 'random', 'favourites_only'],
+                    array_keys($report['personas']['husman_family'])
+                );
                 unset($report['timings_ms']);
                 $reports[] = $report;
             }

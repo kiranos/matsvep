@@ -19,8 +19,7 @@ final class OnboardingManager
         private readonly PDO $db,
         private readonly Learner $learner,
         private readonly ?DateTimeImmutable $now = null
-    )
-    {
+    ) {
     }
 
     /** @return array<string,mixed> */

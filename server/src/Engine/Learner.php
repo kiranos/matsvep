@@ -19,8 +19,7 @@ final class Learner
         private readonly PDO $db,
         private readonly EngineConfig $config,
         private readonly ?DateTimeImmutable $now = null
-    )
-    {
+    ) {
         $this->calculator = new AffinityCalculator($config);
     }
 

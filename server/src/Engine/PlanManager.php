@@ -27,8 +27,7 @@ final class PlanManager
         private EngineConfig $config,
         private readonly ?Closure $observer = null,
         private readonly ?DateTimeImmutable $now = null
-    )
-    {
+    ) {
         $this->builder = new PlanBuilder($config, $observer);
         $this->candidates = new PlanCandidateRepository($db, $config);
     }

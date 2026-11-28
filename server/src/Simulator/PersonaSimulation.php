@@ -34,8 +34,10 @@ final class PersonaSimulation
         if ($weeks < 1) {
             throw new RuntimeException('Simulation weeks must be positive.');
         }
-        $start = new DateTimeImmutable($this->config->string('simulator.start_date'),
-            new DateTimeZone('Europe/Stockholm'));
+        $start = new DateTimeImmutable(
+            $this->config->string('simulator.start_date'),
+            new DateTimeZone('Europe/Stockholm')
+        );
         if ($start->format('w') !== '0') {
             throw new RuntimeException('Simulator start date must be a Sunday.');
         }
@@ -47,8 +49,13 @@ final class PersonaSimulation
             }
             $policies = [];
             foreach (['engine', 'random', 'favourites_only'] as $policy) {
-                $policies[$policy] = $this->runPolicy($persona, $policy, $start, $weeks,
-                    new SeededRandom($seed . ':' . $code . ':' . $policy));
+                $policies[$policy] = $this->runPolicy(
+                    $persona,
+                    $policy,
+                    $start,
+                    $weeks,
+                    new SeededRandom($seed . ':' . $code . ':' . $policy)
+                );
             }
             $results[$code] = $policies;
         }
@@ -75,8 +82,14 @@ final class PersonaSimulation
         $householdId = (int) $this->db->lastInsertId();
         $insert = $this->db->prepare("INSERT INTO `user` (email, password_hash, role, household_id) VALUES (?, ?, 'member', ?)");
         $insert->execute([$email, password_hash($password, PASSWORD_DEFAULT), $householdId]);
-        $token = DbValue::text($this->expect(200, $this->call($start, 'POST', '/auth/token',
-            ['email' => $email, 'password' => $password, 'platform' => 'windows'], null, 'token'))['access_token']);
+        $token = DbValue::text($this->expect(200, $this->call(
+            $start,
+            'POST',
+            '/auth/token',
+            ['email' => $email, 'password' => $password, 'platform' => 'windows'],
+            null,
+            'token'
+        ))['access_token']);
         $settings = [];
         if ($persona['split_week'] === true) {
             $settings['planning_mode'] = 'split_week';
@@ -102,8 +115,17 @@ final class PersonaSimulation
             if ($day > 0) {
                 $yesterday = $today->modify('-1 day')->format('Y-m-d');
                 if (isset($pending[$yesterday])) {
-                    $this->answer($today, $token, $householdId, $pending[$yesterday], $taste,
-                        $week, $behavior, $random, $metrics);
+                    $this->answer(
+                        $today,
+                        $token,
+                        $householdId,
+                        $pending[$yesterday],
+                        $taste,
+                        $week,
+                        $behavior,
+                        $random,
+                        $metrics
+                    );
                     unset($pending[$yesterday]);
                 }
             }
@@ -113,20 +135,49 @@ final class PersonaSimulation
             }
             $weekStart = $start->modify('+' . ($week * 7) . ' days')->format('Y-m-d');
             $part = $weekday === 3 ? 2 : 1;
-            $plan = $this->expect(201, $this->call($today, 'POST', '/plans',
-                ['week_start' => $weekStart, 'part' => $part], $token, 'plan'));
-            $this->choosePart($today, $token, $householdId, $plan, $policy, $behavior, $taste,
-                $week, $random, $pending, $metrics);
+            $plan = $this->expect(201, $this->call(
+                $today,
+                'POST',
+                '/plans',
+                ['week_start' => $weekStart, 'part' => $part],
+                $token,
+                'plan'
+            ));
+            $this->choosePart(
+                $today,
+                $token,
+                $householdId,
+                $plan,
+                $policy,
+                $behavior,
+                $taste,
+                $week,
+                $random,
+                $pending,
+                $metrics
+            );
         }
         $last = $start->modify('+' . ($weeks * 7) . ' days')->setTime(12, 0);
         $lastDate = $last->modify('-1 day')->format('Y-m-d');
         if (isset($pending[$lastDate])) {
-            $this->answer($last, $token, $householdId, $pending[$lastDate], $taste,
-                $weeks - 1, $behavior, $random, $metrics);
+            $this->answer(
+                $last,
+                $token,
+                $householdId,
+                $pending[$lastDate],
+                $taste,
+                $weeks - 1,
+                $behavior,
+                $random,
+                $metrics
+            );
         }
         for ($offset = 1; $offset <= $this->config->integer('after_dinner.unconfirmed_days') + 1; $offset++) {
-            $maintenance = (new PlanningMaintenance($this->db, $this->config,
-                $last->modify('+' . $offset . ' days')))->run();
+            $maintenance = (new PlanningMaintenance(
+                $this->db,
+                $this->config,
+                $last->modify('+' . $offset . ' days')
+            ))->run();
             $metrics['unconfirmed'] += $maintenance['unconfirmed'];
         }
         return $this->summarize($householdId, $metrics);
@@ -140,16 +191,25 @@ final class PersonaSimulation
             if ($item['question_id'] !== 'dish_rating') {
                 continue;
             }
-            foreach (array_slice(DbValue::rows($item['options']), 0,
-                $this->config->integer('simulator.onboarding_count')) as $option) {
+            foreach (array_slice(
+                DbValue::rows($item['options']),
+                0,
+                $this->config->integer('simulator.onboarding_count')
+            ) as $option) {
                 $recipeId = DbValue::integer($option['recipe_id']);
                 $rating = $taste->rating($recipeId, 0, $random);
                 $choices[] = ['recipe_id' => $recipeId, 'choice' => $rating >= 5 ? 'favourite'
                     : ($rating >= 3 ? 'ok' : 'not_for_us')];
             }
         }
-        $this->expect(200, $this->call($now, 'PUT', '/onboarding/answers/dish_rating',
-            ['answer' => ['ratings' => $choices]], $token, 'onboarding'));
+        $this->expect(200, $this->call(
+            $now,
+            'PUT',
+            '/onboarding/answers/dish_rating',
+            ['answer' => ['ratings' => $choices]],
+            $token,
+            'onboarding'
+        ));
         $this->expect(200, $this->call($now, 'POST', '/onboarding/complete', [], $token, 'onboarding'));
     }
 
@@ -187,12 +247,14 @@ final class PersonaSimulation
             $ids = $this->candidateIds($planId, $householdId, $policy, $random);
             if ($ids === [] && $policy !== 'engine') {
                 $ids = array_map(static fn (array $card): int => DbValue::integer(
-                    DbValue::map($card['recipe'])['id']), $cards);
+                    DbValue::map($card['recipe'])['id']
+                ), $cards);
                 $metrics['baseline_fallbacks']++;
             }
             if ($policy === 'engine') {
                 $ids = array_map(static fn (array $card): int => DbValue::integer(
-                    DbValue::map($card['recipe'])['id']), $cards);
+                    DbValue::map($card['recipe'])['id']
+                ), $cards);
             }
             $ids = array_slice($ids, 0, $this->config->integer('simulator.behavior.swipe_limit'));
             $threshold = $this->config->decimal('simulator.behavior.accept.'
@@ -202,9 +264,15 @@ final class PersonaSimulation
             foreach ($ids as $position => $recipeId) {
                 $last = $position === count($ids) - 1;
                 if ($taste->utility($recipeId, $week, $random) < $threshold && !$last) {
-                    $this->expect(201, $this->call($now, 'POST', '/plans/' . $planId . '/swipes',
+                    $this->expect(201, $this->call(
+                        $now,
+                        'POST',
+                        '/plans/' . $planId . '/swipes',
                         ['date' => $date, 'recipe_id' => $recipeId, 'position' => $position,
-                            'action' => 'next', 'session_id' => $session], $token, 'swipe'));
+                            'action' => 'next', 'session_id' => $session],
+                        $token,
+                        'swipe'
+                    ));
                     $metrics['swipes']++;
                     continue;
                 }
@@ -399,8 +467,13 @@ final class PersonaSimulation
             $headers['Idempotency-Key'] = $this->uuid();
         }
         $started = hrtime(true);
-        $result = (new ApiKernel($this->db, $now))->handle($method, '/api/v1' . $route,
-            $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR), $headers, '127.0.0.1');
+        $result = (new ApiKernel($this->db, $now))->handle(
+            $method,
+            '/api/v1' . $route,
+            $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR),
+            $headers,
+            '127.0.0.1'
+        );
         $this->timings[$timing][] = (hrtime(true) - $started) / 1_000_000;
         return $result;
     }
