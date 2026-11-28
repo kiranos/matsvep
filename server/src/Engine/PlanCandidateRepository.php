@@ -42,7 +42,8 @@ final class PlanCandidateRepository
         $query = $this->db->prepare(
             'SELECT r.id, COALESCE(r.dish_group_id, -r.id) AS group_id, r.total_time_min, '
             . 'r.leftover_score, r.festive_score, r.effort, r.main_protein, r.cuisine, r.carb_base, '
-            . 'r.meal_type, r.is_vegetarian, hr.rating, hr.wishlist '
+            . 'r.meal_type, r.is_vegetarian, r.active, r.is_dinner_candidate, '
+            . 'r.source_status, hr.status AS library_status, hr.rating, hr.wishlist '
             . 'FROM recipe r ' . $planJoin
             . 'LEFT JOIN household_recipe hr ON hr.household_id = ? AND hr.recipe_id = r.id '
             . 'WHERE ((r.active = TRUE AND r.is_dinner_candidate = TRUE '
@@ -83,6 +84,7 @@ final class PlanCandidateRepository
         $siblings = $this->siblings($householdId);
         $skips = $this->skips($householdId, $date);
         $groupCookedDays = $this->groupCookedDays($householdId, $date);
+        $filters = new Filters($this->config);
         $all = [];
         foreach ($rows as $id => $row) {
             $features = [];
@@ -109,6 +111,18 @@ final class PlanCandidateRepository
             }
             $group = (int) $row['group_id'];
             $sibling = $siblings[$group] ?? null;
+            $eligible = $filters->passes(new FilterInput(
+                (bool) $row['active'],
+                (bool) $row['is_dinner_candidate'],
+                (string) $row['source_status'],
+                is_string($row['library_status']) ? $row['library_status'] : 'library',
+                $row['is_vegetarian'] === null ? null : (bool) $row['is_vegetarian'],
+                $blockVegetarian,
+                $row['rating'] === null ? null : (int) $row['rating'],
+                $groupCookedDays[$group] ?? null,
+                false,
+                false
+            ));
             $all[] = new PlanCandidate(
                 $id,
                 $group,
@@ -134,12 +148,16 @@ final class PlanCandidateRepository
                 $skips[$id]['days_since_rejected'] ?? null,
                 null,
                 is_string($row['meal_type']) ? $row['meal_type'] : null,
+                $eligible,
             );
         }
         $this->lastLoadedCount = count($all);
         $kept = [];
         $selected = $planId === null && $shortlistIds === null
-            ? (new PlanCandidatePool($this->config))->select($all) : $all;
+            ? (new PlanCandidatePool($this->config))->select(array_values(array_filter(
+                $all,
+                static fn (PlanCandidate $candidate): bool => $candidate->eligible
+            ))) : $all;
         foreach ($selected as $candidate) {
             $kept[$candidate->id] = $candidate;
         }

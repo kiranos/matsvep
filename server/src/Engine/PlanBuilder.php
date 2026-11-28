@@ -176,7 +176,7 @@ final class PlanBuilder
             $forcedKind = $remainingFavourite >= $daysRemaining ? 'favourite'
                 : ($remainingFavourite <= 0 ? 'discovery' : null);
             foreach ($recipes as $recipe) {
-                if (isset($usedGroups[$recipe->groupId])) {
+                if (!$recipe->eligible || isset($usedGroups[$recipe->groupId])) {
                     continue;
                 }
                 $kind = $this->kind($recipe);
@@ -192,7 +192,8 @@ final class PlanBuilder
             if ($forcedKind !== null && $ranked[$forcedKind] === []) {
                 $otherKind = $forcedKind === 'favourite' ? 'discovery' : 'favourite';
                 foreach ($recipes as $recipe) {
-                    if (!isset($usedGroups[$recipe->groupId]) && $this->kind($recipe) === $otherKind) {
+                    if ($recipe->eligible && !isset($usedGroups[$recipe->groupId])
+                        && $this->kind($recipe) === $otherKind) {
                         $ranked[$otherKind][] = $this->card(
                             $recipe,
                             $otherKind,
@@ -264,7 +265,7 @@ final class PlanBuilder
             }
             $pools = ['favourite' => [], 'discovery' => []];
             foreach ($recipes as $recipe) {
-                if (isset($otherGroups[$recipe->groupId])) {
+                if (!$recipe->eligible || isset($otherGroups[$recipe->groupId])) {
                     continue;
                 }
                 $kind = $this->kind($recipe);

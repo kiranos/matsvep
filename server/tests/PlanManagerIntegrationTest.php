@@ -132,11 +132,28 @@ final class PlanManagerIntegrationTest extends TestCase
             self::assertSame(1, $this->value($db, 'SELECT reshuffle_count FROM plan'));
             $setting = $db->prepare('INSERT INTO household_setting (household_id, `key`, value) VALUES (?, ?, ?)');
             $setting->execute([$householdId, 'plan_days', '"sunday_thursday"']);
+            $cookedSlot = $this->value($db, "SELECT id FROM plan_slot WHERE date = '2026-11-22'");
+            $db->prepare("UPDATE plan_slot SET status = 'cooked' WHERE id = ?")->execute([$cookedSlot]);
+            $db->prepare('INSERT INTO meal_log (household_id, recipe_id, cooked_on, plan_slot_id) '
+                . 'VALUES (?, ?, ?, ?)')->execute([$householdId, $newPick, '2026-11-22', $cookedSlot]);
+            $db->prepare('INSERT INTO household_recipe (household_id, recipe_id, last_cooked_at) '
+                . 'VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE last_cooked_at = VALUES(last_cooked_at)')
+                ->execute([$householdId, $newPick, '2026-11-22']);
             $nextWeek = [];
             for ($day = 0; $day < 5; $day++) {
                 $nextWeek[] = (new \DateTimeImmutable('2026-11-29'))->modify('+' . $day . ' days')->format('Y-m-d');
             }
-            self::assertCount(5, $manager->prepare($householdId, '2026-11-29', 1, $nextWeek)['slots']);
+            $nextPlan = $manager->prepare($householdId, '2026-11-29', 1, $nextWeek);
+            self::assertCount(5, $nextPlan['slots']);
+            foreach ($nextPlan['decks'] as $deck) {
+                self::assertNotContains($newPick, array_column($deck, 'recipe_id'));
+            }
+            try {
+                $manager->choose($nextPlan['plan_id'], $nextPlan['version'], $nextWeek[0], $newPick);
+                self::fail('A cooked recipe in the history cannot bypass the cooldown hard filter.');
+            } catch (\InvalidArgumentException $error) {
+                self::assertSame('Recipe does not pass planning filters.', $error->getMessage());
+            }
         } finally {
             $root->exec("DROP DATABASE `$database`");
         }
