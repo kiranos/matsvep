@@ -289,7 +289,7 @@ final class PlanManager
         if (!is_bool($blockVegetarian)) {
             throw new RuntimeException('Invalid vegetarian setting.');
         }
-        $query = $this->db->prepare('SELECT timezone, state_version FROM household WHERE id = ? FOR UPDATE');
+        $query = $this->db->prepare('SELECT timezone, state_version, filter_version FROM household WHERE id = ? FOR UPDATE');
         $query->execute([self::intField($plan, 'household_id')]);
         $household = $this->row($query);
         if ($household === false) {
@@ -297,6 +297,7 @@ final class PlanManager
         }
         $timezone = self::stringField($household, 'timezone');
         $stateVersion = self::intField($household, 'state_version');
+        $filterVersion = self::intField($household, 'filter_version');
         $today = ($this->now ?? new DateTimeImmutable('now'))->setTimezone(new DateTimeZone($timezone));
         $include = array_values(array_unique(array_merge(
             array_values($fixed),
@@ -305,8 +306,9 @@ final class PlanManager
             array_column($history, 'recipe_id')
         )));
         $configVersion = $this->configVersion();
+        $shortlistStarted = hrtime(true);
         $shortlist = $this->shortlistExists($planId)
-            && self::nullableInteger($plan['shortlist_state_version'] ?? null) === $stateVersion
+            && self::nullableInteger($plan['shortlist_filter_version'] ?? null) === $filterVersion
             && self::nullableInteger($plan['shortlist_config_version'] ?? null) === $configVersion;
         if (!$shortlist) {
             if (self::nullableInteger($plan['shortlist_config_version'] ?? null) !== $configVersion) {
@@ -317,7 +319,6 @@ final class PlanManager
             $delete = $this->db->prepare('DELETE FROM plan_candidate WHERE plan_id = ?');
             $delete->execute([$planId]);
         } else {
-            $this->saveCandidates($planId, $include);
             if ($requestedRecipeId !== null) {
                 $this->saveCandidates($planId, [$requestedRecipeId]);
             }
@@ -338,9 +339,13 @@ final class PlanManager
                 $recipes
             ));
             $stamp = $this->db->prepare('UPDATE plan SET shortlist_state_version = ?, '
-                . 'shortlist_config_version = ?, config_version = ? WHERE id = ?');
-            $stamp->execute([$stateVersion, $configVersion, $configVersion, $planId]);
+                . 'shortlist_filter_version = ?, shortlist_config_version = ?, config_version = ? WHERE id = ?');
+            $stamp->execute([$stateVersion, $filterVersion, $configVersion, $configVersion, $planId]);
+        } elseif (self::nullableInteger($plan['shortlist_state_version'] ?? null) !== $stateVersion) {
+            $stamp = $this->db->prepare('UPDATE plan SET shortlist_state_version = ? WHERE id = ?');
+            $stamp->execute([$stateVersion, $planId]);
         }
+        $this->observe($shortlist ? 'shortlist_reuse' : 'shortlist_rebuild', $shortlistStarted);
         return ['plan' => $plan, 'dates' => $validDates, 'days' => $days, 'slots' => $slots, 'fixed' => $fixed,
             'recipes' => $recipes, 'carryovers' => $carryovers, 'earlier' => $earlier,
             'history' => $history, 'share' => $share,
