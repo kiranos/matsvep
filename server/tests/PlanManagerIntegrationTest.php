@@ -104,7 +104,11 @@ final class PlanManagerIntegrationTest extends TestCase
             self::assertContains('shortlist_reuse', $phases);
             self::assertSame($initialFilterVersion, $this->value($db, 'SELECT filter_version FROM household'));
             $shortlisted = (new PlanCandidateRepository($db, $engineConfig))->load(
-                $householdId, new \DateTimeImmutable('2026-11-22'), false, [], $planId
+                $householdId,
+                new \DateTimeImmutable('2026-11-22'),
+                false,
+                [],
+                $planId
             );
             $firstCandidate = array_values(array_filter(
                 $shortlisted,
