@@ -132,6 +132,9 @@ final class ApiPlanningIntegrationTest extends TestCase
         self::assertGreaterThan(1, count($cards));
         $first = DbValue::integer(DbValue::map($cards[0]['recipe'])['id']);
         $second = DbValue::integer(DbValue::map($cards[1]['recipe'])['id']);
+        $filterVersion = self::$db->prepare('SELECT filter_version FROM household WHERE id = ?');
+        $filterVersion->execute([self::$householdId]);
+        $initialFilterVersion = DbValue::integer($filterVersion->fetchColumn());
         $swipe = ['date' => $date, 'recipe_id' => $first, 'position' => 0, 'action' => 'next',
             'session_id' => '123e4567-e89b-42d3-a456-426614174100'];
         $this->contract(
@@ -151,6 +154,8 @@ final class ApiPlanningIntegrationTest extends TestCase
                 'session_id' => $swipe['session_id']],
             '/plans/{plan_id}/swipes'
         );
+        $filterVersion->execute([self::$householdId]);
+        self::assertSame($initialFilterVersion, DbValue::integer($filterVersion->fetchColumn()));
         $chosen = $this->contract(
             $api,
             $schema,
@@ -159,6 +164,8 @@ final class ApiPlanningIntegrationTest extends TestCase
             ['expected_version' => 1, 'recipe_id' => $first],
             '/plans/{plan_id}/slots/{slot_id}/choose'
         );
+        $filterVersion->execute([self::$householdId]);
+        self::assertSame($initialFilterVersion, DbValue::integer($filterVersion->fetchColumn()));
         $replaced = $this->contract(
             $api,
             $schema,

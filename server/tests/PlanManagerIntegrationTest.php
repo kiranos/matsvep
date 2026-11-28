@@ -104,6 +104,12 @@ final class PlanManagerIntegrationTest extends TestCase
             $manager->view($planId);
             self::assertContains('shortlist_reuse', $phases);
             self::assertSame($initialFilterVersion, $this->value($db, 'SELECT filter_version FROM household'));
+            $phases = [];
+            $db->prepare('UPDATE household_recipe SET wishlist = TRUE WHERE household_id = ? AND recipe_id = ?')
+                ->execute([$householdId, 1]);
+            $manager->view($planId);
+            self::assertContains('shortlist_reuse', $phases);
+            self::assertSame($initialFilterVersion, $this->value($db, 'SELECT filter_version FROM household'));
             $shortlisted = (new PlanCandidateRepository($db, $engineConfig))->load(
                 $householdId,
                 new \DateTimeImmutable('2026-11-22'),
@@ -117,6 +123,7 @@ final class PlanManagerIntegrationTest extends TestCase
             ));
             self::assertCount(1, $firstCandidate);
             self::assertSame(3, $firstCandidate[0]->rating);
+            self::assertTrue($firstCandidate[0]->wishlisted);
 
             $phases = [];
             $householdRecipe->execute([$householdId, 9, 'blocked', null, null, null]);

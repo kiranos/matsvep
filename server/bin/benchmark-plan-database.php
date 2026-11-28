@@ -301,19 +301,23 @@ try {
             ['expected_version' => DbValue::integer($chosen['version']), 'recipe_id' => $second]
         );
         $replace = finishBenchmark($start);
+        $deckP95 = percentile($deckSamples, 0.95);
+        $targetMet = $full['total_ms'] < 1000 && $deckFetch['total_ms'] < 100
+            && $deckAfterRating['total_ms'] < 100 && $deckP95 < 100
+            && $deckAfterPick['total_ms'] < 100;
         echo json_encode(
             ['recipe_count' => $recipeCount, 'candidate_count' => $count, 'rated_count' => $rated,
             'database' => 'throwaway_mysql', 'api_full_plan' => $full, 'api_deck_fetch' => $deckFetch,
             'api_rating_update' => $ratingUpdate, 'api_deck_after_rating' => $deckAfterRating,
-            'api_deck_stable_p95_ms' => percentile($deckSamples, 0.95),
+            'api_deck_stable_p95_ms' => $deckP95,
             'api_deck_after_pick' => $deckAfterPick,
             'api_choose' => $choose, 'api_replace' => $replace,
-            'api_target_met' => $full['total_ms'] < 1000 && $deckFetch['total_ms'] < 100
-                && $deckAfterRating['total_ms'] < 100
-                && percentile($deckSamples, 0.95) < 100 && $deckAfterPick['total_ms'] < 100
-                && $choose['total_ms'] < 100 && $replace['total_ms'] < 100],
+            'api_target_met' => $targetMet],
             JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT
         ) . PHP_EOL;
+        if (!$targetMet) {
+            throw new RuntimeException('Production-scale API planning target was missed.');
+        }
         return;
     }
     $manager = new PlanManager($db, $config, static function (string $phase, float $ms) use (&$phaseTimes): void {
@@ -344,6 +348,9 @@ try {
         'rerank_after_pick' => $rerank,
         'rerank_target_met' => $rerank['total_ms'] < 100,
     ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . PHP_EOL;
+    if ($full['total_ms'] >= 1000 || $rerank['total_ms'] >= 100) {
+        throw new RuntimeException('Production-scale planning target was missed.');
+    }
 } finally {
     $root->exec("DROP DATABASE `$database`");
 }
