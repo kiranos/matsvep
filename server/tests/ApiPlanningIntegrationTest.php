@@ -165,7 +165,7 @@ final class ApiPlanningIntegrationTest extends TestCase
             '/plans/{plan_id}/slots/{slot_id}/choose'
         );
         $filterVersion->execute([self::$householdId]);
-        self::assertSame($initialFilterVersion, DbValue::integer($filterVersion->fetchColumn()));
+        self::assertSame(0, DbValue::integer($filterVersion->fetchColumn()) - $initialFilterVersion);
         $replaced = $this->contract(
             $api,
             $schema,
