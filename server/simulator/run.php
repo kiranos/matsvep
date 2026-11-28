@@ -63,8 +63,12 @@ try {
     if ($settings['SOURCE_USER'] === 'matsvep_app' || $settings['TARGET_USER'] === 'matsvep_app') {
         throw new RuntimeException('The simulator must not use the matsvep_app account.');
     }
-    $profiles = json_decode((string) file_get_contents(__DIR__ . '/../seeds/simulator_personas.json'),
-        true, 512, JSON_THROW_ON_ERROR);
+    $profiles = json_decode(
+        (string) file_get_contents(__DIR__ . '/../seeds/simulator_personas.json'),
+        true,
+        512,
+        JSON_THROW_ON_ERROR
+    );
     if (!is_array($profiles) || !array_is_list($profiles)) {
         throw new RuntimeException('Invalid simulator persona data.');
     }
@@ -79,12 +83,19 @@ try {
     }
     $pdoOptions = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_EMULATE_PREPARES => false, \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false];
-    $sourceDsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-        $settings['SOURCE_HOST'], $settings['SOURCE_PORT'], $settings['SOURCE_DB']);
+    $sourceDsn = sprintf(
+        'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+        $settings['SOURCE_HOST'],
+        $settings['SOURCE_PORT'],
+        $settings['SOURCE_DB']
+    );
     $source = new PDO($sourceDsn, $settings['SOURCE_USER'], $settings['SOURCE_PASSWORD'], $pdoOptions);
     DatabaseConnection::setUtc($source);
-    $targetDsn = sprintf('mysql:host=%s;port=%s;charset=utf8mb4',
-        $settings['TARGET_HOST'], $settings['TARGET_PORT']);
+    $targetDsn = sprintf(
+        'mysql:host=%s;port=%s;charset=utf8mb4',
+        $settings['TARGET_HOST'],
+        $settings['TARGET_PORT']
+    );
     $admin = new PDO($targetDsn, $settings['TARGET_USER'], $settings['TARGET_PASSWORD'], $pdoOptions);
     DatabaseConnection::setUtc($admin);
     foreach ([$source, $admin] as $connection) {
@@ -104,8 +115,12 @@ try {
         . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_sv_0900_ai_ci');
     $create->execute();
     $createdDatabase = true;
-    $target = new PDO($targetDsn . ';dbname=' . $database,
-        $settings['TARGET_USER'], $settings['TARGET_PASSWORD'], $pdoOptions);
+    $target = new PDO(
+        $targetDsn . ';dbname=' . $database,
+        $settings['TARGET_USER'],
+        $settings['TARGET_PASSWORD'],
+        $pdoOptions
+    );
     DatabaseConnection::setUtc($target);
     (new MigrationRunner($target, __DIR__ . '/../migrations', $database))->run();
     $counts = (new CatalogueClone($source, $target))->copy();

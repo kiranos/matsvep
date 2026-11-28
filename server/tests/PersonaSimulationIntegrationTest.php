@@ -138,7 +138,7 @@ final class PersonaSimulationIntegrationTest extends TestCase
             $title = $index % 3 === 0 ? 'Synthetic pizza ' . $index : 'Synthetic dinner ' . $index;
             $recipe->execute([$sourceId, 'https://example.test/recipe-' . $index,
                 $title, $index % 2 === 0 ? 'fish' : 'vegetarian', 'italian', 'potato',
-                $index % 2 !== 0, 0.6, 0.5, 2]);
+                $index % 2 !== 0 ? 1 : 0, 0.6, 0.5, 2]);
             $line->execute([(int) $db->lastInsertId(), 'synthetic potato', $ingredientId]);
         }
     }
