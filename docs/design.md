@@ -325,7 +325,7 @@ Seeds start with weight *W₀* = 2 and decay from `onboarding_answer.answered_at
 
 The saved answer keys are `dish_rating`, `cuisine_rating`, `protein_rating` and `disliked_ingredients`. Dish answers contain `ratings: [{recipe_id, choice}]`, with `choice` equal to `favourite`, `ok` or `not_for_us`. Cuisine and protein answers contain `ratings: [{code, rating}]`; disliked ingredients contain `ingredient_ids: [id]`. Reapplying onboarding synchronises only ratings whose source is still `onboarding`. It clears an omitted onboarding dish rating, recording the removal in `rating_history`, and never replaces a user rating.
 
-The current onboarding dish options are found through title keywords. This is a placeholder; phase 3 will replace it with a curated list keyed by source URL.
+Admin users curate onboarding dishes in `onboarding_dish` by searching active dinner candidates and adding, ordering or removing recipe references. The admin list shows title, source and current dinner eligibility, and warns outside the configured 30–40 active dishes. The API returns the curated recipes in position order, skipping any recipe that later becomes inactive or ceases to be a dinner candidate. When no eligible curated dishes remain, it falls back to the existing title-keyword seed. The table holds recipe IDs only; source URLs remain in `recipe`, and no recipe references are committed as seed data. Admin changes are audited.
 
 ### Affinity update
 
