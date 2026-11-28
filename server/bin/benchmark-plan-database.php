@@ -64,6 +64,14 @@ function finishBenchmark(float $startedAt): array
     ];
 }
 
+/** @param list<float> $samples */
+function percentile(array $samples, float $fraction): float
+{
+    sort($samples, SORT_NUMERIC);
+    $index = max(0, (int) ceil(count($samples) * $fraction) - 1);
+    return round($samples[$index], 2);
+}
+
 /** @param list<string> $columns
  *  @param list<list<int|float|string|null>> $rows
  */
@@ -88,6 +96,7 @@ if (!is_array($arguments)) {
 }
 $phaseTimes = [];
 $count = 16365;
+$recipeCount = 37600;
 $rated = 100;
 $readonly = false;
 $apiMode = false;
@@ -104,10 +113,12 @@ foreach (array_slice($arguments, 1) as $argument) {
         $householdId = (int) $match[1];
     } elseif (preg_match('/^--candidates=([1-9][0-9]*)$/', $argument, $match) === 1) {
         $count = (int) $match[1];
+    } elseif (preg_match('/^--recipes=([1-9][0-9]*)$/', $argument, $match) === 1) {
+        $recipeCount = (int) $match[1];
     } elseif (preg_match('/^--rated=(0|[1-9][0-9]*)$/', $argument, $match) === 1) {
         $rated = (int) $match[1];
     } else {
-        throw new InvalidArgumentException('Use --readonly [--household=ID], or --candidates=N [--rated=N].');
+        throw new InvalidArgumentException('Use --readonly [--household=ID], or --recipes=N --candidates=N [--rated=N].');
     }
 }
 if ($readonly) {
@@ -148,6 +159,9 @@ if ($householdId !== null) {
 if ($rated > $count) {
     throw new InvalidArgumentException('Rated count exceeds candidate count.');
 }
+if ($count > $recipeCount) {
+    throw new InvalidArgumentException('Candidate count exceeds recipe count.');
+}
 $path = dirname(__DIR__) . '/.env.testing';
 if (!is_file($path)) {
     throw new RuntimeException('The database benchmark requires .env.testing.');
@@ -184,13 +198,13 @@ try {
         $ingredientRows[] = [$id, 'benchmark ingredient ' . $id, 'protein'];
     }
     insertRows($db, 'ingredient', ['id', 'canonical_name', 'category'], $ingredientRows);
-    for ($startId = 1; $startId <= $count; $startId += 250) {
+    for ($startId = 1; $startId <= $recipeCount; $startId += 250) {
         $recipes = [];
         $ingredients = [];
         $tags = [];
-        for ($id = $startId; $id < min($startId + 250, $count + 1); $id++) {
+        for ($id = $startId; $id < min($startId + 250, $recipeCount + 1); $id++) {
             $recipes[] = [$id, $sourceId, 'https://example.invalid/benchmark-' . $id, 'Benchmark ' . $id,
-                1, 20 + $id % 70, ($id % 10) / 10, ($id % 8) / 8, 1 + $id % 3,
+                $id <= $count ? 1 : 0, 20 + $id % 70, ($id % 10) / 10, ($id % 8) / 8, 1 + $id % 3,
                 ['chicken', 'fish', 'vegetarian', 'beef'][$id % 4],
                 ['italian', 'swedish', 'indian'][$id % 3],
                 ['pasta', 'rice', 'potato'][$id % 3], $id % 4 === 2 ? 1 : 0];
@@ -227,7 +241,7 @@ try {
         $week = $week->modify('-' . $week->format('w') . ' days')->format('Y-m-d');
         $request = static function (string $method, string $path, ?array $body = null) use ($api, $token): array {
             $headers = ['Authorization' => 'Bearer ' . $token];
-            if ($method === 'POST') {
+            if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
                 $bytes = bin2hex(random_bytes(16));
                 $headers['Idempotency-Key'] = substr($bytes, 0, 8) . '-' . substr($bytes, 8, 4)
                     . '-4' . substr($bytes, 13, 3) . '-a' . substr($bytes, 17, 3) . '-' . substr($bytes, 20, 12);
@@ -258,12 +272,28 @@ try {
         $first = DbValue::integer(DbValue::map($cards[0]['recipe'])['id']);
         $second = DbValue::integer(DbValue::map($cards[1]['recipe'])['id']);
         $start = hrtime(true);
+        $request('PUT', '/recipes/' . $first . '/rating', ['rating' => 4]);
+        $ratingUpdate = finishBenchmark($start);
+        $start = hrtime(true);
+        $request('GET', '/plans/' . $planId . '/deck?date=' . $date);
+        $deckAfterRating = finishBenchmark($start);
+        $deckSamples = [];
+        for ($sample = 0; $sample < 20; $sample++) {
+            $start = hrtime(true);
+            $request('GET', '/plans/' . $planId . '/deck?date=' . $date);
+            $deckSamples[] = finishBenchmark($start)['total_ms'];
+        }
+        $start = hrtime(true);
         $chosen = $request(
             'POST',
             '/plans/' . $planId . '/slots/' . $slotId . '/choose',
             ['expected_version' => 1, 'recipe_id' => $first]
         );
         $choose = finishBenchmark($start);
+        $nextDate = DbValue::text(DbValue::rows($plan['slots'])[1]['date']);
+        $start = hrtime(true);
+        $request('GET', '/plans/' . $planId . '/deck?date=' . $nextDate);
+        $deckAfterPick = finishBenchmark($start);
         $start = hrtime(true);
         $request(
             'POST',
@@ -271,14 +301,23 @@ try {
             ['expected_version' => DbValue::integer($chosen['version']), 'recipe_id' => $second]
         );
         $replace = finishBenchmark($start);
+        $deckP95 = percentile($deckSamples, 0.95);
+        $targetMet = $full['total_ms'] < 1000 && $deckFetch['total_ms'] < 100
+            && $deckAfterRating['total_ms'] < 100 && $deckP95 < 100
+            && $deckAfterPick['total_ms'] < 100;
         echo json_encode(
-            ['candidate_count' => $count, 'rated_count' => $rated,
+            ['recipe_count' => $recipeCount, 'candidate_count' => $count, 'rated_count' => $rated,
             'database' => 'throwaway_mysql', 'api_full_plan' => $full, 'api_deck_fetch' => $deckFetch,
+            'api_rating_update' => $ratingUpdate, 'api_deck_after_rating' => $deckAfterRating,
+            'api_deck_stable_p95_ms' => $deckP95,
+            'api_deck_after_pick' => $deckAfterPick,
             'api_choose' => $choose, 'api_replace' => $replace,
-            'api_target_met' => $deckFetch['total_ms'] < 100
-                && $choose['total_ms'] < 100 && $replace['total_ms'] < 100],
+            'api_target_met' => $targetMet],
             JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT
         ) . PHP_EOL;
+        if (!$targetMet) {
+            throw new RuntimeException('Production-scale API planning target was missed.');
+        }
         return;
     }
     $manager = new PlanManager($db, $config, static function (string $phase, float $ms) use (&$phaseTimes): void {
@@ -301,6 +340,7 @@ try {
     $rerank = finishBenchmark($start);
     $rerank['phases'] = $phaseTimes;
     echo json_encode([
+        'recipe_count' => $recipeCount,
         'candidate_count' => $count,
         'rated_count' => $rated,
         'database' => 'throwaway_mysql',
@@ -308,6 +348,9 @@ try {
         'rerank_after_pick' => $rerank,
         'rerank_target_met' => $rerank['total_ms'] < 100,
     ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . PHP_EOL;
+    if ($full['total_ms'] >= 1000 || $rerank['total_ms'] >= 100) {
+        throw new RuntimeException('Production-scale planning target was missed.');
+    }
 } finally {
     $root->exec("DROP DATABASE `$database`");
 }

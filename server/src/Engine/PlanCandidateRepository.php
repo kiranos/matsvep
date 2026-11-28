@@ -210,15 +210,31 @@ final class PlanCandidateRepository
      */
     private function ingredients(array $rows, bool $shortlist): array
     {
-        $where = $shortlist ? ' AND recipe_id IN (' . implode(',', array_fill(0, count($rows), '?')) . ')' : '';
-        $query = $this->db->prepare('SELECT recipe_id, ingredient_id FROM recipe_ingredient '
-            . 'WHERE is_main = TRUE AND ingredient_id IS NOT NULL' . $where . ' ORDER BY recipe_id, position');
+        $where = $shortlist ? ' AND ri.recipe_id IN (' . implode(',', array_fill(0, count($rows), '?')) . ')' : '';
+        $join = $shortlist ? '' : ' JOIN recipe r ON r.id = ri.recipe_id '
+            . 'AND r.active = TRUE AND r.is_dinner_candidate = TRUE ';
+        $query = $this->db->prepare('SELECT ri.recipe_id, ri.ingredient_id FROM recipe_ingredient ri '
+            . $join . 'WHERE ri.is_main = TRUE AND ri.ingredient_id IS NOT NULL'
+            . $where . ' ORDER BY ri.recipe_id, ri.position');
         $query->execute($shortlist ? array_keys($rows) : []);
         $ingredients = [];
         foreach ($this->rows($query) as $row) {
             $id = (int) $row['recipe_id'];
             if (isset($rows[$id])) {
                 $ingredients[$id][] = (int) $row['ingredient_id'];
+            }
+        }
+        if (!$shortlist) {
+            $extras = array_keys(array_filter($rows, static fn (array $row): bool =>
+                !(bool) $row['active'] || !(bool) $row['is_dinner_candidate']));
+            if ($extras !== []) {
+                $query = $this->db->prepare('SELECT recipe_id, ingredient_id FROM recipe_ingredient '
+                    . 'WHERE is_main = TRUE AND ingredient_id IS NOT NULL AND recipe_id IN ('
+                    . implode(',', array_fill(0, count($extras), '?')) . ') ORDER BY recipe_id, position');
+                $query->execute($extras);
+                foreach ($this->rows($query) as $row) {
+                    $ingredients[(int) $row['recipe_id']][] = (int) $row['ingredient_id'];
+                }
             }
         }
         return $ingredients;
