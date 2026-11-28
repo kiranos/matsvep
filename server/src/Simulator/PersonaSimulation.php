@@ -470,7 +470,7 @@ final class PersonaSimulation
         $result = (new ApiKernel($this->db, $now))->handle(
             $method,
             '/api/v1' . $route,
-            $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR),
+            $body === null ? '' : json_encode($body === [] ? (object) [] : $body, JSON_THROW_ON_ERROR),
             $headers,
             '127.0.0.1'
         );
