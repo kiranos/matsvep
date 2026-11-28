@@ -46,20 +46,21 @@ try {
             throw new RuntimeException('Missing simulator configuration key: ' . $key);
         }
     }
-    /** @var array<string,string> $settings */
     foreach (['SOURCE_HOST', 'SOURCE_DB', 'SOURCE_USER', 'TARGET_HOST', 'TARGET_USER'] as $key) {
         if ($settings[$key] === '') {
             throw new RuntimeException('Empty simulator configuration key: ' . $key);
         }
     }
     foreach (['SOURCE_PORT', 'TARGET_PORT'] as $key) {
-        if (preg_match('/^[0-9]+$/', $settings[$key]) !== 1
-            || (int) $settings[$key] < 1 || (int) $settings[$key] > 65535) {
+        $port = $settings[$key] ?? null;
+        if (!is_string($port) || preg_match('/^[0-9]+$/', $port) !== 1
+            || (int) $port < 1 || (int) $port > 65535) {
             throw new RuntimeException('Invalid simulator port: ' . $key);
         }
     }
     foreach (['SOURCE_DB', 'TARGET_DB_PREFIX'] as $key) {
-        if (preg_match('/^[a-zA-Z0-9_]+$/', $settings[$key]) !== 1) {
+        $name = $settings[$key] ?? null;
+        if (!is_string($name) || preg_match('/^[a-zA-Z0-9_]+$/', $name) !== 1) {
             throw new RuntimeException('Invalid simulator database name: ' . $key);
         }
     }
