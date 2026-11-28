@@ -86,6 +86,7 @@ final class PersonaSimulationIntegrationTest extends TestCase
                     array_keys($report['personas']['husman_family'])
                 );
                 foreach ($report['personas']['husman_family'] as $policy) {
+                    self::assertIsArray($policy);
                     self::assertArrayHasKey('mean_hidden_utility', $policy);
                     self::assertArrayHasKey('hidden_utility_4_plus_share', $policy);
                     self::assertArrayHasKey('hit_rate', $policy);
