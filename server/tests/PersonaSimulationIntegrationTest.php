@@ -52,6 +52,8 @@ final class PersonaSimulationIntegrationTest extends TestCase
             );
             self::assertIsArray($personas);
             self::assertIsArray($personas[0]);
+            /** @var array<string,mixed> $firstPersona */
+            $firstPersona = $personas[0];
             $reports = [];
             foreach (array_slice($names, 1) as $name) {
                 $target = new PDO($dsn . ';dbname=' . $name, $settings['DB_USER'], $settings['DB_PASSWORD'], $options);
@@ -65,9 +67,11 @@ final class PersonaSimulationIntegrationTest extends TestCase
                     $clone->releaseCrawlerLock();
                 }
                 self::assertSame(40, $counts['recipe']);
-                $report = (new PersonaSimulation($target))->run([$personas[0]], 2, 42);
+                $report = (new PersonaSimulation($target))->run([$firstPersona], 2, 42);
                 self::assertSame(42, $report['seed']);
                 self::assertSame(2, $report['weeks']);
+                self::assertIsArray($report['personas']);
+                self::assertIsArray($report['personas']['husman_family']);
                 self::assertSame(
                     ['engine', 'random', 'favourites_only'],
                     array_keys($report['personas']['husman_family'])

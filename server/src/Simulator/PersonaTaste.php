@@ -51,7 +51,11 @@ final class PersonaTaste
                 $score += $this->config->decimal('simulator.taste.pair_bonus');
             }
         }
-        $phase = hexdec(substr(hash('sha256', $this->persona['code'] . ':' . $recipeId), 0, 8)) / 4294967296;
+        $code = $this->persona['code'] ?? null;
+        if (!is_string($code)) {
+            throw new \RuntimeException('Invalid persona code.');
+        }
+        $phase = hexdec(substr(hash('sha256', $code . ':' . $recipeId), 0, 8)) / 4294967296;
         $period = $this->config->integer('simulator.taste.drift_weeks');
         $score += sin(2 * M_PI * ($week / $period + $phase)) * $this->config->decimal('simulator.taste.drift');
         $score += ($random->fraction() * 2 - 1) * $this->config->decimal('simulator.taste.noise');

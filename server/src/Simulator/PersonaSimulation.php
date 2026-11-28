@@ -340,7 +340,7 @@ final class PersonaSimulation
             $args[] = $this->config->integer('simulator.favourite_min_rating');
         }
         $query->execute($args);
-        $ids = array_map(DbValue::integer(...), $query->fetchAll(PDO::FETCH_COLUMN));
+        $ids = array_values(array_map(DbValue::integer(...), $query->fetchAll(PDO::FETCH_COLUMN)));
         return array_slice($random->shuffled($ids), 0, $this->config->integer('simulator.random_sample_size'));
     }
 
@@ -483,8 +483,9 @@ final class PersonaSimulation
     private function expect(int $status, array $result): array
     {
         if ($result[0] !== $status) {
+            $code = $result[1]['code'] ?? 'unknown';
             throw new RuntimeException('Simulation API request failed with status ' . $result[0]
-                . ' and code ' . ($result[1]['code'] ?? 'unknown') . '.');
+                . ' and code ' . (is_string($code) ? $code : 'unknown') . '.');
         }
         return $result[1];
     }

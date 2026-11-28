@@ -37,6 +37,6 @@ final class SeededRandom
             $other = $this->index($index + 1);
             [$items[$index], $items[$other]] = [$items[$other], $items[$index]];
         }
-        return $items;
+        return array_values($items);
     }
 }
