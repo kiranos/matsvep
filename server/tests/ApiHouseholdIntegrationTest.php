@@ -304,7 +304,7 @@ final class ApiHouseholdIntegrationTest extends TestCase
         $user->execute(['idempotency@example.test', password_hash('synthetic-password-long', PASSWORD_DEFAULT), $householdId]);
         $userId = (int) self::$db->lastInsertId();
         $config = EngineConfig::fromDatabase(self::$db);
-        $manager = new HouseholdRecipeManager(self::$db, new Learner(self::$db, $config));
+        $manager = new HouseholdRecipeManager(self::$db, new Learner(self::$db, $config), $config);
         $idempotency = new Idempotency(self::$db, $config);
         $key = '123e4567-e89b-42d3-a456-426614174099';
         $action = static fn (): array => [200, $manager->rate($householdId, self::$firstRecipe, 5)];
