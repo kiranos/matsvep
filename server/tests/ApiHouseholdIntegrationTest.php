@@ -348,7 +348,7 @@ final class ApiHouseholdIntegrationTest extends TestCase
         self::assertSame([
             ['recipe_id' => self::$secondRecipe],
             ['recipe_id' => self::$firstRecipe],
-        ], $curated[1]['items'][0]['options']);
+        ], self::dishOptions($curated));
         self::assertSame(2, $service->countStatus()['count']);
         self::assertSame(30, $service->countStatus()['minimum']);
         self::assertSame(40, $service->countStatus()['maximum']);
@@ -356,7 +356,7 @@ final class ApiHouseholdIntegrationTest extends TestCase
 
         $service->remove($actor, self::$secondRecipe);
         $onlyFirst = $this->request($api, 'GET', '/onboarding/questions', null, self::$firstToken);
-        self::assertSame([['recipe_id' => self::$firstRecipe]], $onlyFirst[1]['items'][0]['options']);
+        self::assertSame([['recipe_id' => self::$firstRecipe]], self::dishOptions($onlyFirst));
         try {
             $service->add($actor, self::$inactiveRecipe);
             self::fail('An inactive recipe was accepted.');
@@ -372,7 +372,7 @@ final class ApiHouseholdIntegrationTest extends TestCase
             self::assertSame('Select an active dinner candidate.', $expected->getMessage());
         }
         $skipped = $this->request($api, 'GET', '/onboarding/questions', null, self::$firstToken);
-        self::assertSame($fallback[1]['items'][0]['options'], $skipped[1]['items'][0]['options']);
+        self::assertSame(self::dishOptions($fallback), self::dishOptions($skipped));
         self::assertSame(0, $service->countStatus()['count']);
 
         $actions = self::$db->prepare("SELECT action FROM admin_audit WHERE target_type = 'onboarding_dish' ORDER BY id");
@@ -397,6 +397,18 @@ final class ApiHouseholdIntegrationTest extends TestCase
             $headers,
             '127.0.8.10'
         );
+    }
+
+    /** @param array{0:int,1:array<string,mixed>} $response
+     *  @return list<array<string,mixed>> */
+    private static function dishOptions(array $response): array
+    {
+        $questions = DbValue::rows($response[1]['items']);
+        $dish = $questions[0] ?? null;
+        if ($dish === null) {
+            throw new \RuntimeException('Missing dish question.');
+        }
+        return DbValue::rows($dish['options']);
     }
 
     /** @param array<string,mixed>|null $body */

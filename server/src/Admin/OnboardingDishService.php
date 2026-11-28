@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matsvep\Admin;
 
+use Matsvep\Api\DbValue;
 use Matsvep\Database\WriteTransaction;
 use PDO;
 use RuntimeException;
@@ -22,7 +23,7 @@ final class OnboardingDishService
             . 'FROM onboarding_dish d JOIN recipe r ON r.id = d.recipe_id '
             . 'JOIN source s ON s.id = r.source_id ORDER BY d.active DESC, d.position, d.recipe_id');
         $query->execute();
-        return $query->fetchAll(PDO::FETCH_ASSOC);
+        return DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC));
     }
 
     /** @return list<array<string, mixed>> */
@@ -40,7 +41,7 @@ final class OnboardingDishService
         $query->bindValue(1, '%' . addcslashes($title, '%_\\') . '%');
         $query->bindValue(2, $limit, PDO::PARAM_INT);
         $query->execute();
-        return $query->fetchAll(PDO::FETCH_ASSOC);
+        return DbValue::rows($query->fetchAll(PDO::FETCH_ASSOC));
     }
 
     /** @return array{count:int, minimum:int, maximum:int} */
@@ -50,7 +51,7 @@ final class OnboardingDishService
             . 'WHERE d.active = TRUE AND r.active = TRUE AND r.is_dinner_candidate = TRUE');
         $query->execute();
         return [
-            'count' => (int) $query->fetchColumn(),
+            'count' => DbValue::integer($query->fetchColumn()),
             'minimum' => $this->configInteger('onboarding.dish_count_min'),
             'maximum' => $this->configInteger('onboarding.dish_count_max'),
         ];
@@ -62,18 +63,19 @@ final class OnboardingDishService
             $recipe = $this->db->prepare('SELECT active, is_dinner_candidate FROM recipe WHERE id = ? FOR UPDATE');
             $recipe->execute([$recipeId]);
             $row = $recipe->fetch(PDO::FETCH_ASSOC);
-            if (!is_array($row) || (int) $row['active'] !== 1 || (int) $row['is_dinner_candidate'] !== 1) {
+            if (!is_array($row) || DbValue::integer($row['active']) !== 1
+                || $row['is_dinner_candidate'] === null || DbValue::integer($row['is_dinner_candidate']) !== 1) {
                 throw new RuntimeException('Select an active dinner candidate.');
             }
             $entry = $this->db->prepare('SELECT active, position FROM onboarding_dish WHERE recipe_id = ? FOR UPDATE');
             $entry->execute([$recipeId]);
             $before = $entry->fetch(PDO::FETCH_ASSOC);
-            if (is_array($before) && (int) $before['active'] === 1) {
+            if (is_array($before) && DbValue::integer($before['active']) === 1) {
                 return;
             }
             $next = $this->db->prepare('SELECT COALESCE(MAX(position), 0) + 1 FROM onboarding_dish');
             $next->execute();
-            $position = (int) $next->fetchColumn();
+            $position = DbValue::integer($next->fetchColumn());
             $write = $this->db->prepare('INSERT INTO onboarding_dish (recipe_id, position, active) VALUES (?, ?, TRUE) '
                 . 'ON DUPLICATE KEY UPDATE position = VALUES(position), active = TRUE');
             $write->execute([$recipeId, $position]);
@@ -93,7 +95,7 @@ final class OnboardingDishService
             $read = $this->db->prepare('SELECT active, position FROM onboarding_dish WHERE recipe_id = ? FOR UPDATE');
             $read->execute([$recipeId]);
             $before = $read->fetch(PDO::FETCH_ASSOC);
-            if (!is_array($before) || (int) $before['active'] !== 1) {
+            if (!is_array($before) || DbValue::integer($before['active']) !== 1) {
                 throw new RuntimeException('Onboarding dish is not active.');
             }
             $write = $this->db->prepare('UPDATE onboarding_dish SET active = FALSE WHERE recipe_id = ?');
@@ -103,7 +105,7 @@ final class OnboardingDishService
                 'onboarding_dish.remove',
                 $recipeId,
                 $before,
-                ['active' => false, 'position' => (int) $before['position']]
+                ['active' => false, 'position' => DbValue::integer($before['position'])]
             );
         });
     }
@@ -117,10 +119,10 @@ final class OnboardingDishService
             $read = $this->db->prepare('SELECT recipe_id, position FROM onboarding_dish WHERE active = TRUE '
                 . 'ORDER BY position, recipe_id FOR UPDATE');
             $read->execute();
-            $rows = $read->fetchAll(PDO::FETCH_ASSOC);
+            $rows = DbValue::rows($read->fetchAll(PDO::FETCH_ASSOC));
             $index = null;
             foreach ($rows as $offset => $row) {
-                if ((int) $row['recipe_id'] === $recipeId) {
+                if (DbValue::integer($row['recipe_id']) === $recipeId) {
                     $index = $offset;
                     break;
                 }
@@ -132,9 +134,9 @@ final class OnboardingDishService
             if (!isset($rows[$otherIndex])) {
                 return;
             }
-            $otherId = (int) $rows[$otherIndex]['recipe_id'];
-            $position = (int) $rows[$index]['position'];
-            $otherPosition = (int) $rows[$otherIndex]['position'];
+            $otherId = DbValue::integer($rows[$otherIndex]['recipe_id']);
+            $position = DbValue::integer($rows[$index]['position']);
+            $otherPosition = DbValue::integer($rows[$otherIndex]['position']);
             if ($position === $otherPosition) {
                 $position = $index + 1;
                 $otherPosition = $otherIndex + 1;

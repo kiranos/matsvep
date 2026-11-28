@@ -6,6 +6,7 @@ use Matsvep\Admin\AdminAuth;
 use Matsvep\Admin\AdminIpAllowlist;
 use Matsvep\Admin\AdminService;
 use Matsvep\Admin\OnboardingDishService;
+use Matsvep\Api\DbValue;
 use Matsvep\Ingest\Ingredient\DatabaseConnection;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
@@ -60,6 +61,11 @@ function idFrom(mixed $value): int
         throw new RuntimeException('Invalid identifier.');
     }
     return (int) $value;
+}
+
+function dbFlag(mixed $value): bool
+{
+    return $value !== null && DbValue::integer($value) === 1;
 }
 
 $server = dirname(__DIR__, 2);
@@ -296,10 +302,10 @@ try {
             echo '<ol>';
             foreach ($onboardingDishes->list() as $entry) {
                 echo '<li>' . h($entry['title']) . ' — ' . h($entry['source_name']) .
-                    ' (dinner candidate: ' . ((int) $entry['is_dinner_candidate'] === 1 ? 'yes' : 'no') .
-                    ', recipe active: ' . ((int) $entry['recipe_active'] === 1 ? 'yes' : 'no') .
-                    ', selected: ' . ((int) $entry['active'] === 1 ? 'yes' : 'no') . ') ';
-                if ((int) $entry['active'] === 1) {
+                    ' (dinner candidate: ' . (dbFlag($entry['is_dinner_candidate']) ? 'yes' : 'no') .
+                    ', recipe active: ' . (dbFlag($entry['recipe_active']) ? 'yes' : 'no') .
+                    ', selected: ' . (dbFlag($entry['active']) ? 'yes' : 'no') . ') ';
+                if (dbFlag($entry['active'])) {
                     foreach (['up' => 'Move up', 'down' => 'Move down', 'remove' => 'Remove'] as $operation => $label) {
                         echo actionForm(
                             'onboarding_dish_' . $operation,
@@ -308,7 +314,7 @@ try {
                             '<button>' . h($label) . '</button>'
                         );
                     }
-                } elseif ((int) $entry['recipe_active'] === 1 && (int) $entry['is_dinner_candidate'] === 1) {
+                } elseif (dbFlag($entry['recipe_active']) && dbFlag($entry['is_dinner_candidate'])) {
                     echo actionForm(
                         'onboarding_dish_add',
                         $csrf,
@@ -325,10 +331,10 @@ try {
             foreach ($onboardingDishes->search($query) as $recipe) {
                 echo '<div class="card"><strong>' . h($recipe['title']) . '</strong> — ' . h($recipe['source_name']) .
                     ' <a href="' . h(safeSourceUrl($recipe['url'])) . '">Source</a>' .
-                    '<p>Dinner candidate: ' . ((int) $recipe['is_dinner_candidate'] === 1 ? 'yes' : 'no') .
-                    '; active: ' . ((int) $recipe['active'] === 1 ? 'yes' : 'no') . '</p>';
-                if ((int) $recipe['active'] === 1 && (int) $recipe['is_dinner_candidate'] === 1
-                    && (int) $recipe['selected'] !== 1) {
+                    '<p>Dinner candidate: ' . (dbFlag($recipe['is_dinner_candidate']) ? 'yes' : 'no') .
+                    '; active: ' . (dbFlag($recipe['active']) ? 'yes' : 'no') . '</p>';
+                if (dbFlag($recipe['active']) && dbFlag($recipe['is_dinner_candidate'])
+                    && !dbFlag($recipe['selected'])) {
                     echo actionForm(
                         'onboarding_dish_add',
                         $csrf,
