@@ -6,6 +6,8 @@ namespace Matsvep\Tests;
 
 use Matsvep\Database\MigrationRunner;
 use Matsvep\Engine\EngineConfig;
+use Matsvep\Engine\HouseholdRecipeManager;
+use Matsvep\Engine\Learner;
 use Matsvep\Engine\PlanCandidateRepository;
 use Matsvep\Engine\PlanManager;
 use Matsvep\Engine\PlanVersionConflict;
@@ -97,6 +99,24 @@ final class PlanManagerIntegrationTest extends TestCase
                 $this->value($db, 'SELECT state_version FROM household'),
                 $this->value($db, 'SELECT shortlist_state_version FROM plan')
             );
+
+            $wishlistManager = new HouseholdRecipeManager(
+                $db,
+                new Learner($db, $engineConfig),
+                $engineConfig,
+                new \DateTimeImmutable('2026-11-22 12:00:00', new \DateTimeZone('Europe/Stockholm'))
+            );
+            $phases = [];
+            $wishlistManager->wishlist($householdId, 12, true);
+            self::assertSame(1, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 12'));
+            $withWish = $manager->view($planId);
+            self::assertContains('shortlist_reuse', $phases);
+            self::assertNotContains('shortlist_rebuild', $phases);
+            self::assertContains(12, array_column($withWish['decks'][$dates[1]], 'recipe_id'));
+            $wishlistManager->wishlist($householdId, 13, true);
+            self::assertSame(0, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 13'));
+            $wishlistManager->wishlist($householdId, 15, true);
+            self::assertSame(0, $this->value($db, 'SELECT COUNT(*) FROM plan_candidate WHERE recipe_id = 15'));
 
             $phases = [];
             $db->prepare('UPDATE household_recipe SET rating = ? WHERE household_id = ? AND recipe_id = ?')

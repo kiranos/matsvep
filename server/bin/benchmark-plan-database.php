@@ -239,7 +239,7 @@ try {
         $api = new ApiKernel($db);
         $week = (new DateTimeImmutable('now', new DateTimeZone('Europe/Stockholm')));
         $week = $week->modify('-' . $week->format('w') . ' days')->format('Y-m-d');
-        $request = static function (string $method, string $path, ?array $body = null) use ($api, $token): array {
+        $request = static function (string $method, string $path, ?array $body = null) use ($api, &$token): array {
             $headers = ['Authorization' => 'Bearer ' . $token];
             if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
                 $bytes = bin2hex(random_bytes(16));
@@ -302,9 +302,65 @@ try {
         );
         $replace = finishBenchmark($start);
         $deckP95 = percentile($deckSamples, 0.95);
-        $targetMet = $full['total_ms'] < 1000 && $deckFetch['total_ms'] < 100
-            && $deckAfterRating['total_ms'] < 100 && $deckP95 < 100
-            && $deckAfterPick['total_ms'] < 100;
+        $sampleTimes = ['full_plan' => [], 'deck_fetch' => [], 'deck_after_rating' => [],
+            'deck_stable' => [], 'deck_after_pick' => [], 'choose' => [], 'replace' => []];
+        $householdInsert = $db->prepare('INSERT INTO household (name) VALUES (?)');
+        $userInsert = $db->prepare("INSERT INTO `user` (email, password_hash, role, household_id) "
+            . "VALUES (?, ?, 'member', ?)");
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        for ($sample = 0; $sample < 20; $sample++) {
+            $email = 'benchmark-' . $sample . '@example.test';
+            $householdInsert->execute(['Benchmark household ' . $sample]);
+            $sampleHousehold = (int) $db->lastInsertId();
+            $userInsert->execute([$email, $passwordHash, $sampleHousehold]);
+            for ($recipeId = 1; $recipeId <= $rated; $recipeId++) {
+                $rating->execute([$sampleHousehold, $recipeId]);
+            }
+            $token = DbValue::text($auth->login(['email' => $email,
+                'password' => $password, 'platform' => 'windows'], '127.0.0.1')['access_token']);
+            PlanningBenchmarkStatement::$queries = [];
+            $started = hrtime(true);
+            $samplePlan = $request('POST', '/plans', ['week_start' => $week, 'part' => 1]);
+            $sampleTimes['full_plan'][] = finishBenchmark($started)['total_ms'];
+            $samplePlanId = DbValue::integer($samplePlan['id']);
+            $sampleSlots = DbValue::rows($samplePlan['slots']);
+            $sampleSlotId = DbValue::integer($sampleSlots[0]['id']);
+            $sampleDate = DbValue::text($sampleSlots[0]['date']);
+            $followingDate = DbValue::text($sampleSlots[1]['date']);
+            $started = hrtime(true);
+            $sampleDeck = $request('GET', '/plans/' . $samplePlanId . '/deck?date=' . $sampleDate);
+            $sampleTimes['deck_fetch'][] = finishBenchmark($started)['total_ms'];
+            $sampleCards = DbValue::rows($sampleDeck['items']);
+            $firstRecipe = DbValue::integer(DbValue::map($sampleCards[0]['recipe'])['id']);
+            $secondRecipe = DbValue::integer(DbValue::map($sampleCards[1]['recipe'])['id']);
+            $request('PUT', '/recipes/' . $firstRecipe . '/rating', ['rating' => 4]);
+            PlanningBenchmarkStatement::$queries = [];
+            $started = hrtime(true);
+            $request('GET', '/plans/' . $samplePlanId . '/deck?date=' . $sampleDate);
+            $sampleTimes['deck_after_rating'][] = finishBenchmark($started)['total_ms'];
+            $started = hrtime(true);
+            $request('GET', '/plans/' . $samplePlanId . '/deck?date=' . $sampleDate);
+            $sampleTimes['deck_stable'][] = finishBenchmark($started)['total_ms'];
+            $started = hrtime(true);
+            $sampleChosen = $request('POST', '/plans/' . $samplePlanId . '/slots/' . $sampleSlotId . '/choose',
+                ['expected_version' => 1, 'recipe_id' => $firstRecipe]);
+            $sampleTimes['choose'][] = finishBenchmark($started)['total_ms'];
+            $started = hrtime(true);
+            $request('GET', '/plans/' . $samplePlanId . '/deck?date=' . $followingDate);
+            $sampleTimes['deck_after_pick'][] = finishBenchmark($started)['total_ms'];
+            $started = hrtime(true);
+            $request('POST', '/plans/' . $samplePlanId . '/slots/' . $sampleSlotId . '/replace',
+                ['expected_version' => DbValue::integer($sampleChosen['version']), 'recipe_id' => $secondRecipe]);
+            $sampleTimes['replace'][] = finishBenchmark($started)['total_ms'];
+        }
+        $p95 = [];
+        foreach ($sampleTimes as $name => $times) {
+            $p95[$name] = percentile($times, 0.95);
+        }
+        $targetMet = $p95['full_plan'] < 1000;
+        foreach (['deck_fetch', 'deck_after_rating', 'deck_stable', 'deck_after_pick', 'choose', 'replace'] as $name) {
+            $targetMet = $targetMet && $p95[$name] < 100;
+        }
         echo json_encode(
             ['recipe_count' => $recipeCount, 'candidate_count' => $count, 'rated_count' => $rated,
             'database' => 'throwaway_mysql', 'api_full_plan' => $full, 'api_deck_fetch' => $deckFetch,
@@ -312,6 +368,7 @@ try {
             'api_deck_stable_p95_ms' => $deckP95,
             'api_deck_after_pick' => $deckAfterPick,
             'api_choose' => $choose, 'api_replace' => $replace,
+            'api_latency_sample_count' => count($sampleTimes['full_plan']), 'api_latency_p95_ms' => $p95,
             'api_target_met' => $targetMet],
             JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT
         ) . PHP_EOL;

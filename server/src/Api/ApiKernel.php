@@ -32,7 +32,7 @@ final class ApiKernel
         $this->idempotency = new Idempotency($db, $config);
         $learner = new Learner($db, $config, $now);
         $this->households = new HouseholdManager($db, $config);
-        $this->householdRecipes = new HouseholdRecipeManager($db, $learner);
+        $this->householdRecipes = new HouseholdRecipeManager($db, $learner, $config, $now);
         $this->onboarding = new OnboardingManager($db, $learner, $now);
         $this->planning = new PlanningService($db, $config, $this->recipes, $this->householdRecipes, $now);
     }
