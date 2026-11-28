@@ -19,8 +19,7 @@ final class HouseholdRecipeManager
         private readonly Learner $learner,
         private readonly EngineConfig $config,
         private readonly ?DateTimeImmutable $now = null
-    )
-    {
+    ) {
     }
 
     /** @return array<string,mixed> */

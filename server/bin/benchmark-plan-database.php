@@ -342,15 +342,21 @@ try {
             $request('GET', '/plans/' . $samplePlanId . '/deck?date=' . $sampleDate);
             $sampleTimes['deck_stable'][] = finishBenchmark($started)['total_ms'];
             $started = hrtime(true);
-            $sampleChosen = $request('POST', '/plans/' . $samplePlanId . '/slots/' . $sampleSlotId . '/choose',
-                ['expected_version' => 1, 'recipe_id' => $firstRecipe]);
+            $sampleChosen = $request(
+                'POST',
+                '/plans/' . $samplePlanId . '/slots/' . $sampleSlotId . '/choose',
+                ['expected_version' => 1, 'recipe_id' => $firstRecipe]
+            );
             $sampleTimes['choose'][] = finishBenchmark($started)['total_ms'];
             $started = hrtime(true);
             $request('GET', '/plans/' . $samplePlanId . '/deck?date=' . $followingDate);
             $sampleTimes['deck_after_pick'][] = finishBenchmark($started)['total_ms'];
             $started = hrtime(true);
-            $request('POST', '/plans/' . $samplePlanId . '/slots/' . $sampleSlotId . '/replace',
-                ['expected_version' => DbValue::integer($sampleChosen['version']), 'recipe_id' => $secondRecipe]);
+            $request(
+                'POST',
+                '/plans/' . $samplePlanId . '/slots/' . $sampleSlotId . '/replace',
+                ['expected_version' => DbValue::integer($sampleChosen['version']), 'recipe_id' => $secondRecipe]
+            );
             $sampleTimes['replace'][] = finishBenchmark($started)['total_ms'];
         }
         $p95 = [];
