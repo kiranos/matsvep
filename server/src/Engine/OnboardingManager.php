@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Matsvep\Engine;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Matsvep\Api\ApiError;
 use Matsvep\Api\DbValue;
 use Matsvep\Database\WriteTransaction;
@@ -13,7 +15,11 @@ final class OnboardingManager
 {
     private const QUESTIONS = ['dish_rating', 'cuisine_rating', 'protein_rating', 'disliked_ingredients'];
 
-    public function __construct(private readonly PDO $db, private readonly Learner $learner)
+    public function __construct(
+        private readonly PDO $db,
+        private readonly Learner $learner,
+        private readonly ?DateTimeImmutable $now = null
+    )
     {
     }
 
@@ -84,8 +90,10 @@ final class OnboardingManager
         }
         $this->requireReferences($questionId, $answer);
         return WriteTransaction::run($this->db, function () use ($householdId, $questionId, $answer): array {
-            $write = $this->db->prepare('INSERT INTO onboarding_answer (household_id, question_id, answer) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE answer = VALUES(answer), answered_at = UTC_TIMESTAMP(6)');
-            $write->execute([$householdId, $questionId, json_encode($answer, JSON_THROW_ON_ERROR)]);
+            $write = $this->db->prepare('INSERT INTO onboarding_answer (household_id, question_id, answer, answered_at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE answer = VALUES(answer), answered_at = VALUES(answered_at)');
+            $answeredAt = ($this->now ?? new DateTimeImmutable('now'))
+                ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
+            $write->execute([$householdId, $questionId, json_encode($answer, JSON_THROW_ON_ERROR), $answeredAt]);
             $read = $this->db->prepare('SELECT answered_at FROM onboarding_answer WHERE household_id = ? AND question_id = ?');
             $read->execute([$householdId, $questionId]);
             return ['question_id' => $questionId, 'answer' => $answer, 'answered_at' => self::timestamp($read->fetchColumn())];

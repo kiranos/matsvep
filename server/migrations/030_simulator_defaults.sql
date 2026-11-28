@@ -1,0 +1,26 @@
+-- Simulator behavior and hidden-taste parameters live in the disposable database.
+INSERT INTO engine_config (`key`, value, type, description, version) VALUES
+    ('simulator.start_date', '2030-01-06', 'string', 'Fixed Sunday starting a reproducible simulation', 1),
+    ('simulator.onboarding_count', '35', 'integer', 'Maximum initial dish options rated by a persona', 1),
+    ('simulator.random_sample_size', '24', 'integer', 'Eligible dinner candidates sampled per baseline choice', 1),
+    ('simulator.favourite_min_rating', '4', 'integer', 'Lowest rating included in the favourites-only baseline', 1),
+    ('simulator.taste.base_stars', '3', 'decimal', 'Independent persona taste baseline', 1),
+    ('simulator.taste.dish_bonus', '1.1', 'decimal', 'Persona bonus for a liked dish term', 1),
+    ('simulator.taste.dish_penalty', '1.3', 'decimal', 'Persona penalty for a disliked dish term', 1),
+    ('simulator.taste.ingredient_bonus', '0.8', 'decimal', 'Saturating bonus for liked ingredients', 1),
+    ('simulator.taste.ingredient_penalty', '0.9', 'decimal', 'Saturating penalty for disliked ingredients', 1),
+    ('simulator.taste.pair_bonus', '0.6', 'decimal', 'Nonlinear bonus for a liked ingredient pair', 1),
+    ('simulator.taste.noise', '0.35', 'decimal', 'Maximum independent rating noise', 1),
+    ('simulator.taste.drift', '0.25', 'decimal', 'Maximum slow taste drift over the simulation', 1),
+    ('simulator.taste.drift_weeks', '26', 'integer', 'Taste drift cycle in weeks', 1),
+    ('simulator.behavior.cook.default', '0.88', 'decimal', 'Default share of chosen dinners cooked', 1),
+    ('simulator.behavior.cook.chaotic', '0.52', 'decimal', 'Share of chaotic-week dinners cooked', 1),
+    ('simulator.behavior.replace.default', '0.08', 'decimal', 'Default share of choices replaced', 1),
+    ('simulator.behavior.replace.chaotic', '0.38', 'decimal', 'Share of chaotic-week choices replaced', 1),
+    ('simulator.behavior.no_answer.default', '0', 'decimal', 'Default share of choices left unanswered', 1),
+    ('simulator.behavior.no_answer.chaotic', '0.25', 'decimal', 'Share of chaotic-week choices left unanswered', 1),
+    ('simulator.behavior.accept.default', '3.4', 'decimal', 'Default hidden-taste threshold for a deck pick', 1),
+    ('simulator.behavior.accept.picky', '4.1', 'decimal', 'Picky-persona threshold for a deck pick', 1),
+    ('simulator.behavior.accept.adventurous', '2.7', 'decimal', 'Adventurous-persona threshold for a deck pick', 1),
+    ('simulator.behavior.swipe_limit', '10', 'integer', 'Maximum cards inspected for one dinner', 1)
+ON DUPLICATE KEY UPDATE `key` = `key`;

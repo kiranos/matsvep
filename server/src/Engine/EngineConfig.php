@@ -46,6 +46,15 @@ final class EngineConfig
         return (int) $value;
     }
 
+    public function string(string $key): string
+    {
+        $value = $this->values[$key] ?? null;
+        if (!is_string($value) || $value === '') {
+            throw new RuntimeException('Missing string engine configuration: ' . $key);
+        }
+        return $value;
+    }
+
     /** @return list<string> */
     public function stringList(string $key): array
     {

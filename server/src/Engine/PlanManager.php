@@ -22,7 +22,12 @@ final class PlanManager
 
     private PlanCandidateRepository $candidates;
 
-    public function __construct(private readonly PDO $db, private EngineConfig $config, private readonly ?Closure $observer = null)
+    public function __construct(
+        private readonly PDO $db,
+        private EngineConfig $config,
+        private readonly ?Closure $observer = null,
+        private readonly ?DateTimeImmutable $now = null
+    )
     {
         $this->builder = new PlanBuilder($config, $observer);
         $this->candidates = new PlanCandidateRepository($db, $config);
@@ -291,7 +296,7 @@ final class PlanManager
         }
         $timezone = self::stringField($household, 'timezone');
         $stateVersion = self::intField($household, 'state_version');
-        $today = new DateTimeImmutable('now', new DateTimeZone($timezone));
+        $today = ($this->now ?? new DateTimeImmutable('now'))->setTimezone(new DateTimeZone($timezone));
         $include = array_values(array_unique(array_merge(
             array_values($fixed),
             array_column($carryovers, 'recipe_id'),
